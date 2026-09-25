@@ -98,6 +98,8 @@
   .drawchip{display:inline-block;font:600 10px var(--mono);letter-spacing:.03em;padding:2px 7px;border-radius:20px;background:rgba(179,38,30,.10);color:#b3261e;margin-top:5px;white-space:nowrap}
   .oddraw select{font:600 12px var(--ui);padding:5px 8px;border:1px solid var(--fieldline);border-radius:7px;background:var(--field);color:var(--ink)}
   .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
+  .fchip{font:600 11.5px var(--ui);padding:6px 11px;border:1px solid var(--fieldline);border-radius:20px;background:var(--field);color:var(--ink2);cursor:pointer}
+  .fchip.on{background:var(--ox);color:#fff;border-color:var(--ox)}
   .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
   .odbtns a.solid{background:var(--ox);color:#fff}
@@ -179,9 +181,9 @@
         <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
       </div>
-      <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px">
+      <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
-        <select id="salesstatus" class="filtersel" onchange="salesStatus=this.value;renderSalesDash()"></select>
+        <div id="salesstatuschips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         <span id="salescount" class="muted" style="align-self:center;margin-left:auto"></span>
       </div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
@@ -4629,7 +4631,7 @@ function switchTab(t){activeTab=t;document.querySelectorAll(".tab").forEach(b=>b
 function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Loading orders from Shopify…";}renderSalesDash();loadShopify().then(function(){buildFilters();renderSalesDash();});}
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
 let salesView="orders";  /* "orders" (paid/placed) | "drafts" */
-function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");salesStatus="all";buildFilters();renderSalesDash();}
+function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");salesStatuses.clear();buildFilters();renderSalesDash();}
 function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(function(){buildFilters();renderSalesDash();});}
 /* Shopify-derived status pill (Shipped / Paid / Draft …) */
 function shopifyStatus(o){
@@ -4646,7 +4648,8 @@ function shopifyStatus(o){
 }
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 /* ---- filters ---- */
-let salesMonth="all", salesStatus="all";
+let salesMonth="all";
+const salesStatuses=new Set();   /* multi-select; empty = show all */
 const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function monthLabel(ym){const p=String(ym).split("-");return p.length>=2?(MONTHS[(+p[1])-1]||p[1])+" "+p[0]:ym;}
 function isShipped(o){return !o.isDraft && (o.fulfillment_status||"").toLowerCase()==="fulfilled";}
@@ -4659,24 +4662,27 @@ function buildFilters(){
     if(!months.includes(salesMonth)) salesMonth="all";
     ms.innerHTML='<option value="all">All months</option>'+months.map(m=>'<option value="'+m+'"'+(m===salesMonth?" selected":"")+'>'+monthLabel(m)+'</option>').join("");
   }
-  const ss=$("salesstatus");
-  if(ss){
-    const opts = salesView==="drafts"
-      ? [["all","All statuses"],["open","Open"],["invoice_sent","Invoice sent"]]
-      : [["all","All statuses"],["needsdrawing","Needs drawing"],["open","Open / unfulfilled"],["shipped","Shipped"],["paid","Paid"]];
-    if(!opts.some(o=>o[0]===salesStatus)) salesStatus="all";
-    ss.innerHTML=opts.map(o=>'<option value="'+o[0]+'"'+(o[0]===salesStatus?" selected":"")+'>'+o[1]+'</option>').join("");
+  const box=$("salesstatuschips");
+  if(box){
+    const defs = salesView==="drafts"
+      ? [["open","Open"],["invoice_sent","Invoice sent"]]
+      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped"],["paid","Paid"],["refunded","Refunded"]];
+    [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
+    box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
 }
-function matchStatus(o){
-  if(salesStatus==="all") return true;
-  if(o.isDraft){ if(salesStatus==="open") return (o.status||"open")==="open"; if(salesStatus==="invoice_sent") return o.status==="invoice_sent"; return true; }
-  if(salesStatus==="needsdrawing") return needsDrawing(o);
-  if(salesStatus==="shipped") return isShipped(o);
-  if(salesStatus==="open") return !isShipped(o);
-  if(salesStatus==="paid") return (o.financial_status||"").toLowerCase()==="paid";
-  return true;
+function toggleStatus(s){ if(salesStatuses.has(s)) salesStatuses.delete(s); else salesStatuses.add(s); buildFilters(); renderSalesDash(); }
+function matchOne(o,s){
+  if(o.isDraft){ if(s==="open") return (o.status||"open")==="open"; if(s==="invoice_sent") return o.status==="invoice_sent"; return false; }
+  const fin=(o.financial_status||"").toLowerCase(), refunded=fin.indexOf("refund")>=0||fin==="voided";
+  if(s==="needsdrawing") return needsDrawing(o);
+  if(s==="shipped") return isShipped(o);
+  if(s==="open") return !isShipped(o) && !refunded;
+  if(s==="paid") return fin==="paid";
+  if(s==="refunded") return refunded;
+  return false;
 }
+function matchStatus(o){ if(salesStatuses.size===0) return true; for(const s of salesStatuses){ if(matchOne(o,s)) return true; } return false; }
 function salesRowClick(tr){const i=+tr.getAttribute("data-oi");const o=SHOPIFY[i];if(o)openOrderDetail(o);}
 /* Factory-drawing assignment: everything is "Needs drawing" until DWGs are uploaded,
    split evenly between the drawers. Reassignments persist per-browser (localStorage). */
@@ -4744,7 +4750,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
-  tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatus!=="all"?' matching your filters':'')+'.</td></tr>';
+  tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
   const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");
 }
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
@@ -4795,5 +4801,6 @@ function addWorker(){const inp=$("newworker"),n=(inp.value||"").trim();if(!n)ret
 function delWorker(i){const w=DB.workers();w.splice(i,1);DB.saveWorkers(w);renderWorkers();}
 
 ["loginlogo","dashlogo","worklogo","saleslogo"].forEach(id=>{if($(id))$(id).src=LOGO.uri;});
-initProducts();renderQC();loadProduct();try{init3D();}catch(e){}applyZoom();pickRole("sales");showScreen("screen-login");
+function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){ROLE=d.role;if(ROLE==="sales")enterSalesDash();else enterFactory();}}).catch(function(){});}
+initProducts();renderQC();loadProduct();try{init3D();}catch(e){}applyZoom();pickRole("sales");showScreen("screen-login");restoreSession();
 </script>

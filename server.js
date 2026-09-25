@@ -70,6 +70,16 @@ app.post('/api/login', (req, res) => {
   res.json({ ok: true, role });
 });
 
+// Restore an existing session on page load/refresh, and slide it forward 12h on use.
+app.get('/api/session', (req, res) => {
+  const sess = verify(req.cookies.nfs_session);
+  if (!sess) return res.json({ ok: false });
+  const exp = Date.now() + 12 * 3600 * 1000;
+  res.setHeader('Set-Cookie',
+    `nfs_session=${sign(sess.role, exp)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
+  res.json({ ok: true, role: sess.role });
+});
+
 app.post('/api/logout', (req, res) => {
   res.setHeader('Set-Cookie', 'nfs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
   res.json({ ok: true });
