@@ -1,0 +1,15 @@
+{
+  "name": "nader-factory-dashboard",
+  "version": "1.0.0",
+  "description": "Nader factory & sales dashboard — serves the app and proxies read-only Shopify Admin data.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.22.3"
+  }
+}

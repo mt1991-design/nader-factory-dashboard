@@ -1,0 +1,8 @@
+node_modules/
+.env
+.DS_Store
+*.log
+
+# deploy spec may hold secrets — never commit
+.do/
+deploy-spec.local.yaml
