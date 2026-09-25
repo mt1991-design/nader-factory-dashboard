@@ -95,6 +95,8 @@
   .specbtn.done{background:transparent;color:#2f7a3a;border-color:#2f7a3a}
   .pdflink{display:inline-block;font:600 11.5px var(--ui);color:var(--ox);text-decoration:none;border:1px solid var(--panelline);border-radius:7px;padding:6px 9px;white-space:nowrap}
   .pdflink:hover{border-color:var(--ox)}
+  .drawchip{display:inline-block;font:600 10px var(--mono);letter-spacing:.03em;padding:2px 7px;border-radius:20px;background:rgba(179,38,30,.10);color:#b3261e;margin-top:5px;white-space:nowrap}
+  .oddraw select{font:600 12px var(--ui);padding:5px 8px;border:1px solid var(--fieldline);border-radius:7px;background:var(--field);color:var(--ink)}
   .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
   .odbtns a.solid{background:var(--ox);color:#fff}
@@ -4637,12 +4639,20 @@ function shopifyStatus(o){
   return{cls:"todo",txt:(o.financial_status||"Unfulfilled").replace(/_/g," ")};
 }
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+/* Factory-drawing assignment: everything is "Needs drawing" until DWGs are uploaded,
+   split evenly between the drawers. Reassignments persist per-browser (localStorage). */
+const DRAWERS=["Mohammed","Abdul"];
+function drawHash(s){let h=0;s=String(s||"");for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
+function drawStore(){try{return JSON.parse(localStorage.getItem("nfs_drawing")||"{}");}catch(e){return{};}}
+function assignedDrawer(o){const m=drawStore(),k=o.order;return m[k]||DRAWERS[drawHash(k)%DRAWERS.length];}
+function setDrawer(order,name){const m=drawStore();m[order]=name;try{localStorage.setItem("nfs_drawing",JSON.stringify(m));}catch(e){}renderSalesDash();}
 function fmtMoney(v,c){if(v===""||v==null)return"";return (c?c+" ":"")+v;}
 function fmtAddr(a){if(!a)return'<span class="muted">— no address on file —</span>';
   const L=[a.name,a.company,a.address1,a.address2,[a.zip,a.city].filter(Boolean).join(" "),[a.province,a.country].filter(Boolean).join(", "),a.phone].filter(Boolean).map(esc);
   return L.length?L.join("\n"):'<span class="muted">—</span>';}
 function openOrderDetail(o){
   const st=shopifyStatus(o);
+  const oq2=esc(o.order).replace(/'/g,"");
   $("od-title").innerHTML=esc(o.order)+(o.isDraft?' <span class="muted" style="font:600 12px var(--ui)">· draft</span>':'');
   const items=(o.items||[]).map((it,i)=>`<tr><td>${esc(it.product)}${it.variant?' <span class="muted">'+esc(it.variant)+'</span>':''}</td><td>${esc(it.sku)}</td><td style="text-align:center">${esc(it.qty)}</td><td style="text-align:right">${esc(fmtMoney(it.price,o.currency))}</td><td style="text-align:right"><button class="linkbtn" onclick="specFromDetail('${esc(o.order).replace(/'/g,"")}',${i})">＋ Spec</button></td></tr>`).join("");
   $("od-body").innerHTML=`
@@ -4663,6 +4673,10 @@ function openOrderDetail(o){
     <div class="odsec"><h4>Items</h4><table class="oditems"><thead><tr><th>Product</th><th>SKU</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th></th></tr></thead><tbody>${items||'<tr><td colspan="5" class="muted">No items</td></tr>'}</tbody></table></div>
     ${o.note?`<div class="odsec"><h4>Note</h4><div style="font-size:13px">${esc(o.note)}</div></div>`:''}
     ${o.tags?`<div class="odsec"><h4>Tags</h4><div style="font-size:13px">${esc(o.tags)}</div></div>`:''}
+    <div class="odsec oddraw"><h4>Factory drawing</h4>
+      <div class="odrow"><span class="k">Status</span><span><span class="pill fail">Needs drawing</span></span></div>
+      <div class="odrow"><span class="k">Assigned to</span><span><select onchange="setDrawer('${oq2}',this.value)">${DRAWERS.map(function(nm){return '<option'+(nm===assignedDrawer(o)?' selected':'')+'>'+esc(nm)+'</option>';}).join('')}</select></span></div>
+    </div>
     <div class="odbtns">
       ${o.pdf_url?`<a class="solid" href="${esc(o.pdf_url)}" target="_blank" rel="noopener">⬇ Signed form (PDF)</a>`:''}
       ${o.admin_url?`<a href="${esc(o.admin_url)}" target="_blank" rel="noopener">Open in Shopify ↗</a>`:''}
@@ -4684,7 +4698,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>openOrderDetail(o);
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
-    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${i===0?'<span class="pill '+st.cls+'">'+st.txt+'</span>':""}</td><td style="text-align:right;white-space:nowrap">${pdfLink}<button class="${specCls}" onclick="event.stopPropagation();specLineItem('${oq}',${i})">${specTxt}</button></td>`;
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span><br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>'):"";
+    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${statusCell}</td><td style="text-align:right;white-space:nowrap">${pdfLink}<button class="${specCls}" onclick="event.stopPropagation();specLineItem('${oq}',${i})">${specTxt}</button></td>`;
     tr.children[1].innerHTML=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     tb.appendChild(tr);});});
   if(!shown){tb.innerHTML='<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
