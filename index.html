@@ -90,6 +90,9 @@
   .oditems th{text-align:left;font:600 10px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);padding:5px 8px;border-bottom:1px solid var(--panelline)}
   .oditems td{padding:7px 8px;border-bottom:1px solid var(--panelline);vertical-align:top}
   .linkbtn{background:none;border:none;color:var(--ox);font:600 12px var(--ui);cursor:pointer;padding:0;white-space:nowrap}
+  .specbtn{flex:0 0 auto;background:var(--ox);color:#fff;border:1px solid var(--ox);border-radius:7px;font:600 11.5px var(--ui);padding:6px 12px;cursor:pointer;white-space:nowrap;letter-spacing:.02em}
+  .specbtn:hover{background:#4a1017}
+  .specbtn.done{background:transparent;color:#2f7a3a;border-color:#2f7a3a}
   .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
   .odbtns a.solid{background:var(--ox);color:#fff}
@@ -172,7 +175,7 @@
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
       </div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
-      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th></tr></thead><tbody id="salesrows"></tbody></table></div>
+      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th><th></th></tr></thead><tbody id="salesrows"></tbody></table></div>
       <p class="hint" style="margin:12px 2px 0">Live from Shopify. Click any order to see the customer, address and full details. Orders with more than one product show a row per item.</p>
     </div>
   </div>
@@ -4276,7 +4279,8 @@ async function loadShopify(fresh){
     ]);
     const od=ro.ok?await ro.json():{orders:[]};
     const dd=rd.ok?await rd.json():{drafts:[]};
-    const drafts=(dd.drafts||[]).map(o=>Object.assign({},o,{isDraft:true}));
+    /* completed drafts have become real orders (they show in the Orders list) — hide them here to match Shopify */
+    const drafts=(dd.drafts||[]).filter(o=>o.status!=="completed").map(o=>Object.assign({},o,{isDraft:true}));
     const orders=(od.orders||[]).map(o=>Object.assign({},o,{isDraft:false}));
     /* drafts first (awaiting spec), then placed orders; both newest-first */
     SHOPIFY=drafts.concat(orders).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
@@ -4673,11 +4677,13 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   let shown=0;
   list.forEach(o=>{o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
     const st=shopifyStatus(o);
+    const oid=lineId(o,i),done=DB.getOrder(oid);
     const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>openOrderDetail(o);
-    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${i===0?'<span class="pill '+st.cls+'">'+st.txt+'</span>':""}</td>`;
+    const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
+    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${i===0?'<span class="pill '+st.cls+'">'+st.txt+'</span>':""}</td><td style="text-align:right"><button class="${specCls}" onclick="event.stopPropagation();specLineItem('${oq}',${i})">${specTxt}</button></td>`;
     tr.children[1].innerHTML=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     tb.appendChild(tr);});});
-  if(!shown){tb.innerHTML='<tr><td colspan="5" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
+  if(!shown){tb.innerHTML='<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
 }
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
   mode="sales";curOrderId=id;
