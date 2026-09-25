@@ -1,8 +1,8 @@
 <title>Nader — Factory Spec Sheet Generator</title>
 <style>
-  :root{--paper:#fff;--ink:#1c1a17;--ink2:#6a635a;--ox:#5E161D;--ox-soft:#8a3038;--bg:#efe9df;--panel:#f7f2e9;--panelline:#ddd3c3;--field:#fffdf8;--fieldline:#cfc6b6;--shadow:0 1px 2px rgba(40,30,20,.08),0 8px 30px rgba(40,30,20,.10);--ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
-  @media (prefers-color-scheme:dark){:root{--bg:#1a1713;--panel:#221e18;--panelline:#352f26;--field:#2a251e;--fieldline:#40382c;--ink2:#a89e8f;--ink:#ece7de;}}
-  :root[data-theme="light"]{--bg:#efe9df;--panel:#f7f2e9;--panelline:#ddd3c3;--field:#fffdf8;--fieldline:#cfc6b6;--ink2:#6a635a;}
+  :root{--paper:#fff;--ink:#1a1a1a;--ink2:#5b5b62;--ox:#5E161D;--ox-soft:#8a3038;--bg:#ffffff;--panel:#ffffff;--panelline:#e4e4e7;--field:#f7f7f9;--fieldline:#d7d7dc;--shadow:0 1px 2px rgba(20,20,25,.06),0 8px 28px rgba(20,20,25,.08);--ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
+  /* auto dark-mode disabled — dashboard stays light regardless of OS theme */
+  :root[data-theme="light"]{--paper:#fff;--ink:#1a1a1a;--ink2:#5b5b62;--bg:#ffffff;--panel:#ffffff;--panelline:#e4e4e7;--field:#f7f7f9;--fieldline:#d7d7dc;}
   :root[data-theme="dark"]{--bg:#1a1713;--panel:#221e18;--panelline:#352f26;--field:#2a251e;--fieldline:#40382c;--ink2:#a89e8f;--ink:#ece7de;}
   *{box-sizing:border-box}body{margin:0;font-family:var(--ui);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
   [hidden]{display:none!important}
@@ -147,7 +147,11 @@
   </div>
   <div class="dashgrid" style="grid-template-columns:1fr">
     <div class="card">
-      <div class="cardhdr"><span>Orders from Shopify · awaiting spec</span><input type="text" id="salessearch" placeholder="Search order # / product / customer" oninput="renderSalesDash()"></div>
+      <div class="cardhdr"><span>Shopify orders</span><input type="text" id="salessearch" placeholder="Search order # / product / customer" oninput="renderSalesDash()"></div>
+      <div class="roletabs" id="salestabs" style="max-width:360px;margin:0 0 14px">
+        <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
+        <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
+      </div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
       <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Spec status</th></tr></thead><tbody id="salesrows"></tbody></table></div>
       <p class="hint" style="margin:12px 2px 0">Demo orders — this list will pull live from Shopify. Orders with more than one product show a row per item.</p>
@@ -4582,14 +4586,23 @@ function switchTab(t){activeTab=t;document.querySelectorAll(".tab").forEach(b=>b
 /* ---- sales dashboard: incoming Shopify orders awaiting a spec ---- */
 function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Loading orders from Shopify…";}renderSalesDash();loadShopify().then(renderSalesDash);}
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
+let salesView="orders";  /* "orders" (paid/placed) | "drafts" */
+function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");renderSalesDash();}
 function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;tb.innerHTML="";
-  SHOPIFY.forEach(o=>{o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+o.customer).toLowerCase();if(q&&hay.indexOf(q)<0)return;
+  const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length;
+  if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
+  if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
+  const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft);
+  let shown=0;
+  list.forEach(o=>{o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
     const id=lineId(o,i),done=DB.getOrder(id);let cls,st;if(!done){cls="todo";st="Needs spec";}else if(!done.qc){cls="sent";st="Sent to factory";}else{cls=qcState(done);st=QCLABEL[cls];}
     const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>specLineItem(o.order,i);
     const kindTag=(i===0&&o.isDraft)?' <span class="muted" style="font-size:11px">· draft</span>':'';
     tr.innerHTML=`<td class="ono">${i===0?o.order+kindTag:""}</td><td></td><td>${o.customer||""}</td><td>${o.date||""}</td><td><span class="pill ${cls}">${st}</span></td>`;
     tr.children[1].innerHTML=it.product+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
-    tb.appendChild(tr);});});}
+    tb.appendChild(tr);});});
+  if(!shown){tb.innerHTML='<tr><td colspan="5" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
+}
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
   mode="sales";curOrderId=id;
   $("rolechip").textContent="Sales";$("salesbtns").hidden=false;$("factorybtns").hidden=true;
