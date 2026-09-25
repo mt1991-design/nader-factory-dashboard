@@ -74,6 +74,25 @@
   .pill.todo{background:rgba(180,140,20,.18);color:#8a6d10}
   .pill.sent{background:rgba(47,122,58,.16);color:#2f7a3a}
   .muted{color:var(--ink2);font-size:11px}
+  /* order detail modal */
+  .odoverlay{position:fixed;inset:0;background:rgba(20,20,25,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow:auto}
+  .odoverlay[hidden]{display:none!important}
+  .odcard{background:var(--panel);border:1px solid var(--panelline);border-radius:16px;box-shadow:var(--shadow);width:640px;max-width:100%}
+  .odhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--panelline)}
+  .odtitle{font:700 16px var(--ui)}
+  .odbody{padding:18px 20px;max-height:72vh;overflow:auto}
+  .odsec{margin:0 0 16px}
+  .odsec h4{font:600 10.5px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--ink2);margin:0 0 7px}
+  .odrow{display:flex;justify-content:space-between;gap:14px;font-size:13px;padding:3px 0}
+  .odrow .k{color:var(--ink2)}
+  .odaddr{font-size:13px;line-height:1.55;white-space:pre-line}
+  .oditems{width:100%;border-collapse:collapse;font-size:13px}
+  .oditems th{text-align:left;font:600 10px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);padding:5px 8px;border-bottom:1px solid var(--panelline)}
+  .oditems td{padding:7px 8px;border-bottom:1px solid var(--panelline);vertical-align:top}
+  .linkbtn{background:none;border:none;color:var(--ox);font:600 12px var(--ui);cursor:pointer;padding:0;white-space:nowrap}
+  .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
+  .odbtns a.solid{background:var(--ox);color:#fff}
   .dashempty{padding:26px 10px;text-align:center;color:var(--ink2);font-size:13px}
   .workerlist{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
   .workerrow{display:flex;justify-content:space-between;align-items:center;background:var(--field);border:1px solid var(--fieldline);border-radius:8px;padding:8px 11px;font-size:13px}
@@ -147,17 +166,25 @@
   </div>
   <div class="dashgrid" style="grid-template-columns:1fr">
     <div class="card">
-      <div class="cardhdr"><span>Shopify orders</span><input type="text" id="salessearch" placeholder="Search order # / product / customer" oninput="renderSalesDash()"></div>
+      <div class="cardhdr"><span>Shopify orders</span><div style="display:flex;gap:8px;align-items:center"><button class="ghost small" style="flex:0 0 auto;white-space:nowrap" onclick="refreshSales()">↻ Refresh</button><input type="text" id="salessearch" placeholder="Search order # / product / customer" oninput="renderSalesDash()"></div></div>
       <div class="roletabs" id="salestabs" style="max-width:360px;margin:0 0 14px">
         <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
       </div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
-      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Spec status</th></tr></thead><tbody id="salesrows"></tbody></table></div>
-      <p class="hint" style="margin:12px 2px 0">Demo orders — this list will pull live from Shopify. Orders with more than one product show a row per item.</p>
+      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th></tr></thead><tbody id="salesrows"></tbody></table></div>
+      <p class="hint" style="margin:12px 2px 0">Live from Shopify. Click any order to see the customer, address and full details. Orders with more than one product show a row per item.</p>
     </div>
   </div>
 </section>
+
+<!-- ================= ORDER DETAIL MODAL ================= -->
+<div id="orderdetail" class="odoverlay" hidden onclick="if(event.target===this)closeOrderDetail()">
+  <div class="odcard">
+    <div class="odhead"><div id="od-title" class="odtitle"></div><button class="ghost small" style="flex:0 0 auto" onclick="closeOrderDetail()">✕ Close</button></div>
+    <div id="od-body" class="odbody"></div>
+  </div>
+</div>
 
 <!-- ================= FACTORY DASHBOARD ================= -->
 <section id="screen-factory" class="screen" hidden>
@@ -4240,11 +4267,12 @@ let ROLE=null,pendingRole="sales",mode="sales",curOrderId=null,activeTab="photo"
 const DEFWORKERS=["Rabi","Suvash","Raja","Ahmad","Akash","Jo","Bahador"];
 let SHOPIFY=[];   /* populated live from Shopify via loadShopify() */
 /* Pull real orders + draft orders from the server (which proxies Shopify Admin). */
-async function loadShopify(){
+async function loadShopify(fresh){
+  const qs=fresh?"?fresh=1":"";
   try{
     const [ro,rd]=await Promise.all([
-      fetch("/api/orders",{credentials:"same-origin"}),
-      fetch("/api/draft_orders",{credentials:"same-origin"})
+      fetch("/api/orders"+qs,{credentials:"same-origin"}),
+      fetch("/api/draft_orders"+qs,{credentials:"same-origin"})
     ]);
     const od=ro.ok?await ro.json():{orders:[]};
     const dd=rd.ok?await rd.json():{drafts:[]};
@@ -4588,6 +4616,55 @@ function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading"
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
 let salesView="orders";  /* "orders" (paid/placed) | "drafts" */
 function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");renderSalesDash();}
+function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(renderSalesDash);}
+/* Shopify-derived status pill (Shipped / Paid / Draft …) */
+function shopifyStatus(o){
+  if(o.isDraft){const s=o.status;if(s==="completed")return{cls:"pass",txt:"Completed"};if(s==="invoice_sent")return{cls:"inqc",txt:"Invoice sent"};return{cls:"todo",txt:"Draft"};}
+  const f=(o.fulfillment_status||"").toLowerCase();
+  if(f==="fulfilled")return{cls:"pass",txt:"Shipped"};
+  if(f==="partial")return{cls:"inqc",txt:"Partly shipped"};
+  const p=(o.financial_status||"").toLowerCase();
+  if(p==="paid")return{cls:"sent",txt:"Paid"};
+  if(p==="pending")return{cls:"todo",txt:"Pending"};
+  if(p==="refunded"||p==="partially_refunded")return{cls:"fail",txt:"Refunded"};
+  if(p==="voided")return{cls:"fail",txt:"Voided"};
+  return{cls:"todo",txt:(o.financial_status||"Unfulfilled").replace(/_/g," ")};
+}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function fmtMoney(v,c){if(v===""||v==null)return"";return (c?c+" ":"")+v;}
+function fmtAddr(a){if(!a)return'<span class="muted">— no address on file —</span>';
+  const L=[a.name,a.company,a.address1,a.address2,[a.zip,a.city].filter(Boolean).join(" "),[a.province,a.country].filter(Boolean).join(", "),a.phone].filter(Boolean).map(esc);
+  return L.length?L.join("\n"):'<span class="muted">—</span>';}
+function openOrderDetail(o){
+  const st=shopifyStatus(o);
+  $("od-title").innerHTML=esc(o.order)+(o.isDraft?' <span class="muted" style="font:600 12px var(--ui)">· draft</span>':'');
+  const items=(o.items||[]).map((it,i)=>`<tr><td>${esc(it.product)}${it.variant?' <span class="muted">'+esc(it.variant)+'</span>':''}</td><td>${esc(it.sku)}</td><td style="text-align:center">${esc(it.qty)}</td><td style="text-align:right">${esc(fmtMoney(it.price,o.currency))}</td><td style="text-align:right"><button class="linkbtn" onclick="specFromDetail('${esc(o.order).replace(/'/g,"")}',${i})">＋ Spec</button></td></tr>`).join("");
+  $("od-body").innerHTML=`
+    <div class="odsec">
+      <div class="odrow"><span class="k">Status</span><span><span class="pill ${st.cls}">${st.txt}</span></span></div>
+      <div class="odrow"><span class="k">Date</span><span>${esc(o.date)||'—'}</span></div>
+      ${o.total?`<div class="odrow"><span class="k">Total</span><span>${esc(fmtMoney(o.total,o.currency))}</span></div>`:''}
+      ${o.financial_status?`<div class="odrow"><span class="k">Payment</span><span>${esc(o.financial_status).replace(/_/g,' ')}</span></div>`:''}
+      ${(o.fulfillment_status&&!o.isDraft)?`<div class="odrow"><span class="k">Fulfilment</span><span>${esc(o.fulfillment_status)}</span></div>`:''}
+    </div>
+    <div class="odsec"><h4>Customer</h4>
+      <div class="odrow"><span class="k">Name</span><span>${esc(o.customer)||'—'}</span></div>
+      ${o.email?`<div class="odrow"><span class="k">Email</span><span>${esc(o.email)}</span></div>`:''}
+      ${o.phone?`<div class="odrow"><span class="k">Phone</span><span>${esc(o.phone)}</span></div>`:''}
+    </div>
+    <div class="odsec"><h4>Shipping address</h4><div class="odaddr">${fmtAddr(o.shipping_address)}</div></div>
+    ${o.billing_address?`<div class="odsec"><h4>Billing address</h4><div class="odaddr">${fmtAddr(o.billing_address)}</div></div>`:''}
+    <div class="odsec"><h4>Items</h4><table class="oditems"><thead><tr><th>Product</th><th>SKU</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th></th></tr></thead><tbody>${items||'<tr><td colspan="5" class="muted">No items</td></tr>'}</tbody></table></div>
+    ${o.note?`<div class="odsec"><h4>Note</h4><div style="font-size:13px">${esc(o.note)}</div></div>`:''}
+    ${o.tags?`<div class="odsec"><h4>Tags</h4><div style="font-size:13px">${esc(o.tags)}</div></div>`:''}
+    <div class="odbtns">
+      ${o.admin_url?`<a class="solid" href="${esc(o.admin_url)}" target="_blank" rel="noopener">Open in Shopify ↗</a>`:''}
+      ${o.invoice_url?`<a href="${esc(o.invoice_url)}" target="_blank" rel="noopener">Open invoice ↗</a>`:''}
+    </div>`;
+  $("orderdetail").hidden=false;
+}
+function closeOrderDetail(){$("orderdetail").hidden=true;}
+function specFromDetail(orderNo,i){closeOrderDetail();specLineItem(orderNo,i);}
 function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;tb.innerHTML="";
   const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length;
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
@@ -4595,11 +4672,10 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft);
   let shown=0;
   list.forEach(o=>{o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
-    const id=lineId(o,i),done=DB.getOrder(id);let cls,st;if(!done){cls="todo";st="Needs spec";}else if(!done.qc){cls="sent";st="Sent to factory";}else{cls=qcState(done);st=QCLABEL[cls];}
-    const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>specLineItem(o.order,i);
-    const kindTag=(i===0&&o.isDraft)?' <span class="muted" style="font-size:11px">· draft</span>':'';
-    tr.innerHTML=`<td class="ono">${i===0?o.order+kindTag:""}</td><td></td><td>${o.customer||""}</td><td>${o.date||""}</td><td><span class="pill ${cls}">${st}</span></td>`;
-    tr.children[1].innerHTML=it.product+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
+    const st=shopifyStatus(o);
+    const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>openOrderDetail(o);
+    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${i===0?'<span class="pill '+st.cls+'">'+st.txt+'</span>':""}</td>`;
+    tr.children[1].innerHTML=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     tb.appendChild(tr);});});
   if(!shown){tb.innerHTML='<tr><td colspan="5" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
 }

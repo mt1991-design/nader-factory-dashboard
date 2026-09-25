@@ -75,8 +75,8 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-/* ---------- Shopify Admin proxy ---------- */
-async function shopify(pathAndQuery, maxPages = 6) {
+/* ---------- Shopify Admin proxy (full pagination + short cache) ---------- */
+async function shopify(pathAndQuery, maxPages = 60) {
   if (!STORE || !TOKEN) throw new Error('Shopify not configured');
   let url = `https://${STORE}/admin/api/${APIVER}/${pathAndQuery}`;
   const out = [];
@@ -100,25 +100,67 @@ async function shopify(pathAndQuery, maxPages = 6) {
   return out;
 }
 
+// 60s in-memory cache so repeated dashboard loads don't re-scan the whole store.
+// Pass ?fresh=1 (the Refresh button) to bypass it.
+const CACHE = {};
+const TTL = 60 * 1000;
+async function cached(name, fetcher, fresh) {
+  const hit = CACHE[name];
+  if (!fresh && hit && (Date.now() - hit.at) < TTL) return hit.data;
+  const data = await fetcher();
+  CACHE[name] = { at: Date.now(), data };
+  return data;
+}
+
 function custName(c) {
   if (!c) return '';
   return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || '';
 }
 function mapLineItems(arr) {
-  return (arr || []).map(li => ({ product: li.title, sku: li.sku || '', qty: li.quantity || 1 }));
+  return (arr || []).map(li => ({
+    product: li.title,
+    variant: li.variant_title || '',
+    sku: li.sku || '',
+    qty: li.quantity || 1,
+    price: li.price || ''
+  }));
+}
+function mapAddress(a) {
+  if (!a) return null;
+  return {
+    name: a.name || [a.first_name, a.last_name].filter(Boolean).join(' '),
+    company: a.company || '',
+    address1: a.address1 || '', address2: a.address2 || '',
+    city: a.city || '', province: a.province || '', zip: a.zip || '',
+    country: a.country || '', phone: a.phone || ''
+  };
 }
 
 app.get('/api/orders', requireAuth, async (req, res) => {
   try {
-    const raw = await shopify('orders.json?status=any&limit=250&fields=id,name,created_at,customer,line_items,financial_status,fulfillment_status,tags');
+    const fresh = req.query.fresh === '1';
+    const raw = await cached('orders', () => shopify(
+      'orders.json?status=any&limit=250&fields=id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note'
+    ), fresh);
     const orders = raw.map(o => ({
+      id: o.id,
       order: o.name,
       kind: 'order',
       customer: custName(o.customer),
+      email: (o.customer && o.customer.email) || o.email || '',
+      phone: (o.customer && o.customer.phone) || o.phone || (o.shipping_address && o.shipping_address.phone) || '',
       date: (o.created_at || '').slice(0, 10),
       financial_status: o.financial_status || '',
       fulfillment_status: o.fulfillment_status || 'unfulfilled',
+      currency: o.currency || '',
+      total: o.total_price || '',
+      subtotal: o.subtotal_price || '',
+      tax: o.total_tax || '',
       tags: o.tags || '',
+      note: o.note || '',
+      shipping_address: mapAddress(o.shipping_address),
+      billing_address: mapAddress(o.billing_address),
+      admin_url: `https://${STORE}/admin/orders/${o.id}`,
       items: mapLineItems(o.line_items)
     }));
     res.json({ ok: true, orders });
@@ -129,15 +171,27 @@ app.get('/api/orders', requireAuth, async (req, res) => {
 
 app.get('/api/draft_orders', requireAuth, async (req, res) => {
   try {
-    const raw = await shopify('draft_orders.json?limit=250');
+    const fresh = req.query.fresh === '1';
+    const raw = await cached('drafts', () => shopify('draft_orders.json?limit=250'), fresh);
     const drafts = raw.map(d => ({
+      id: d.id,
       order: d.name,
       kind: 'draft',
       customer: custName(d.customer),
+      email: (d.customer && d.customer.email) || d.email || '',
+      phone: (d.customer && d.customer.phone) || (d.shipping_address && d.shipping_address.phone) || '',
       date: (d.created_at || '').slice(0, 10),
       status: d.status || 'open',        // open | invoice_sent | completed
+      currency: d.currency || '',
+      total: d.total_price || '',
+      subtotal: d.subtotal_price || '',
+      tax: d.total_tax || '',
       tags: d.tags || '',
+      note: d.note || '',
       invoice_url: d.invoice_url || '',
+      shipping_address: mapAddress(d.shipping_address),
+      billing_address: mapAddress(d.billing_address),
+      admin_url: `https://${STORE}/admin/draft_orders/${d.id}`,
       items: mapLineItems(d.line_items)
     }));
     res.json({ ok: true, drafts });
