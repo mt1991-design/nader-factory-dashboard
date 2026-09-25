@@ -97,6 +97,7 @@
   .pdflink:hover{border-color:var(--ox)}
   .drawchip{display:inline-block;font:600 10px var(--mono);letter-spacing:.03em;padding:2px 7px;border-radius:20px;background:rgba(179,38,30,.10);color:#b3261e;margin-top:5px;white-space:nowrap}
   .oddraw select{font:600 12px var(--ui);padding:5px 8px;border:1px solid var(--fieldline);border-radius:7px;background:var(--field);color:var(--ink)}
+  .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
   .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
   .odbtns a.solid{background:var(--ox);color:#fff}
@@ -167,16 +168,21 @@
     <img id="saleslogo" alt="Nader" class="worklogo">
     <div class="topttl">Sales · New orders</div>
     <div class="topspacer"></div>
-    <a class="primary small" href="https://nader.ae/pages/sales-form" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">＋ New order</a>
+    <a class="small" href="https://nader.ae/pages/sales-form" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
     <span class="chip">Sales</span>
     <button class="ghost small" onclick="logout()">Log out</button>
   </div>
   <div class="dashgrid" style="grid-template-columns:1fr">
     <div class="card">
       <div class="cardhdr"><span>Shopify orders</span><div style="display:flex;gap:8px;align-items:center"><button class="ghost small" style="flex:0 0 auto;white-space:nowrap" onclick="refreshSales()">↻ Refresh</button><input type="text" id="salessearch" placeholder="Search order # / product / customer" oninput="renderSalesDash()"></div></div>
-      <div class="roletabs" id="salestabs" style="max-width:360px;margin:0 0 14px">
+      <div class="roletabs" id="salestabs" style="max-width:360px;margin:0 0 12px">
         <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
+      </div>
+      <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px">
+        <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
+        <select id="salesstatus" class="filtersel" onchange="salesStatus=this.value;renderSalesDash()"></select>
+        <span id="salescount" class="muted" style="align-self:center;margin-left:auto"></span>
       </div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
       <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th><th></th></tr></thead><tbody id="salesrows"></tbody></table></div>
@@ -4620,11 +4626,11 @@ function reset3D(){const v=$("viewer"),b=$("d3toggle");if(v)v.setAttribute("hidd
 function switchTab(t){activeTab=t;document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));$("tab-photo").hidden=(t!=="photo");$("tab-drawing").hidden=(t!=="drawing");$("tab-qc").hidden=(t!=="qc");$("zoombar").style.display=(t==="qc")?"none":"flex";$("pagebadge").textContent=(t==="photo")?"Page 1 · reference photo":(t==="drawing")?"Page 2 · factory drawing":"";if(t!=="qc")applyZoom();}
 
 /* ---- sales dashboard: incoming Shopify orders awaiting a spec ---- */
-function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Loading orders from Shopify…";}renderSalesDash();loadShopify().then(renderSalesDash);}
+function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Loading orders from Shopify…";}renderSalesDash();loadShopify().then(function(){buildFilters();renderSalesDash();});}
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
 let salesView="orders";  /* "orders" (paid/placed) | "drafts" */
-function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");renderSalesDash();}
-function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(renderSalesDash);}
+function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");salesStatus="all";buildFilters();renderSalesDash();}
+function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(function(){buildFilters();renderSalesDash();});}
 /* Shopify-derived status pill (Shipped / Paid / Draft …) */
 function shopifyStatus(o){
   if(o.isDraft){const s=o.status;if(s==="completed")return{cls:"pass",txt:"Completed"};if(s==="invoice_sent")return{cls:"inqc",txt:"Invoice sent"};return{cls:"todo",txt:"Draft"};}
@@ -4639,6 +4645,39 @@ function shopifyStatus(o){
   return{cls:"todo",txt:(o.financial_status||"Unfulfilled").replace(/_/g," ")};
 }
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+/* ---- filters ---- */
+let salesMonth="all", salesStatus="all";
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function monthLabel(ym){const p=String(ym).split("-");return p.length>=2?(MONTHS[(+p[1])-1]||p[1])+" "+p[0]:ym;}
+function isShipped(o){return !o.isDraft && (o.fulfillment_status||"").toLowerCase()==="fulfilled";}
+/* Shipped = past/done, no drawing needed. Everything else still needs a factory drawing (for now). */
+function needsDrawing(o){ if(isShipped(o)) return false; const t=shopifyStatus(o).txt.toLowerCase(); return t.indexOf("refund")<0 && t.indexOf("void")<0; }
+function buildFilters(){
+  const ms=$("salesmonth");
+  if(ms){
+    const months=[...new Set(SHOPIFY.filter(o=>o.date).map(o=>o.date.slice(0,7)))].sort().reverse();
+    if(!months.includes(salesMonth)) salesMonth="all";
+    ms.innerHTML='<option value="all">All months</option>'+months.map(m=>'<option value="'+m+'"'+(m===salesMonth?" selected":"")+'>'+monthLabel(m)+'</option>').join("");
+  }
+  const ss=$("salesstatus");
+  if(ss){
+    const opts = salesView==="drafts"
+      ? [["all","All statuses"],["open","Open"],["invoice_sent","Invoice sent"]]
+      : [["all","All statuses"],["needsdrawing","Needs drawing"],["open","Open / unfulfilled"],["shipped","Shipped"],["paid","Paid"]];
+    if(!opts.some(o=>o[0]===salesStatus)) salesStatus="all";
+    ss.innerHTML=opts.map(o=>'<option value="'+o[0]+'"'+(o[0]===salesStatus?" selected":"")+'>'+o[1]+'</option>').join("");
+  }
+}
+function matchStatus(o){
+  if(salesStatus==="all") return true;
+  if(o.isDraft){ if(salesStatus==="open") return (o.status||"open")==="open"; if(salesStatus==="invoice_sent") return o.status==="invoice_sent"; return true; }
+  if(salesStatus==="needsdrawing") return needsDrawing(o);
+  if(salesStatus==="shipped") return isShipped(o);
+  if(salesStatus==="open") return !isShipped(o);
+  if(salesStatus==="paid") return (o.financial_status||"").toLowerCase()==="paid";
+  return true;
+}
+function salesRowClick(tr){const i=+tr.getAttribute("data-oi");const o=SHOPIFY[i];if(o)openOrderDetail(o);}
 /* Factory-drawing assignment: everything is "Needs drawing" until DWGs are uploaded,
    split evenly between the drawers. Reassignments persist per-browser (localStorage). */
 const DRAWERS=["Mohammed","Abdul"];
@@ -4686,23 +4725,27 @@ function openOrderDetail(o){
 }
 function closeOrderDetail(){$("orderdetail").hidden=true;}
 function specFromDetail(orderNo,i){closeOrderDetail();specLineItem(orderNo,i);}
-function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;tb.innerHTML="";
+function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;
   const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length;
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
-  const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft);
-  let shown=0;
-  list.forEach(o=>{o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
+  const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
+    .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
+    .filter(matchStatus);
+  let html="",shown=0;
+  list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
     const st=shopifyStatus(o);
     const oid=lineId(o,i),done=DB.getOrder(oid);
-    const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>openOrderDetail(o);
+    const multi=o.items.length>1;
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
-    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span><br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>'):"";
-    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${statusCell}</td><td style="text-align:right;white-space:nowrap">${pdfLink}<button class="${specCls}" onclick="event.stopPropagation();specLineItem('${oq}',${i})">${specTxt}</button></td>`;
-    tr.children[1].innerHTML=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
-    tb.appendChild(tr);});});
-  if(!shown){tb.innerHTML='<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
+    const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw):"";
+    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
+    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
+  });});
+  tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatus!=="all"?' matching your filters':'')+'.</td></tr>';
+  const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");
 }
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
   mode="sales";curOrderId=id;
