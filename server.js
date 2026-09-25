@@ -125,6 +125,11 @@ function mapLineItems(arr) {
     price: li.price || ''
   }));
 }
+function extractPdf(note) {
+  if (!note) return '';
+  const m = String(note).match(/https?:\/\/\S+\/pdf\/[a-zA-Z0-9]+/);
+  return m ? m[0] : '';
+}
 function mapAddress(a) {
   if (!a) return null;
   return {
@@ -158,6 +163,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       tax: o.total_tax || '',
       tags: o.tags || '',
       note: o.note || '',
+      pdf_url: extractPdf(o.note),
       shipping_address: mapAddress(o.shipping_address),
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
@@ -188,6 +194,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       tax: d.total_tax || '',
       tags: d.tags || '',
       note: d.note || '',
+      pdf_url: extractPdf(d.note),
       invoice_url: d.invoice_url || '',
       shipping_address: mapAddress(d.shipping_address),
       billing_address: mapAddress(d.billing_address),

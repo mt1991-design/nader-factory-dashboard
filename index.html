@@ -93,6 +93,8 @@
   .specbtn{flex:0 0 auto;background:var(--ox);color:#fff;border:1px solid var(--ox);border-radius:7px;font:600 11.5px var(--ui);padding:6px 12px;cursor:pointer;white-space:nowrap;letter-spacing:.02em}
   .specbtn:hover{background:#4a1017}
   .specbtn.done{background:transparent;color:#2f7a3a;border-color:#2f7a3a}
+  .pdflink{display:inline-block;font:600 11.5px var(--ui);color:var(--ox);text-decoration:none;border:1px solid var(--panelline);border-radius:7px;padding:6px 9px;white-space:nowrap}
+  .pdflink:hover{border-color:var(--ox)}
   .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
   .odbtns a.solid{background:var(--ox);color:#fff}
@@ -4662,7 +4664,8 @@ function openOrderDetail(o){
     ${o.note?`<div class="odsec"><h4>Note</h4><div style="font-size:13px">${esc(o.note)}</div></div>`:''}
     ${o.tags?`<div class="odsec"><h4>Tags</h4><div style="font-size:13px">${esc(o.tags)}</div></div>`:''}
     <div class="odbtns">
-      ${o.admin_url?`<a class="solid" href="${esc(o.admin_url)}" target="_blank" rel="noopener">Open in Shopify ↗</a>`:''}
+      ${o.pdf_url?`<a class="solid" href="${esc(o.pdf_url)}" target="_blank" rel="noopener">⬇ Signed form (PDF)</a>`:''}
+      ${o.admin_url?`<a href="${esc(o.admin_url)}" target="_blank" rel="noopener">Open in Shopify ↗</a>`:''}
       ${o.invoice_url?`<a href="${esc(o.invoice_url)}" target="_blank" rel="noopener">Open invoice ↗</a>`:''}
     </div>`;
   $("orderdetail").hidden=false;
@@ -4680,7 +4683,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const oid=lineId(o,i),done=DB.getOrder(oid);
     const multi=o.items.length>1,tr=document.createElement("tr");tr.onclick=()=>openOrderDetail(o);
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
-    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${i===0?'<span class="pill '+st.cls+'">'+st.txt+'</span>':""}</td><td style="text-align:right"><button class="${specCls}" onclick="event.stopPropagation();specLineItem('${oq}',${i})">${specTxt}</button></td>`;
+    const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
+    tr.innerHTML=`<td class="ono">${i===0?esc(o.order):""}</td><td></td><td>${i===0?esc(o.customer||""):""}</td><td>${i===0?esc(o.date||""):""}</td><td>${i===0?'<span class="pill '+st.cls+'">'+st.txt+'</span>':""}</td><td style="text-align:right;white-space:nowrap">${pdfLink}<button class="${specCls}" onclick="event.stopPropagation();specLineItem('${oq}',${i})">${specTxt}</button></td>`;
     tr.children[1].innerHTML=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     tb.appendChild(tr);});});
   if(!shown){tb.innerHTML='<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q?' for "'+q+'"':'')+'.</td></tr>';}
