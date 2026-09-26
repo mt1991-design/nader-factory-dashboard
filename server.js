@@ -174,18 +174,20 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     // Limit what the sales team sees: hide refunded/voided/cancelled orders entirely,
     // and hide shipped orders more than 3 days after they shipped. Owners use Shopify for the full history.
     const nowMs = Date.now(), THREE_DAYS = 3 * 24 * 3600 * 1000;
-    const visible = raw.filter(o => {
+    const orderState = (o) => {
       const fin = (o.financial_status || '').toLowerCase();
-      if (fin === 'refunded' || fin === 'voided') return false;
-      if (o.cancelled_at) return false;
-      if ((o.fulfillment_status || '') === 'fulfilled') {
-        const fdates = (o.fulfillments || []).map(f => f.created_at).filter(Boolean).sort();
-        const shippedAt = fdates.length ? fdates[fdates.length - 1] : o.updated_at;
-        const t = shippedAt ? Date.parse(shippedAt) : 0;
-        return (nowMs - t) <= THREE_DAYS;
-      }
-      return true;
-    });
+      if (o.cancelled_at || fin === 'refunded' || fin === 'voided' || fin === 'partially_refunded') return 'refunded';
+      if ((o.fulfillment_status || '') === 'fulfilled') return 'shipped';
+      return 'open';   // an order only exists if it's paid, so open == paid == "in production"
+    };
+    const terminalMs = (o, st) => {
+      if (st === 'shipped') { const fd = (o.fulfillments || []).map(f => f.created_at).filter(Boolean).sort(); return Date.parse(fd.length ? fd[fd.length - 1] : o.updated_at) || 0; }
+      if (st === 'refunded') { return Date.parse(o.cancelled_at || o.updated_at) || 0; }
+      return nowMs;
+    };
+    // Open orders always show. Shipped & refunded only show for 3 days after the event, then roll off
+    // automatically (the window is relative to "now", so each day the oldest drop out — no cleanup job needed).
+    const visible = raw.filter(o => { const st = orderState(o); return st === 'open' || (nowMs - terminalMs(o, st)) <= THREE_DAYS; });
     const orders = visible.map(o => ({
       id: o.id,
       order: o.name,
@@ -207,6 +209,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
       prod_stage: prodStageFromTags(o.tags),
+      state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
       items: mapLineItems(o.line_items)
     }));
     const out = req.session.role === 'factory' ? orders.map(stripPrice) : orders;

@@ -195,6 +195,7 @@
         <div id="salesstatuschips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         <span id="salescount" class="muted" style="align-self:center;margin-left:auto"></span>
       </div>
+      <div id="salesnote" class="hint" style="margin:-4px 2px 10px;font-size:11px"></div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
       <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th><th></th></tr></thead><tbody id="salesrows"></tbody></table></div>
       <p class="hint" style="margin:12px 2px 0">Live from Shopify. Click any order to see the customer, address and full details. Orders with more than one product show a row per item.</p>
@@ -4645,15 +4646,9 @@ function refreshSales(){const note=$("salesloading");if(note){note.style.display
 /* Shopify-derived status pill (Shipped / Paid / Draft …) */
 function shopifyStatus(o){
   if(o.isDraft){const s=o.status;if(s==="completed")return{cls:"pass",txt:"Completed"};if(s==="invoice_sent")return{cls:"inqc",txt:"Invoice sent"};return{cls:"todo",txt:"Draft"};}
-  const f=(o.fulfillment_status||"").toLowerCase();
-  if(f==="fulfilled")return{cls:"pass",txt:"Shipped"};
-  if(f==="partial")return{cls:"inqc",txt:"Partly shipped"};
-  const p=(o.financial_status||"").toLowerCase();
-  if(p==="paid")return{cls:"sent",txt:"Paid"};
-  if(p==="pending")return{cls:"todo",txt:"Pending"};
-  if(p==="refunded"||p==="partially_refunded")return{cls:"fail",txt:"Refunded"};
-  if(p==="voided")return{cls:"fail",txt:"Voided"};
-  return{cls:"todo",txt:(o.financial_status||"Unfulfilled").replace(/_/g," ")};
+  if(o.state==="shipped")return{cls:"pass",txt:"Shipped"};
+  if(o.state==="refunded")return{cls:"fail",txt:"Refunded"};
+  return{cls:"sent",txt:"Open"};   // paid + not yet shipped
 }
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 /* ---- filters ---- */
@@ -4661,9 +4656,9 @@ let salesMonth="all";
 const salesStatuses=new Set();   /* multi-select; empty = show all */
 const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function monthLabel(ym){const p=String(ym).split("-");return p.length>=2?(MONTHS[(+p[1])-1]||p[1])+" "+p[0]:ym;}
-function isShipped(o){return !o.isDraft && (o.fulfillment_status||"").toLowerCase()==="fulfilled";}
-/* Shipped = past/done, no drawing needed. Everything else still needs a factory drawing (for now). */
-function needsDrawing(o){ if(isShipped(o)) return false; const t=shopifyStatus(o).txt.toLowerCase(); return t.indexOf("refund")<0 && t.indexOf("void")<0; }
+function isShipped(o){return o.state==="shipped";}
+/* Needs drawing = an open order whose drawing hasn't been started yet (production still at Drawing). */
+function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1; }
 function buildFilters(){
   const ms=$("salesmonth");
   if(ms){
@@ -4675,23 +4670,23 @@ function buildFilters(){
   if(box){
     const defs = salesView==="production" ? []
       : salesView==="drafts" ? [["open","Open"],["invoice_sent","Invoice sent"]]
-      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped (last 3 days)"]];
+      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped"],["refunded","Refunded"]];
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
+  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. Shipped & refunded appear for 3 days only (via their chips), then roll off automatically." : "";
 }
 function toggleStatus(s){ if(salesStatuses.has(s)) salesStatuses.delete(s); else salesStatuses.add(s); buildFilters(); renderSalesDash(); }
 function matchOne(o,s){
   if(o.isDraft){ if(s==="open") return (o.status||"open")==="open"; if(s==="invoice_sent") return o.status==="invoice_sent"; return false; }
-  const fin=(o.financial_status||"").toLowerCase(), refunded=fin.indexOf("refund")>=0||fin==="voided";
   if(s==="needsdrawing") return needsDrawing(o);
-  if(s==="shipped") return isShipped(o);
-  if(s==="open") return !isShipped(o) && !refunded;
-  if(s==="paid") return fin==="paid";
-  if(s==="refunded") return refunded;
+  if(s==="open") return o.state==="open";
+  if(s==="shipped") return o.state==="shipped";
+  if(s==="refunded") return o.state==="refunded";
   return false;
 }
-function matchStatus(o){ if(salesStatuses.size===0) return true; for(const s of salesStatuses){ if(matchOne(o,s)) return true; } return false; }
+/* Default (no chip) = OPEN orders only — shipped & refunded stay hidden until you pick their chip. */
+function matchStatus(o){ if(salesStatuses.size===0) return o.isDraft?true:(o.state==="open"); for(const s of salesStatuses){ if(matchOne(o,s)) return true; } return false; }
 function salesRowClick(tr){const i=+tr.getAttribute("data-oi");const o=SHOPIFY[i];if(o)openOrderDetail(o);}
 /* ---- production timeline (factory edits, sales views) ---- */
 let FACTORY_MODE=false;
