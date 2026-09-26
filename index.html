@@ -100,6 +100,14 @@
   .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
   .fchip{font:600 11.5px var(--ui);padding:6px 11px;border:1px solid var(--fieldline);border-radius:20px;background:var(--field);color:var(--ink2);cursor:pointer}
   .fchip.on{background:var(--ox);color:#fff;border-color:var(--ox)}
+  .pbar{display:flex;gap:3px;width:100%;min-width:340px}
+  .pseg{flex:1;text-align:center;font:600 10px var(--ui);padding:7px 4px;border-radius:5px;background:var(--field);color:var(--ink2);border:1px solid var(--panelline);white-space:nowrap}
+  .pseg.edit{cursor:pointer}
+  .pseg.done{background:#2f7a3a;color:#fff;border-color:#2f7a3a}
+  .pseg.on{background:#256b30;color:#fff;border-color:#256b30;box-shadow:0 0 0 2px rgba(47,122,58,.25)}
+  .speccomplete{font:600 10.5px var(--mono);padding:2px 7px;border-radius:20px}
+  .speccomplete.yes{background:rgba(47,122,58,.16);color:#2f7a3a}
+  .speccomplete.no{background:rgba(180,140,20,.18);color:#8a6d10}
   .odbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .odbtns a,.odbtns .ob{flex:0 0 auto;text-decoration:none;font:600 12px var(--ui);padding:9px 13px;border-radius:8px;border:1px solid var(--ox);color:var(--ox);background:transparent;cursor:pointer}
   .odbtns a.solid{background:var(--ox);color:#fff}
@@ -177,9 +185,10 @@
   <div class="dashgrid" style="grid-template-columns:1fr">
     <div class="card">
       <div class="cardhdr"><span>Shopify orders</span><div style="display:flex;gap:8px;align-items:center"><button class="ghost small" style="flex:0 0 auto;white-space:nowrap" onclick="refreshSales()">↻ Refresh</button><input type="text" id="salessearch" placeholder="Search order # / product / customer" oninput="renderSalesDash()"></div></div>
-      <div class="roletabs" id="salestabs" style="max-width:360px;margin:0 0 12px">
+      <div class="roletabs" id="salestabs" style="max-width:560px;margin:0 0 12px">
         <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
+        <button class="roletab" id="tab-production" onclick="setSalesView('production')">Production</button>
       </div>
       <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
@@ -4620,7 +4629,7 @@ function doLogin(){const pw=$("pw").value;$("loginerr").style.color="";$("logine
   fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({role:pendingRole,password:pw})})
     .then(r=>r.json()).then(d=>{ if(!d||!d.ok){$("loginerr").style.color="";$("loginerr").textContent="Incorrect password.";return;}
       ROLE=pendingRole;$("pw").value="";$("loginerr").textContent="";
-      if(ROLE==="sales")enterSalesDash(); else enterFactory();
+      enterDash();
     }).catch(e=>{$("loginerr").textContent="Login failed — try again.";});}
 function logout(){ROLE=null;curOrderId=null;showScreen("screen-login");pickRole("sales");}
 function toggle3D(){const v=$("viewer"),b=$("d3toggle");if(!v)return;if(v.hasAttribute("hidden")){v.removeAttribute("hidden");b.innerHTML='<span class="d3ico">▾</span> Hide 3D';try{v.scrollIntoView({behavior:"smooth",block:"nearest"});}catch(e){}}else{v.setAttribute("hidden","");b.innerHTML='<span class="d3ico">◆</span> View in 3D';}}
@@ -4631,7 +4640,7 @@ function switchTab(t){activeTab=t;document.querySelectorAll(".tab").forEach(b=>b
 function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Loading orders from Shopify…";}renderSalesDash();loadShopify().then(function(){buildFilters();renderSalesDash();});}
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
 let salesView="orders";  /* "orders" (paid/placed) | "drafts" */
-function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");salesStatuses.clear();buildFilters();renderSalesDash();}
+function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");const t3=$("tab-production");if(t3)t3.classList.toggle("on",v==="production");salesStatuses.clear();buildFilters();renderSalesDash();}
 function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(function(){buildFilters();renderSalesDash();});}
 /* Shopify-derived status pill (Shipped / Paid / Draft …) */
 function shopifyStatus(o){
@@ -4664,9 +4673,9 @@ function buildFilters(){
   }
   const box=$("salesstatuschips");
   if(box){
-    const defs = salesView==="drafts"
-      ? [["open","Open"],["invoice_sent","Invoice sent"]]
-      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped"],["paid","Paid"],["refunded","Refunded"]];
+    const defs = salesView==="production" ? []
+      : salesView==="drafts" ? [["open","Open"],["invoice_sent","Invoice sent"]]
+      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped (last 3 days)"]];
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
@@ -4684,6 +4693,44 @@ function matchOne(o,s){
 }
 function matchStatus(o){ if(salesStatuses.size===0) return true; for(const s of salesStatuses){ if(matchOne(o,s)) return true; } return false; }
 function salesRowClick(tr){const i=+tr.getAttribute("data-oi");const o=SHOPIFY[i];if(o)openOrderDetail(o);}
+/* ---- production timeline (factory edits, sales views) ---- */
+let FACTORY_MODE=false;
+const PROD_STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing"];
+function applyRoleMode(){
+  const dt=$("tab-drafts"); if(dt) dt.style.display=FACTORY_MODE?"none":"";
+  const nb=document.querySelector('#screen-sales .topbar a'); if(nb) nb.style.display=FACTORY_MODE?"none":"";
+  const chip=document.querySelector('#screen-sales .chip'); if(chip) chip.textContent=FACTORY_MODE?"Factory":"Sales";
+  const ttl=document.querySelector('#screen-sales .topttl'); if(ttl) ttl.textContent=FACTORY_MODE?"Factory · Open orders":"Sales · New orders";
+  if(FACTORY_MODE && salesView==="drafts") salesView="orders";
+}
+function enterDash(){FACTORY_MODE=(ROLE==="factory");applyRoleMode();enterSalesDash();}
+function setProdStageServer(id,idx){
+  fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,stage:idx})})
+    .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o)o.prod_stage=d.stage; renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
+    .catch(function(){ alert("Network error updating production."); });
+}
+function renderProduction(q){
+  const tb=$("salesrows"); if(!tb) return;
+  const editable=(typeof ROLE!=="undefined" && ROLE==="factory");
+  const list=SHOPIFY.filter(o=>!o.isDraft && !isShipped(o))
+    .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth);
+  let html="",shown=0;
+  list.forEach(function(o){
+    const hay=(o.order+" "+(o.items[0]?o.items[0].product:"")+" "+(o.customer||"")).toLowerCase();
+    if(q&&hay.indexOf(q)<0) return; shown++;
+    const oi=SHOPIFY.indexOf(o), cur=o.prod_stage||0;
+    const bar=PROD_STAGES.map(function(nm,idx){
+      const cls="pseg"+(idx<cur?" done":(idx===cur?" on":""))+(editable?" edit":"");
+      const click=editable?(' onclick="event.stopPropagation();setProdStageServer(\''+o.id+'\','+idx+')"'):"";
+      return '<button class="'+cls+'"'+click+'>'+nm+'</button>';
+    }).join("");
+    const spec=cur>=1?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+    const prodName=esc(o.items[0]?o.items[0].product:"—")+(o.items.length>1?' <span class="muted">+'+(o.items.length-1)+' more</span>':'');
+    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+esc(o.order)+'</td><td>'+prodName+'<div class="muted" style="font-size:11px;margin-top:3px">'+esc(o.customer||"")+' · '+spec+'</div></td><td colspan="4"><div class="pbar">'+bar+'</div></td></tr>';
+  });
+  tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No open orders in production.</td></tr>';
+  const cnt=$("salescount");if(cnt)cnt.textContent=shown+" order"+(shown===1?"":"s")+(editable?" · tap a stage to update":" · view only");
+}
 /* Factory-drawing assignment: everything is "Needs drawing" until DWGs are uploaded,
    split evenly between the drawers. Reassignments persist per-browser (localStorage). */
 const DRAWERS=["Mohammed","Abdul"];
@@ -4732,9 +4779,11 @@ function openOrderDetail(o){
 function closeOrderDetail(){$("orderdetail").hidden=true;}
 function specFromDetail(orderNo,i){closeOrderDetail();specLineItem(orderNo,i);}
 function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;
-  const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length;
+  const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length,nProd=SHOPIFY.filter(o=>!o.isDraft&&!isShipped(o)).length;
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
+  if($("tab-production"))$("tab-production").textContent="Production"+(nProd?" ("+nProd+")":"");
+  if(salesView==="production"){ renderProduction(q); return; }
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
     .filter(matchStatus);
@@ -4801,6 +4850,6 @@ function addWorker(){const inp=$("newworker"),n=(inp.value||"").trim();if(!n)ret
 function delWorker(i){const w=DB.workers();w.splice(i,1);DB.saveWorkers(w);renderWorkers();}
 
 ["loginlogo","dashlogo","worklogo","saleslogo"].forEach(id=>{if($(id))$(id).src=LOGO.uri;});
-function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){ROLE=d.role;if(ROLE==="sales")enterSalesDash();else enterFactory();}}).catch(function(){});}
+function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){ROLE=d.role;enterDash();}}).catch(function(){});}
 initProducts();renderQC();loadProduct();try{init3D();}catch(e){}applyZoom();pickRole("sales");showScreen("screen-login");restoreSession();
 </script>

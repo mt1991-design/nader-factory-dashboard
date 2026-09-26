@@ -140,6 +140,20 @@ function extractPdf(note) {
   const m = String(note).match(/https?:\/\/\S+\/pdf\/[a-zA-Z0-9]+/);
   return m ? m[0] : '';
 }
+// Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing). Shared + persistent.
+const PROD_STAGE_COUNT = 5;
+function prodStageFromTags(tags) {
+  const m = String(tags || '').match(/prodstage:(\d+)/);
+  const n = m ? parseInt(m[1], 10) : 0;
+  return Math.max(0, Math.min(PROD_STAGE_COUNT - 1, n));
+}
+// Strip all pricing from an order/draft before sending to the factory role.
+function stripPrice(o) {
+  const c = Object.assign({}, o);
+  delete c.total; delete c.subtotal; delete c.tax; delete c.currency; delete c.financial_status;
+  c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; return x; });
+  return c;
+}
 function mapAddress(a) {
   if (!a) return null;
   return {
@@ -155,9 +169,24 @@ app.get('/api/orders', requireAuth, async (req, res) => {
   try {
     const fresh = req.query.fresh === '1';
     const raw = await cached('orders', () => shopify(
-      'orders.json?status=any&limit=250&fields=id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note'
+      'orders.json?status=any&limit=250&fields=id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at'
     ), fresh);
-    const orders = raw.map(o => ({
+    // Limit what the sales team sees: hide refunded/voided/cancelled orders entirely,
+    // and hide shipped orders more than 3 days after they shipped. Owners use Shopify for the full history.
+    const nowMs = Date.now(), THREE_DAYS = 3 * 24 * 3600 * 1000;
+    const visible = raw.filter(o => {
+      const fin = (o.financial_status || '').toLowerCase();
+      if (fin === 'refunded' || fin === 'voided') return false;
+      if (o.cancelled_at) return false;
+      if ((o.fulfillment_status || '') === 'fulfilled') {
+        const fdates = (o.fulfillments || []).map(f => f.created_at).filter(Boolean).sort();
+        const shippedAt = fdates.length ? fdates[fdates.length - 1] : o.updated_at;
+        const t = shippedAt ? Date.parse(shippedAt) : 0;
+        return (nowMs - t) <= THREE_DAYS;
+      }
+      return true;
+    });
+    const orders = visible.map(o => ({
       id: o.id,
       order: o.name,
       kind: 'order',
@@ -177,9 +206,11 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       shipping_address: mapAddress(o.shipping_address),
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
+      prod_stage: prodStageFromTags(o.tags),
       items: mapLineItems(o.line_items)
     }));
-    res.json({ ok: true, orders });
+    const out = req.session.role === 'factory' ? orders.map(stripPrice) : orders;
+    res.json({ ok: true, orders: out });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
   }
@@ -211,9 +242,36 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       admin_url: `https://${STORE}/admin/draft_orders/${d.id}`,
       items: mapLineItems(d.line_items)
     }));
-    res.json({ ok: true, drafts });
+    const out = req.session.role === 'factory' ? drafts.map(stripPrice) : drafts;
+    res.json({ ok: true, drafts: out });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
+  }
+});
+
+// Factory advances the production timeline; stored as a `prodstage:N` tag on the order (persistent + visible in Shopify).
+app.post('/api/production', requireAuth, async (req, res) => {
+  if (req.session.role !== 'factory') return res.status(403).json({ ok: false, error: 'factory only' });
+  const { id, stage } = req.body || {};
+  const s = Math.max(0, Math.min(PROD_STAGE_COUNT - 1, parseInt(stage, 10) || 0));
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try {
+    const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`,
+      { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    if (!r.ok) throw new Error('Shopify ' + r.status);
+    const cur = ((await r.json()).order || {}).tags || '';
+    const tags = cur.split(',').map(t => t.trim()).filter(t => t && !/^prodstage:/.test(t));
+    tags.push('prodstage:' + s);
+    const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
+      method: 'PUT',
+      headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } })
+    });
+    if (!up.ok) throw new Error('Shopify PUT ' + up.status);
+    if (CACHE.orders) delete CACHE.orders;   // force fresh so the change shows immediately
+    res.json({ ok: true, stage: s });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
