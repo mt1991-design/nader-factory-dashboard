@@ -4811,7 +4811,13 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
     const editBtn=(i===0&&o.isDraft&&o.edit_state&&ROLE==="sales")?'<a class="pdflink" href="https://nader.ae/pages/sales-form#edit='+esc(o.edit_state)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Edit this order (sales only)">✎ Edit</a> ':"";
     const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
-    const sig=(i===0&&o.isDraft)?(o.signature==="signed"?'<br><span class="speccomplete yes">✓ Signed</span>':(o.signature==="pending"?'<br><span class="speccomplete no">Needs signature</span>':'')):"";
+    const sig=(i===0&&o.isDraft)?(
+        o.signature==="signed"
+          ? '<br><span style="display:inline-block;margin-top:6px;padding:4px 11px;border-radius:20px;background:#e6f4ea;color:#1e7d43;font:700 11px var(--ui);letter-spacing:.02em">✓ Signed</span>'
+          : (o.signature==="pending"
+              ? '<br><span style="display:inline-block;margin-top:6px;padding:4px 11px;border-radius:20px;background:#fdf0d5;color:#8a5a00;font:700 11px var(--ui);letter-spacing:.02em">◷ Needs signature</span>'
+              : '')
+      ):"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
