@@ -228,9 +228,9 @@
   </div>
   <div class="dashgrid">
     <div class="card dashmain">
-      <div class="cardhdr"><span>Orders sent to factory</span><input type="text" id="ordersearch" placeholder="Search order # / product" oninput="renderDash()"></div>
-      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Locked</th><th>Fabric</th><th>QC status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
-      <div id="dashempty" class="dashempty">No orders yet. When Sales lock a spec it appears here.</div>
+      <div class="cardhdr"><span>Open orders · production</span><input type="text" id="ordersearch" placeholder="Search order # / product / customer" oninput="renderFactoryProd()"></div>
+      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
+      <div id="dashempty" class="dashempty">No open orders in production yet.</div>
     </div>
     <div class="card dashside">
       <div class="cardhdr"><span>Factory team</span></div>
@@ -4705,7 +4705,7 @@ function applyRoleMode(){
   const ttl=document.querySelector('#screen-sales .topttl'); if(ttl) ttl.textContent=FACTORY_MODE?"Factory · Open orders":"Sales · New orders";
   if(FACTORY_MODE && salesView==="drafts") salesView="orders";
 }
-function enterDash(){FACTORY_MODE=(ROLE==="factory");applyRoleMode();enterSalesDash();}
+function enterDash(){ if(ROLE==="factory"){ enterFactory(); } else { enterSalesDash(); } }
 function setProdStageServer(id,line,idx){
   fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
@@ -4832,7 +4832,29 @@ function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!
   draw();applyQCMode();loadQC(ex?ex.qc:null);switchTab("photo");reset3D();}
 function exitToSalesDash(){curOrderId=null;renderSalesDash();showScreen("screen-sales");}
 
-function enterFactory(){mode="factory";renderDash();renderWorkers();showScreen("screen-factory");}
+function enterFactory(){mode="factory";showScreen("screen-factory");renderWorkers();
+  const tb=$("orderrows"); if(tb) tb.innerHTML='<tr><td colspan="4" class="muted" style="padding:14px 10px">Loading open orders…</td></tr>';
+  loadShopify().then(function(){ renderFactoryProd(); });}
+function renderFactoryProd(){
+  const tb=$("orderrows"); if(!tb) return;
+  const q=($("ordersearch").value||"").toLowerCase();
+  const list=SHOPIFY.filter(o=>!o.isDraft && o.state==="open")
+    .sort((a,b)=>(b.prod_stage||0)-(a.prod_stage||0));   // drawing-ready first
+  let html="",shown=0;
+  list.forEach(function(o){ const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[];
+    o.items.forEach(function(it,i){
+      const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return; shown++;
+      const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
+      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
+      const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+      const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td>'+draw+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
+    });
+  });
+  tb.innerHTML=shown?html:"";
+  const de=$("dashempty"); if(de) de.style.display=shown?"none":"block";
+  renderLeaderboard();
+}
 function exitWork(){if(mode==="factory"){curOrderId=null;renderDash();renderWorkers();showScreen("screen-factory");}else{logout();}}
 
 /* ---- factory dashboard ---- */
