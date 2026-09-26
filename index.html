@@ -4809,11 +4809,12 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const multi=o.items.length>1;
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
+    const editBtn=(i===0&&o.isDraft&&o.edit_state&&ROLE==="sales")?'<a class="pdflink" href="https://nader.ae/pages/sales-form#edit='+esc(o.edit_state)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Edit this order (sales only)">✎ Edit</a> ':"";
     const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
     const sig=(i===0&&o.isDraft)?(o.signature==="signed"?'<br><span class="speccomplete yes">✓ Signed</span>':(o.signature==="pending"?'<br><span class="speccomplete no">Needs signature</span>':'')):"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
-    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
+    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
   const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");

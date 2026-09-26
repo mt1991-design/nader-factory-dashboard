@@ -253,6 +253,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       note: d.note || '',
       pdf_url: extractPdf(d.note),
       signature: /signature:signed/.test(d.tags || '') ? 'signed' : (/signature:pending/.test(d.tags || '') ? 'pending' : ''),
+      edit_state: (String(d.tags || '').match(/state:(s_[a-z0-9]+)/i) || [])[1] || '',
       invoice_url: d.invoice_url || '',
       shipping_address: mapAddress(d.shipping_address),
       billing_address: mapAddress(d.billing_address),
