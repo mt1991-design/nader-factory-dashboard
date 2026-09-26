@@ -162,6 +162,7 @@ function stripPrice(o) {
   const c = Object.assign({}, o);
   delete c.total; delete c.subtotal; delete c.tax; delete c.currency; delete c.financial_status;
   c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; return x; });
+  if (c.note) c.note = c.note.split('\n').filter(l => !/\bAED\b|total/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n');
   return c;
 }
 function mapAddress(a) {

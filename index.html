@@ -270,6 +270,7 @@
       <div class="grp"><label>Dimensions (cm)</label><div class="dims" id="dimfields"></div></div>
       <div class="grp"><label>Fabric supplier</label><select id="supplier"><option value=""></option><option>Silvertex</option><option>Red Velvet</option><option>Madrid</option><option>Skytex</option><option>Hero</option><option>Busra al Sham</option><option>Alwan Al Taif</option><option>Amaan</option><option>Marhaba</option><option>Fabric Library</option><option>York</option><option>IDT</option><option>Ultra</option><option>Client's Own (COM)</option><option>Other</option></select></div>
       <div class="grp"><label>Fabric code</label><input type="text" id="fabcode" placeholder="Supplier reference / shade code"></div>
+      <div class="grp" id="orderInfoGrp" style="display:none;border-top:1px solid var(--panelline);padding-top:12px"><label>Order &amp; customer</label><div id="orderInfo" style="font-size:12.5px;line-height:1.55"></div></div>
       <div class="btns" id="salesbtns"><button class="primary" onclick="printSheets()">Print / Save PDF</button><button class="ghost" id="lockbtn" onclick="lockAndSend()">🔒 Lock &amp; send</button></div>
       <div class="btns" id="factorybtns" hidden><button class="primary" onclick="printSheets()">Print / Save PDF</button></div>
       <p class="hint" id="workhint">Prototype. Frame/foam values are defaults until confirmed with the workshop.</p>
@@ -4816,7 +4817,18 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
   const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");
 }
+function orderInfoHTML(o){
+  const a=o.shipping_address||{};
+  const addr=[a.address1,a.address2,[a.zip,a.city].filter(Boolean).join(" "),a.province,a.country].filter(Boolean).join(", ");
+  let h='<div><b>'+esc(o.customer||"—")+'</b></div>';
+  if(o.phone) h+='<div class="muted">'+esc(o.phone)+'</div>';
+  if(addr) h+='<div class="muted" style="margin-top:2px">'+esc(addr)+'</div>';
+  if(o.note) h+='<div style="margin-top:8px;white-space:pre-wrap;font-size:12px;border-top:1px dashed var(--panelline);padding-top:8px">'+esc(o.note)+'</div>';
+  if(o.pdf_url) h+='<div style="margin-top:8px"><a href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" style="color:var(--ox);font-weight:600;font-size:12px">⬇ Signed form (PDF)</a></div>';
+  return h;
+}
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
+  const oig=$("orderInfoGrp"); if(oig){ oig.style.display=""; $("orderInfo").innerHTML=orderInfoHTML(o); }
   mode="sales";curOrderId=id;
   $("rolechip").textContent="Sales";$("salesbtns").hidden=false;$("factorybtns").hidden=true;
   $("worktitle").textContent="Order "+id+(o.items.length>1?" · item "+(i+1)+"/"+o.items.length:"");
