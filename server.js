@@ -187,7 +187,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     };
     // Open orders always show. Shipped & refunded only show for 3 days after the event, then roll off
     // automatically (the window is relative to "now", so each day the oldest drop out — no cleanup job needed).
-    const visible = raw.filter(o => { const st = orderState(o); return st === 'open' || (nowMs - terminalMs(o, st)) <= THREE_DAYS; });
+    // Open orders always show; shipped shows for 3 days then rolls off; refunded/voided/cancelled are hidden entirely.
+    const visible = raw.filter(o => { const st = orderState(o); if (st === 'refunded') return false; return st === 'open' || (nowMs - terminalMs(o, st)) <= THREE_DAYS; });
     const orders = visible.map(o => ({
       id: o.id,
       order: o.name,

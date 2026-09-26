@@ -100,11 +100,18 @@
   .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
   .fchip{font:600 11.5px var(--ui);padding:6px 11px;border:1px solid var(--fieldline);border-radius:20px;background:var(--field);color:var(--ink2);cursor:pointer}
   .fchip.on{background:var(--ox);color:#fff;border-color:var(--ox)}
-  .pbar{display:flex;gap:3px;width:100%;min-width:340px}
-  .pseg{flex:1;text-align:center;font:600 10px var(--ui);padding:7px 4px;border-radius:5px;background:var(--field);color:var(--ink2);border:1px solid var(--panelline);white-space:nowrap}
-  .pseg.edit{cursor:pointer}
-  .pseg.done{background:#2f7a3a;color:#fff;border-color:#2f7a3a}
-  .pseg.on{background:#256b30;color:#fff;border-color:#256b30;box-shadow:0 0 0 2px rgba(47,122,58,.25)}
+  .pbar2{min-width:380px;padding:6px 4px 2px}
+  .prow{display:flex;align-items:center}
+  .pdot{width:15px;height:15px;border-radius:50%;background:var(--field);border:2px solid var(--panelline);flex:0 0 auto}
+  .pdot.done{background:#2f7a3a;border-color:#2f7a3a}
+  .pdot.on{background:#256b30;border-color:#256b30;box-shadow:0 0 0 4px rgba(47,122,58,.22)}
+  .pconn{flex:1 1 auto;height:3px;background:var(--panelline)}
+  .pconn.done{background:#2f7a3a}
+  .plabels{display:flex;margin-top:6px}
+  .plabel{flex:1;text-align:center;font:600 9.5px var(--ui);color:var(--ink2)}
+  .plabel:first-child{text-align:left}
+  .plabel:last-child{text-align:right}
+  .plabel.on{color:#256b30}
   .speccomplete{font:600 10.5px var(--mono);padding:2px 7px;border-radius:20px}
   .speccomplete.yes{background:rgba(47,122,58,.16);color:#2f7a3a}
   .speccomplete.no{background:rgba(180,140,20,.18);color:#8a6d10}
@@ -188,7 +195,7 @@
       <div class="roletabs" id="salestabs" style="max-width:560px;margin:0 0 12px">
         <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
-        <button class="roletab" id="tab-production" onclick="setSalesView('production')">Production</button>
+        <button class="roletab" id="tab-production" onclick="setSalesView('production')">Production status</button>
       </div>
       <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
@@ -4670,11 +4677,11 @@ function buildFilters(){
   if(box){
     const defs = salesView==="production" ? []
       : salesView==="drafts" ? [["open","Open"],["invoice_sent","Invoice sent"]]
-      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped"],["refunded","Refunded"]];
+      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped"]];
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
-  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. Shipped & refunded appear for 3 days only (via their chips), then roll off automatically." : "";
+  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. Shipped orders appear for 3 days only (Shipped chip), then roll off automatically. Refunds aren't shown here." : "";
 }
 function toggleStatus(s){ if(salesStatuses.has(s)) salesStatuses.delete(s); else salesStatuses.add(s); buildFilters(); renderSalesDash(); }
 function matchOne(o,s){
@@ -4704,27 +4711,39 @@ function setProdStageServer(id,idx){
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o)o.prod_stage=d.stage; renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
     .catch(function(){ alert("Network error updating production."); });
 }
+function prodBar(o,editable){
+  const cur=o.prod_stage||0,n=PROD_STAGES.length;
+  let row="";
+  for(let i=0;i<n;i++){
+    const dcls="pdot"+(i<cur?" done":(i===cur?" on":""));
+    const click=editable?(' onclick="event.stopPropagation();setProdStageServer(\''+o.id+'\','+i+')" style="cursor:pointer"'):"";
+    row+='<div class="'+dcls+'"'+click+' title="'+PROD_STAGES[i]+'"></div>';
+    if(i<n-1) row+='<div class="pconn'+(i<cur?" done":"")+'"></div>';
+  }
+  const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur?" on":"")+'">'+nm+'</span>').join("");
+  return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div></div>';
+}
 function renderProduction(q){
   const tb=$("salesrows"); if(!tb) return;
   const editable=(typeof ROLE!=="undefined" && ROLE==="factory");
-  const list=SHOPIFY.filter(o=>!o.isDraft && !isShipped(o))
+  const list=SHOPIFY.filter(o=>!o.isDraft && o.state==="open")
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth);
   let html="",shown=0;
   list.forEach(function(o){
-    const hay=(o.order+" "+(o.items[0]?o.items[0].product:"")+" "+(o.customer||"")).toLowerCase();
-    if(q&&hay.indexOf(q)<0) return; shown++;
     const oi=SHOPIFY.indexOf(o), cur=o.prod_stage||0;
-    const bar=PROD_STAGES.map(function(nm,idx){
-      const cls="pseg"+(idx<cur?" done":(idx===cur?" on":""))+(editable?" edit":"");
-      const click=editable?(' onclick="event.stopPropagation();setProdStageServer(\''+o.id+'\','+idx+')"'):"";
-      return '<button class="'+cls+'"'+click+'>'+nm+'</button>';
-    }).join("");
     const spec=cur>=1?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
-    const prodName=esc(o.items[0]?o.items[0].product:"—")+(o.items.length>1?' <span class="muted">+'+(o.items.length-1)+' more</span>':'');
-    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+esc(o.order)+'</td><td>'+prodName+'<div class="muted" style="font-size:11px;margin-top:3px">'+esc(o.customer||"")+' · '+spec+'</div></td><td colspan="4"><div class="pbar">'+bar+'</div></td></tr>';
+    o.items.forEach(function(it,i){
+      const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();
+      if(q&&hay.indexOf(q)<0) return; shown++;
+      const first=(i===0), multi=o.items.length>1;
+      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
+      const meta=first?'<div class="muted" style="font-size:11px;margin-top:3px">'+esc(o.customer||"")+' · '+spec+'</div>':"";
+      const bar=first?prodBar(o,editable):"";
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td colspan="4">'+bar+'</td></tr>';
+    });
   });
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No open orders in production.</td></tr>';
-  const cnt=$("salescount");if(cnt)cnt.textContent=shown+" order"+(shown===1?"":"s")+(editable?" · tap a stage to update":" · view only");
+  const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s")+(editable?" · tap a point to update the stage":" · view only");
 }
 /* Factory-drawing assignment: everything is "Needs drawing" until DWGs are uploaded,
    split evenly between the drawers. Reassignments persist per-browser (localStorage). */
