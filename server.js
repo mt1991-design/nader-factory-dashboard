@@ -142,10 +142,20 @@ function extractPdf(note) {
 }
 // Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing). Shared + persistent.
 const PROD_STAGE_COUNT = 5;
-function prodStageFromTags(tags) {
-  const m = String(tags || '').match(/prodstage:(\d+)/);
-  const n = m ? parseInt(m[1], 10) : 0;
-  return Math.max(0, Math.min(PROD_STAGE_COUNT - 1, n));
+const clampStage = n => Math.max(0, Math.min(PROD_STAGE_COUNT - 1, parseInt(n, 10) || 0));
+// Per-line-item production stage, stored on the order as tags `prodstage:<lineIndex>:<stage>`.
+// (legacy `prodstage:<stage>` = whole-order, applied to every line for backward-compat)
+function prodStagesFromTags(tags, nLines) {
+  const arr = new Array(Math.max(1, nLines || 1)).fill(0);
+  let legacy = null;
+  String(tags || '').split(',').map(t => t.trim()).forEach(t => {
+    let m = t.match(/^prodstage:(\d+):(\d+)$/);
+    if (m) { const li = +m[1]; if (li < arr.length) arr[li] = clampStage(m[2]); return; }
+    m = t.match(/^prodstage:(\d+)$/);
+    if (m) legacy = clampStage(m[1]);
+  });
+  if (legacy != null) for (let i = 0; i < arr.length; i++) arr[i] = legacy;
+  return arr;
 }
 // Strip all pricing from an order/draft before sending to the factory role.
 function stripPrice(o) {
@@ -209,7 +219,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       shipping_address: mapAddress(o.shipping_address),
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
-      prod_stage: prodStageFromTags(o.tags),
+      prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length),
+      prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
       items: mapLineItems(o.line_items)
     }));
@@ -257,15 +268,18 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
 app.post('/api/production', requireAuth, async (req, res) => {
   if (req.session.role !== 'factory') return res.status(403).json({ ok: false, error: 'factory only' });
   const { id, stage } = req.body || {};
-  const s = Math.max(0, Math.min(PROD_STAGE_COUNT - 1, parseInt(stage, 10) || 0));
+  const line = Math.max(0, parseInt((req.body || {}).line, 10) || 0);
+  const s = clampStage(stage);
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
   try {
     const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`,
       { headers: { 'X-Shopify-Access-Token': TOKEN } });
     if (!r.ok) throw new Error('Shopify ' + r.status);
     const cur = ((await r.json()).order || {}).tags || '';
-    const tags = cur.split(',').map(t => t.trim()).filter(t => t && !/^prodstage:/.test(t));
-    tags.push('prodstage:' + s);
+    // keep other tags; drop this line's old stage + any legacy whole-order stage
+    const tags = cur.split(',').map(t => t.trim()).filter(t =>
+      t && !new RegExp('^prodstage:' + line + ':').test(t) && !/^prodstage:\d+$/.test(t));
+    tags.push('prodstage:' + line + ':' + s);
     const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
       method: 'PUT',
       headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
@@ -273,7 +287,7 @@ app.post('/api/production', requireAuth, async (req, res) => {
     });
     if (!up.ok) throw new Error('Shopify PUT ' + up.status);
     if (CACHE.orders) delete CACHE.orders;   // force fresh so the change shows immediately
-    res.json({ ok: true, stage: s });
+    res.json({ ok: true, line: line, stage: s });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

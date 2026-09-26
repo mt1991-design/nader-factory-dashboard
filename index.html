@@ -4706,17 +4706,17 @@ function applyRoleMode(){
   if(FACTORY_MODE && salesView==="drafts") salesView="orders";
 }
 function enterDash(){FACTORY_MODE=(ROLE==="factory");applyRoleMode();enterSalesDash();}
-function setProdStageServer(id,idx){
-  fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,stage:idx})})
-    .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o)o.prod_stage=d.stage; renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
+function setProdStageServer(id,line,idx){
+  fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
+    .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
     .catch(function(){ alert("Network error updating production."); });
 }
-function prodBar(o,editable){
-  const cur=o.prod_stage||0,n=PROD_STAGES.length;
+function prodBar(o,line,cur,editable){
+  const n=PROD_STAGES.length;
   let row="";
   for(let i=0;i<n;i++){
     const dcls="pdot"+(i<cur?" done":(i===cur?" on":""));
-    const click=editable?(' onclick="event.stopPropagation();setProdStageServer(\''+o.id+'\','+i+')" style="cursor:pointer"'):"";
+    const click=editable?(' onclick="event.stopPropagation();setProdStageServer(\''+o.id+'\','+line+','+i+')" style="cursor:pointer"'):"";
     row+='<div class="'+dcls+'"'+click+' title="'+PROD_STAGES[i]+'"></div>';
     if(i<n-1) row+='<div class="pconn'+(i<cur?" done":"")+'"></div>';
   }
@@ -4730,16 +4730,16 @@ function renderProduction(q){
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth);
   let html="",shown=0;
   list.forEach(function(o){
-    const oi=SHOPIFY.indexOf(o), cur=o.prod_stage||0;
-    const spec=cur>=1?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+    const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[];
     o.items.forEach(function(it,i){
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();
       if(q&&hay.indexOf(q)<0) return; shown++;
-      const first=(i===0), multi=o.items.length>1;
+      const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
       const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
-      const meta=first?'<div class="muted" style="font-size:11px;margin-top:3px">'+esc(o.customer||"")+' · '+spec+'</div>':"";
-      const bar=first?prodBar(o,editable):"";
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td colspan="4">'+bar+'</td></tr>';
+      const spec=cur>=1?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+      const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
+      // every line item gets its OWN progress bar
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td colspan="4">'+prodBar(o,i,cur,editable)+'</td></tr>';
     });
   });
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No open orders in production.</td></tr>';
@@ -4796,7 +4796,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length,nProd=SHOPIFY.filter(o=>!o.isDraft&&!isShipped(o)).length;
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
-  if($("tab-production"))$("tab-production").textContent="Production"+(nProd?" ("+nProd+")":"");
+  if($("tab-production"))$("tab-production").textContent="Production status"+(nProd?" ("+nProd+")":"");
   if(salesView==="production"){ renderProduction(q); return; }
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
