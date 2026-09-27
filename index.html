@@ -4903,7 +4903,9 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   if(salesView==="production"){ renderProduction(q); return; }
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
-    .filter(matchStatus);
+    .filter(matchStatus)
+    /* newest first — for drafts sort by the draft number (D1842 > D1841); orders keep newest-date order */
+    .sort((a,b)=>{ if(salesView==="drafts"){ const na=parseInt(String(a.order).replace(/\D/g,''))||0, nb=parseInt(String(b.order).replace(/\D/g,''))||0; return nb-na; } return (b.date||"").localeCompare(a.date||""); });
   let html="",shown=0;
   list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
     const st=shopifyStatus(o);
