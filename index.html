@@ -4792,6 +4792,17 @@ function openOrderDetail(o){
   $("orderdetail").hidden=false;
 }
 function closeOrderDetail(){$("orderdetail").hidden=true;}
+function markPaid(sel,id){
+  if(sel.value!=="paid"){return;}
+  if(!confirm("Mark this order as PAID?\n\nIt will move out of Drafts and into the Orders list.")){ sel.value="unpaid"; return; }
+  sel.disabled=true;
+  fetch("/api/mark_paid",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id})})
+    .then(r=>r.json()).then(d=>{
+      if(d&&d.ok){ refreshSales(); }
+      else { alert("Could not mark as paid: "+((d&&d.error)||"error")); sel.value="unpaid"; sel.disabled=false; }
+    }).catch(()=>{ alert("Network error — please try again."); sel.value="unpaid"; sel.disabled=false; });
+}
+window.markPaid=markPaid;
 function specFromDetail(orderNo,i){closeOrderDetail();specLineItem(orderNo,i);}
 function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;
   const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length,nProd=SHOPIFY.filter(o=>!o.isDraft&&!isShipped(o)).length;
@@ -4818,7 +4829,13 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
               ? '<br><span style="display:inline-block;margin-top:6px;padding:4px 11px;border-radius:20px;background:#fdf0d5;color:#8a5a00;font:700 11px var(--ui);letter-spacing:.02em">◷ Needs signature</span>'
               : '')
       ):"";
-    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig):"";
+    const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed"&&(o.payment_method==="cash"||o.payment_method==="transfer"))
+      ? '<br><select onclick="event.stopPropagation()" onchange="markPaid(this,'+o.id+')" title="Change to Paid to move this into Orders" style="margin-top:6px;padding:4px 8px;border-radius:6px;border:1px solid #d9c9a0;background:#fff8e7;color:#8a5a00;font:700 11px var(--ui);cursor:pointer">'
+          +'<option value="unpaid">'+(o.payment_method==="cash"?"💵 Cash":"🏦 Transfer")+' · Unpaid</option>'
+          +'<option value="paid">✓ Mark Paid → Orders</option>'
+        +'</select>'
+      :"";
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});

@@ -253,6 +253,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       note: d.note || '',
       pdf_url: extractPdf(d.note),
       signature: /signature:signed/.test(d.tags || '') ? 'signed' : (/signature:pending/.test(d.tags || '') ? 'pending' : ''),
+      payment_method: /payment-cash/.test(d.tags || '') ? 'cash' : (/payment-bank-transfer/.test(d.tags || '') ? 'transfer' : (/payment-card/.test(d.tags || '') ? 'card' : '')),
       edit_state: (String(d.tags || '').match(/state:(s_[a-z0-9]+)/i) || [])[1] || '',
       invoice_url: d.invoice_url || '',
       shipping_address: mapAddress(d.shipping_address),
@@ -291,6 +292,29 @@ app.post('/api/production', requireAuth, async (req, res) => {
     if (!up.ok) throw new Error('Shopify PUT ' + up.status);
     if (CACHE.orders) delete CACHE.orders;   // force fresh so the change shows immediately
     res.json({ ok: true, line: line, stage: s });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Mark a cash / bank-transfer draft as PAID → completes the draft into a real (paid) order,
+// which moves it out of Drafts and into Orders. (Card orders convert via the checkout link.)
+app.post('/api/mark_paid', requireAuth, async (req, res) => {
+  if (req.session.role === 'factory') return res.status(403).json({ ok: false, error: 'not allowed' });
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try {
+    // No payment_pending param → Shopify marks the resulting order as PAID.
+    const r = await fetch(`https://${STORE}/admin/api/${APIVER}/draft_orders/${id}/complete.json`, {
+      method: 'PUT',
+      headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' }
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ ok: false, error: 'Shopify ' + r.status, detail: data });
+    const dd = data.draft_order || {};
+    if (CACHE.drafts) delete CACHE.drafts;   // draft is now completed → hide from Drafts
+    if (CACHE.orders) delete CACHE.orders;    // new order appears in Orders
+    res.json({ ok: true, order_id: dd.order_id, status: dd.status });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
