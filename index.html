@@ -4800,7 +4800,7 @@ document.addEventListener("click",function(ev){ if(!USER)return; const t=ev.targ
 window.addEventListener("beforeunload",function(){ if(USER&&TRACK_Q.length){ try{ navigator.sendBeacon("/api/track", new Blob([JSON.stringify({events:TRACK_Q})],{type:"application/json"})); }catch(e){} } });
 function setProdStageServer(id,line,idx){
   fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
-    .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
+    .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } if(ROLE==="factory"){ renderFactoryProd(); } else { renderSalesDash(); } } else { alert("Couldn't update — factory login required."); } })
     .catch(function(){ alert("Network error updating production."); });
 }
 function prodBar(o,line,cur,editable){
