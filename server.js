@@ -22,28 +22,45 @@ const STORE   = process.env.SHOPIFY_STORE || '';
 const TOKEN   = process.env.SHOPIFY_TOKEN || '';
 const APIVER  = process.env.SHOPIFY_API_VERSION || '2025-01';
 const SECRET  = process.env.SESSION_SECRET || 'change-me';
-const PW = { sales: process.env.SALES_PASSWORD || '', factory: process.env.FACTORY_PASSWORD || '' };
+
+/* ---------- users (passwords stored as node-scrypt hashes; plaintext lives only with Mariam) ---------- */
+const USERS = {
+  admin:    { name: "Admin",          roles: ["sales", "factory", "admin"], salt: "8ec5da97f7e275da088ac2c4ba6f3ca8", hash: "d4c7e5dacc420351ee742f59b4d40e1d1b4bab582975451f0ba9ea623d3fb5d9" },
+  mohammed: { name: "Mohammed",       roles: ["sales"],                     salt: "44fa5269a6718a7a306532a61ba910f5", hash: "996d2736bacc4b3810c222325cf83db6316833adaaab0cf59631cd50989bf240" },
+  abdul:    { name: "Abdul",          roles: ["sales", "factory"],          salt: "bddd62168c55e7a2c4588224f29d020b", hash: "feede78530d367c9ac4b9f7ba7460248356e9d0b71b9eb15e0fd15a12143950e" },
+  zahak:    { name: "Zahak",          roles: ["sales"],                     salt: "aa2dff4f4aed7d0a2f7e12df8f96cb6f", hash: "c6568b8860c8cbc989ada742e8cbcd706cd68323361b2b9043553680412cdadf" },
+  adnan:    { name: "Adnan",          roles: ["sales"],                     salt: "bb5fc4c98a8ccb90bccc0d4643d169d2", hash: "e433348737656403001f8437671413ac9989aa456c8b9427d6fa447497c31998" },
+  nizam:    { name: "Nizam",          roles: ["sales"],                     salt: "d47a879917e5526ed0f6a4a1a3c1e2e7", hash: "973652ea5bfffbf63b5cd895be2643b2455646c392a206540e00f5d740d497db" },
+  aslam:    { name: "Mohammed Aslam", roles: ["sales", "factory"],          salt: "08b9113d0d29bb7e5f1c257a09ad77a8", hash: "b1e444a6c4fe9ac5a13b4c92460bc5b78e21dd4795b75015f93b296da23628e4" },
+  sam:      { name: "Sam",            roles: ["sales", "factory"],          salt: "baee45f03e78cd9ca17b82b2f56b90db", hash: "057b1a36ce267a4ab31515f8302cb672107e30e88301cdf72a85952f3801e6e4" },
+};
+function checkPassword(user, password) {
+  if (!user || !password) return false;
+  try {
+    const h = crypto.scryptSync(String(password), Buffer.from(user.salt, 'hex'), 32);
+    return crypto.timingSafeEqual(h, Buffer.from(user.hash, 'hex'));
+  } catch (e) { return false; }
+}
 
 app.use(express.json());
 app.use(cookies);
 
 /* ---------- tiny signed-cookie session (no external deps) ---------- */
-function sign(role, exp) {
-  const body = `${role}|${exp}`;
-  const mac  = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
-  return `${Buffer.from(body).toString('base64url')}.${mac}`;
+function sign(sess) {
+  const b64 = Buffer.from(JSON.stringify(sess)).toString('base64url');
+  const mac = crypto.createHmac('sha256', SECRET).update(b64).digest('base64url');
+  return `${b64}.${mac}`;
 }
 function verify(tok) {
   if (!tok || tok.indexOf('.') < 0) return null;
   const [b64, mac] = tok.split('.');
-  let body;
-  try { body = Buffer.from(b64, 'base64url').toString(); } catch (e) { return null; }
-  const expect = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
-  if (mac.length !== expect.length ||
+  const expect = crypto.createHmac('sha256', SECRET).update(b64).digest('base64url');
+  if (!mac || mac.length !== expect.length ||
       !crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expect))) return null;
-  const [role, exp] = body.split('|');
-  if (!exp || Date.now() > Number(exp)) return null;
-  return { role };
+  let sess;
+  try { sess = JSON.parse(Buffer.from(b64, 'base64url').toString()); } catch (e) { return null; }
+  if (!sess || !sess.e || Date.now() > Number(sess.e)) return null;
+  return sess;   // { u:username, e:exp }
 }
 function cookies(req, res, next) {
   req.cookies = {};
@@ -55,34 +72,107 @@ function cookies(req, res, next) {
 }
 function requireAuth(req, res, next) {
   const sess = verify(req.cookies.nfs_session);
-  if (!sess) return res.status(401).json({ ok: false, error: 'auth' });
-  req.session = sess;
+  const user = sess && USERS[sess.u];
+  if (!user) return res.status(401).json({ ok: false, error: 'auth' });
+  req.session = { username: sess.u, name: user.name, roles: user.roles };
   next();
+}
+function hasRole(req, role) { return req.session && (req.session.roles || []).indexOf(role) >= 0; }
+// price is hidden only for FACTORY-ONLY users (dual sales+factory staff keep prices in their sales view)
+function factoryOnly(req) { return hasRole(req, 'factory') && !hasRole(req, 'sales') && !hasRole(req, 'admin'); }
+
+function setSessionCookie(res, username) {
+  const exp = Date.now() + 12 * 3600 * 1000; // 12h
+  res.setHeader('Set-Cookie',
+    `nfs_session=${sign({ u: username, e: exp })}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
 }
 
 app.post('/api/login', (req, res) => {
-  const { role, password } = req.body || {};
-  if (!PW[role] || password !== PW[role]) return res.json({ ok: false });
-  const exp = Date.now() + 12 * 3600 * 1000; // 12h
-  const tok = sign(role, exp);
-  res.setHeader('Set-Cookie',
-    `nfs_session=${tok}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
-  res.json({ ok: true, role });
+  const uname = String((req.body || {}).username || '').trim().toLowerCase();
+  const password = (req.body || {}).password;
+  const user = USERS[uname];
+  if (!user || !checkPassword(user, password)) {
+    logEvent(uname || '(unknown)', 'login_failed', { ip: clientIp(req) });
+    return res.json({ ok: false });
+  }
+  setSessionCookie(res, uname);
+  logEvent(uname, 'login', { ip: clientIp(req), name: user.name });
+  res.json({ ok: true, username: uname, name: user.name, roles: user.roles });
 });
 
 // Restore an existing session on page load/refresh, and slide it forward 12h on use.
 app.get('/api/session', (req, res) => {
   const sess = verify(req.cookies.nfs_session);
-  if (!sess) return res.json({ ok: false });
-  const exp = Date.now() + 12 * 3600 * 1000;
-  res.setHeader('Set-Cookie',
-    `nfs_session=${sign(sess.role, exp)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
-  res.json({ ok: true, role: sess.role });
+  const user = sess && USERS[sess.u];
+  if (!user) return res.json({ ok: false });
+  setSessionCookie(res, sess.u);
+  res.json({ ok: true, username: sess.u, name: user.name, roles: user.roles });
 });
 
 app.post('/api/logout', (req, res) => {
+  const sess = verify(req.cookies.nfs_session);
+  if (sess && sess.u) logEvent(sess.u, 'logout', { ip: clientIp(req) });
   res.setHeader('Set-Cookie', 'nfs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
   res.json({ ok: true });
+});
+
+/* ---------- audit log (in-memory buffer, persisted best-effort to Cloudflare KV via the worker) ---------- */
+const WORKER_URL = 'https://nader-drafts.partner-e88.workers.dev';
+const FORM_SECRET = process.env.FORM_SECRET || '';   // set in DO env; enables KV persistence
+const AUDIT_MAX = 6000;
+let EVENTS = [];
+let auditDirty = false;
+
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+}
+function logEvent(username, type, meta) {
+  EVENTS.push({ t: Date.now(), u: username || '', type: type || 'event', meta: meta || {} });
+  if (EVENTS.length > AUDIT_MAX) EVENTS = EVENTS.slice(-AUDIT_MAX);
+  auditDirty = true;
+}
+async function loadAudit() {
+  if (!FORM_SECRET) return;
+  try {
+    const r = await fetch(WORKER_URL + '/audit', { headers: { 'X-Form-Secret': FORM_SECRET } });
+    const d = await r.json().catch(() => ({}));
+    if (d && d.ok && Array.isArray(d.log)) EVENTS = d.log.slice(-AUDIT_MAX);
+  } catch (e) { /* memory-only if worker unreachable */ }
+}
+async function flushAudit() {
+  if (!auditDirty || !FORM_SECRET) return;
+  auditDirty = false;
+  try {
+    await fetch(WORKER_URL + '/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Form-Secret': FORM_SECRET },
+      body: JSON.stringify({ log: EVENTS })
+    });
+  } catch (e) { auditDirty = true; }
+}
+setInterval(flushAudit, 15000);
+loadAudit();
+
+// Client posts UI activity (tab views, clicks, actions) here.
+app.post('/api/track', requireAuth, (req, res) => {
+  const evs = Array.isArray((req.body || {}).events) ? req.body.events : [];
+  evs.slice(0, 50).forEach(e => logEvent(req.session.username, String(e && e.type || 'click').slice(0, 40),
+    Object.assign({ ip: clientIp(req) }, (e && e.meta) || {})));
+  res.json({ ok: true });
+});
+
+// Admin-only: full audit log + per-user summary.
+app.get('/api/audit', requireAuth, (req, res) => {
+  if (!hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'admin only' });
+  const users = {};
+  for (const key of Object.keys(USERS)) users[key] = { name: USERS[key].name, roles: USERS[key].roles, lastLogin: 0, lastSeen: 0, logins: 0, events: 0 };
+  EVENTS.forEach(e => {
+    const u = users[e.u]; if (!u) return;
+    u.events++;
+    if (e.t > u.lastSeen) u.lastSeen = e.t;
+    if (e.type === 'login') { u.logins++; if (e.t > u.lastLogin) u.lastLogin = e.t; }
+  });
+  res.json({ ok: true, users, events: EVENTS.slice(-2500) });
 });
 
 /* ---------- Shopify Admin proxy (full pagination + short cache) ---------- */
@@ -225,7 +315,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
       items: mapLineItems(o.line_items)
     }));
-    const out = req.session.role === 'factory' ? orders.map(stripPrice) : orders;
+    const out = factoryOnly(req) ? orders.map(stripPrice) : orders;
     res.json({ ok: true, orders: out });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
@@ -261,7 +351,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       admin_url: `https://${STORE}/admin/draft_orders/${d.id}`,
       items: mapLineItems(d.line_items)
     }));
-    const out = req.session.role === 'factory' ? drafts.map(stripPrice) : drafts;
+    const out = factoryOnly(req) ? drafts.map(stripPrice) : drafts;
     res.json({ ok: true, drafts: out });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
@@ -270,7 +360,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
 
 // Factory advances the production timeline; stored as a `prodstage:N` tag on the order (persistent + visible in Shopify).
 app.post('/api/production', requireAuth, async (req, res) => {
-  if (req.session.role !== 'factory') return res.status(403).json({ ok: false, error: 'factory only' });
+  if (!hasRole(req, 'factory')) return res.status(403).json({ ok: false, error: 'factory only' });
   const { id, stage } = req.body || {};
   const line = Math.max(0, parseInt((req.body || {}).line, 10) || 0);
   const s = clampStage(stage);
@@ -291,6 +381,7 @@ app.post('/api/production', requireAuth, async (req, res) => {
     });
     if (!up.ok) throw new Error('Shopify PUT ' + up.status);
     if (CACHE.orders) delete CACHE.orders;   // force fresh so the change shows immediately
+    logEvent(req.session.username, 'production_stage', { id, line, stage: s, ip: clientIp(req) });
     res.json({ ok: true, line: line, stage: s });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -300,7 +391,7 @@ app.post('/api/production', requireAuth, async (req, res) => {
 // Mark a cash / bank-transfer draft as PAID → completes the draft into a real (paid) order,
 // which moves it out of Drafts and into Orders. (Card orders convert via the checkout link.)
 app.post('/api/mark_paid', requireAuth, async (req, res) => {
-  if (req.session.role === 'factory') return res.status(403).json({ ok: false, error: 'not allowed' });
+  if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
   const { id } = req.body || {};
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
   try {
@@ -314,6 +405,7 @@ app.post('/api/mark_paid', requireAuth, async (req, res) => {
     const dd = data.draft_order || {};
     if (CACHE.drafts) delete CACHE.drafts;   // draft is now completed → hide from Drafts
     if (CACHE.orders) delete CACHE.orders;    // new order appears in Orders
+    logEvent(req.session.username, 'mark_paid', { id, order_id: dd.order_id, ip: clientIp(req) });
     res.json({ ok: true, order_id: dd.order_id, status: dd.status });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

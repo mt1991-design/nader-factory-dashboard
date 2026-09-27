@@ -47,6 +47,22 @@
   .logincard{width:340px;max-width:92vw;background:var(--panel);border:1px solid var(--panelline);border-radius:18px;box-shadow:var(--shadow);padding:34px 30px;text-align:center;margin-top:12vh;animation:fadeup .5s both}
   .loginlogo{height:44px;width:auto;margin:0 auto 6px;display:block}
   .loginsub{font:600 11px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--ink2);margin:0 0 22px}
+  .roleswitch{display:inline-flex;gap:4px;background:var(--field);border:1px solid var(--fieldline);border-radius:9px;padding:3px}
+  .rsbtn{border:none;background:transparent;color:var(--ink2);font:600 11px var(--ui);letter-spacing:.04em;padding:6px 12px;border-radius:7px;cursor:pointer;text-transform:uppercase}
+  .rsbtn.on{background:var(--accent,#6B1A22);color:#fff}
+  .adminusers{display:flex;flex-direction:column;gap:2px}
+  .aurow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border-radius:9px;cursor:pointer;border:1px solid transparent}
+  .aurow:hover{background:var(--field)}
+  .aurow.on{background:var(--field);border-color:var(--fieldline)}
+  .auname{font:600 14px var(--ui);color:var(--ink)}
+  .aurole{font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--ink2)}
+  .aumeta{font:500 11px var(--ui);color:var(--ink2);text-align:right;white-space:nowrap}
+  .adminactivity{display:flex;flex-direction:column;gap:1px;max-height:70vh;overflow:auto}
+  .aerow{display:grid;grid-template-columns:150px 130px 1fr;gap:12px;padding:8px 10px;border-bottom:1px solid var(--fieldline);font:500 12px var(--ui);align-items:center}
+  .aerow:hover{background:var(--field)}
+  .aetime{color:var(--ink2);font:500 11px var(--mono)}
+  .aetype{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.04em}
+  .aemeta{color:var(--ink2);font:500 11px var(--ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .roletabs{display:flex;gap:6px;background:var(--field);border:1px solid var(--fieldline);border-radius:12px;padding:5px;margin-bottom:16px}
   .roletab{flex:1;border:none;background:transparent;color:var(--ink2);font:600 13px var(--ui);padding:10px;border-radius:8px;cursor:pointer}
   .roletab.on{background:var(--ox);color:#fff}
@@ -168,14 +184,11 @@
   <div class="logincard">
     <img id="loginlogo" alt="Nader" class="loginlogo">
     <p class="loginsub">Factory Spec System</p>
-    <div class="roletabs">
-      <button class="roletab on" id="rt-sales" onclick="pickRole('sales')">Sales</button>
-      <button class="roletab" id="rt-factory" onclick="pickRole('factory')">Factory</button>
-    </div>
-    <input type="password" id="pw" class="pwfield" placeholder="Password" autocomplete="off" onkeydown="if(event.key=='Enter')doLogin()">
+    <input type="text" id="user" class="pwfield" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" onkeydown="if(event.key=='Enter')doLogin()">
+    <input type="password" id="pw" class="pwfield" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key=='Enter')doLogin()">
     <div id="loginerr" class="loginerr"></div>
     <button class="primary loginbtn" onclick="doLogin()">Enter</button>
-    <p class="loginhint">Sales create &amp; lock specs · Factory view locked orders &amp; log QC.</p>
+    <p class="loginhint">Sign in with the username &amp; password you were given.</p>
   </div>
 </section>
 
@@ -186,7 +199,7 @@
     <div class="topttl">Sales · New orders</div>
     <div class="topspacer"></div>
     <a class="small" href="https://nader.ae/pages/sales-form" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
-    <span class="chip">Sales</span>
+    <span class="roleswitch" id="roleSwitch-sales"></span>
     <button class="ghost small" onclick="logout()">Log out</button>
   </div>
   <div class="dashgrid" style="grid-template-columns:1fr">
@@ -224,6 +237,7 @@
     <img id="dashlogo" alt="Nader" class="worklogo">
     <div class="topttl">Factory Dashboard</div>
     <div class="topspacer"></div>
+    <span class="roleswitch" id="roleSwitch-factory"></span>
     <button class="ghost small" onclick="logout()">Log out</button>
   </div>
   <div class="dashgrid">
@@ -245,6 +259,28 @@
         <div><div class="lbhd">Carpenters</div><div id="lb-carpenter"></div></div>
         <div><div class="lbhd">Fabricators</div><div id="lb-fabricator"></div></div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ADMIN ================= -->
+<section id="screen-admin" class="screen" hidden>
+  <div class="topbar">
+    <img id="adminlogo" alt="Nader" class="worklogo">
+    <div class="topttl">Admin · Activity log</div>
+    <div class="topspacer"></div>
+    <button class="ghost small" onclick="loadAdmin()">↻ Refresh</button>
+    <span class="roleswitch" id="roleSwitch-admin"></span>
+    <button class="ghost small" onclick="logout()">Log out</button>
+  </div>
+  <div class="dashgrid" style="grid-template-columns:340px 1fr">
+    <div class="card">
+      <div class="cardhdr"><span>Team</span></div>
+      <div id="adminUserList" class="adminusers"></div>
+    </div>
+    <div class="card">
+      <div class="cardhdr"><span id="adminActivityTitle">Activity</span></div>
+      <div id="adminActivity" class="adminactivity"></div>
     </div>
   </div>
 </section>
@@ -4632,15 +4668,25 @@ function animate3(){requestAnimationFrame(animate3);if(!R3)return;const cv=$("gl
   lblData.forEach((d,i)=>{const v=d.p.clone().project(cam3),el=labelEls[i];if(!el)return;if(v.z>1){el.style.display="none";return;}el.style.display="";el.style.left=((v.x*0.5+0.5)*w)+"px";el.style.top=((-v.y*0.5+0.5)*h)+"px";});}
 
 /* ================= APP: screens / auth / routing ================= */
-function showScreen(id){["screen-login","screen-sales","screen-factory","screen-work"].forEach(s=>{$(s).hidden=(s!==id);});}
-function pickRole(r){pendingRole=r;$("rt-sales").classList.toggle("on",r==="sales");$("rt-factory").classList.toggle("on",r==="factory");$("loginerr").textContent="";$("pw").value="";$("pw").focus();}
-function doLogin(){const pw=$("pw").value;$("loginerr").style.color="";$("loginerr").textContent="Signing in…";
-  fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({role:pendingRole,password:pw})})
-    .then(r=>r.json()).then(d=>{ if(!d||!d.ok){$("loginerr").style.color="";$("loginerr").textContent="Incorrect password.";return;}
-      ROLE=pendingRole;$("pw").value="";$("loginerr").textContent="";
-      enterDash();
+function showScreen(id){["screen-login","screen-sales","screen-factory","screen-admin","screen-work"].forEach(s=>{const el=$(s);if(el)el.hidden=(s!==id);});}
+function pickRole(){}  /* legacy no-op (login is now username + password) */
+const ROLE_LABEL={sales:"Sales",factory:"Factory",admin:"Admin"};
+function defaultView(roles){return roles.indexOf("sales")>=0?"sales":(roles.indexOf("factory")>=0?"factory":"admin");}
+function doLogin(){const u=($("user").value||"").trim(),pw=$("pw").value;$("loginerr").style.color="";$("loginerr").textContent="Signing in…";
+  fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({username:u,password:pw})})
+    .then(r=>r.json()).then(d=>{ if(!d||!d.ok){$("loginerr").style.color="";$("loginerr").textContent="Incorrect username or password.";return;}
+      USER={username:d.username,name:d.name,roles:d.roles||[]};ROLE=defaultView(USER.roles);
+      $("pw").value="";$("user").value="";$("loginerr").textContent="";
+      renderRoleSwitch();enterDash();
     }).catch(e=>{$("loginerr").textContent="Login failed — try again.";});}
-function logout(){ROLE=null;curOrderId=null;showScreen("screen-login");pickRole("sales");}
+function logout(){track("logout_click",{});fetch("/api/logout",{method:"POST",credentials:"same-origin"}).catch(function(){});USER=null;ROLE=null;curOrderId=null;showScreen("screen-login");}
+/* Role switcher shown in each screen's top bar (only the roles this user has). */
+function renderRoleSwitch(){
+  if(!USER)return;
+  const html=USER.roles.map(function(r){return '<button class="rsbtn'+(r===ROLE?" on":"")+'" onclick="switchView(\''+r+'\')">'+(ROLE_LABEL[r]||r)+'</button>';}).join("");
+  ["sales","factory","admin"].forEach(function(v){const el=$("roleSwitch-"+v);if(el)el.innerHTML=html;});
+}
+function switchView(v){ if(!USER||USER.roles.indexOf(v)<0||v===ROLE)return; ROLE=v; track("switch_view",{to:v}); renderRoleSwitch(); enterDash(); }
 function toggle3D(){const v=$("viewer"),b=$("d3toggle");if(!v)return;if(v.hasAttribute("hidden")){v.removeAttribute("hidden");b.innerHTML='<span class="d3ico">▾</span> Hide 3D';try{v.scrollIntoView({behavior:"smooth",block:"nearest"});}catch(e){}}else{v.setAttribute("hidden","");b.innerHTML='<span class="d3ico">◆</span> View in 3D';}}
 function reset3D(){const v=$("viewer"),b=$("d3toggle");if(v)v.setAttribute("hidden","");if(b)b.innerHTML='<span class="d3ico">◆</span> View in 3D';}
 function switchTab(t){activeTab=t;document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));$("tab-photo").hidden=(t!=="photo");$("tab-drawing").hidden=(t!=="drawing");$("tab-qc").hidden=(t!=="qc");$("zoombar").style.display=(t==="qc")?"none":"flex";$("pagebadge").textContent=(t==="photo")?"Page 1 · reference photo":(t==="drawing")?"Page 2 · factory drawing":"";if(t!=="qc")applyZoom();}
@@ -4706,7 +4752,52 @@ function applyRoleMode(){
   const ttl=document.querySelector('#screen-sales .topttl'); if(ttl) ttl.textContent=FACTORY_MODE?"Factory · Open orders":"Sales · New orders";
   if(FACTORY_MODE && salesView==="drafts") salesView="orders";
 }
-function enterDash(){ if(ROLE==="factory"){ enterFactory(); } else { enterSalesDash(); } }
+function enterDash(){ renderRoleSwitch(); if(ROLE==="admin"){ enterAdmin(); } else if(ROLE==="factory"){ enterFactory(); } else { enterSalesDash(); } }
+/* ---------- ADMIN: activity log ---------- */
+let ADMIN_DATA=null, adminSelUser=null;
+function enterAdmin(){ showScreen("screen-admin"); loadAdmin(); }
+function loadAdmin(){
+  const box=$("adminUserList"); if(box) box.innerHTML='<div class="hint" style="margin:0">Loading…</div>';
+  fetch("/api/audit",{credentials:"same-origin"}).then(r=>r.json()).then(function(d){
+    if(!d||!d.ok){ if(box) box.innerHTML='<div class="hint" style="margin:0">Not authorised.</div>'; return; }
+    ADMIN_DATA=d; renderAdminUsers();
+    if(adminSelUser && d.users[adminSelUser]) renderAdminActivity(adminSelUser); else renderAdminActivity(null);
+  }).catch(function(){ if(box) box.innerHTML='<div class="hint" style="margin:0">Failed to load.</div>'; });
+}
+function fmtTime(t){ if(!t)return "—"; const d=new Date(t); return d.toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }
+function renderAdminUsers(){
+  const box=$("adminUserList"); if(!box||!ADMIN_DATA)return;
+  const u=ADMIN_DATA.users, keys=Object.keys(u).sort(function(a,b){return (u[b].lastSeen||0)-(u[a].lastSeen||0);});
+  box.innerHTML=keys.map(function(k){const x=u[k];
+    return '<div class="aurow'+(k===adminSelUser?" on":"")+'" onclick="renderAdminActivity(\''+k+'\')">'
+      +'<div><div class="auname">'+esc(x.name)+'</div><div class="aurole">'+x.roles.join(" · ")+'</div></div>'
+      +'<div class="aumeta">'+(x.lastLogin?("Last login<br>"+fmtTime(x.lastLogin)):"Never logged in")+'<br><span style="color:var(--ink2);opacity:.7">'+x.events+' events</span></div>'
+      +'</div>';
+  }).join("");
+}
+function renderAdminActivity(uname){
+  adminSelUser=uname; renderAdminUsers();
+  const box=$("adminActivity"), ttl=$("adminActivityTitle"); if(!box||!ADMIN_DATA)return;
+  const evs=ADMIN_DATA.events.filter(function(e){return !uname || e.u===uname;}).slice().reverse();
+  if(ttl) ttl.textContent = uname ? ("Activity · "+(ADMIN_DATA.users[uname]?ADMIN_DATA.users[uname].name:uname)) : "All activity";
+  if(!evs.length){ box.innerHTML='<div class="hint" style="margin:0;padding:12px">No activity recorded yet.</div>'; return; }
+  box.innerHTML=evs.slice(0,1500).map(function(e){
+    const m=e.meta||{}; const bits=[];
+    Object.keys(m).forEach(function(k){ if(k==="ip")return; if(m[k]!==""&&m[k]!=null) bits.push(k+": "+m[k]); });
+    if(m.ip) bits.push(m.ip);
+    return '<div class="aerow"><span class="aetime">'+fmtTime(e.t)+'</span><span class="aetype">'+esc(e.type)+'</span><span class="aemeta">'+esc(bits.join("  ·  "))+'</span></div>';
+  }).join("");
+}
+/* ---------- audit tracker: batch UI activity to the server ---------- */
+let TRACK_Q=[];
+function track(type,meta){ if(!USER)return; TRACK_Q.push({type:type,meta:Object.assign({view:ROLE},meta||{})}); }
+function flushTrack(){ if(!USER||!TRACK_Q.length)return; const batch=TRACK_Q.splice(0,50);
+  fetch("/api/track",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({events:batch})}).catch(function(){ TRACK_Q=batch.concat(TRACK_Q); }); }
+setInterval(flushTrack,5000);
+document.addEventListener("click",function(ev){ if(!USER)return; const t=ev.target.closest("button,a,.roletab,.fchip,.pdot"); if(!t)return;
+  let label=(t.textContent||t.title||t.id||"").trim().replace(/\s+/g," ").slice(0,40); if(!label&&t.className)label=String(t.className).split(" ")[0];
+  track("click",{label:label}); },true);
+window.addEventListener("beforeunload",function(){ if(USER&&TRACK_Q.length){ try{ navigator.sendBeacon("/api/track", new Blob([JSON.stringify({events:TRACK_Q})],{type:"application/json"})); }catch(e){} } });
 function setProdStageServer(id,line,idx){
   fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } renderSalesDash(); } else { alert("Couldn't update — factory login required."); } })
@@ -4922,7 +5013,7 @@ function renderWorkers(){const box=$("workerlist");if(!box)return;const w=DB.wor
 function addWorker(){const inp=$("newworker"),n=(inp.value||"").trim();if(!n)return;const w=DB.workers();if(!w.includes(n))w.push(n);DB.saveWorkers(w);inp.value="";renderWorkers();}
 function delWorker(i){const w=DB.workers();w.splice(i,1);DB.saveWorkers(w);renderWorkers();}
 
-["loginlogo","dashlogo","worklogo","saleslogo"].forEach(id=>{if($(id))$(id).src=LOGO.uri;});
-function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){ROLE=d.role;enterDash();}}).catch(function(){});}
-initProducts();renderQC();loadProduct();try{init3D();}catch(e){}applyZoom();pickRole("sales");showScreen("screen-login");restoreSession();
+["loginlogo","dashlogo","worklogo","saleslogo","adminlogo"].forEach(id=>{if($(id))$(id).src=LOGO.uri;});
+function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){USER={username:d.username,name:d.name,roles:d.roles||[]};ROLE=defaultView(USER.roles);renderRoleSwitch();enterDash();}}).catch(function(){});}
+initProducts();renderQC();loadProduct();try{init3D();}catch(e){}applyZoom();showScreen("screen-login");restoreSession();
 </script>
