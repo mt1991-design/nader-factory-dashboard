@@ -25,14 +25,14 @@ const SECRET  = process.env.SESSION_SECRET || 'change-me';
 
 /* ---------- users (passwords stored as node-scrypt hashes; plaintext lives only with Mariam) ---------- */
 const USERS = {
-  admin:    { name: "Admin",          roles: ["sales", "factory", "admin"], salt: "8ec5da97f7e275da088ac2c4ba6f3ca8", hash: "d4c7e5dacc420351ee742f59b4d40e1d1b4bab582975451f0ba9ea623d3fb5d9" },
-  mohammed: { name: "Mohammed",       roles: ["sales"],                     salt: "44fa5269a6718a7a306532a61ba910f5", hash: "996d2736bacc4b3810c222325cf83db6316833adaaab0cf59631cd50989bf240" },
-  abdul:    { name: "Abdul",          roles: ["sales", "factory"],          salt: "bddd62168c55e7a2c4588224f29d020b", hash: "feede78530d367c9ac4b9f7ba7460248356e9d0b71b9eb15e0fd15a12143950e" },
-  zahak:    { name: "Zahak",          roles: ["sales"],                     salt: "aa2dff4f4aed7d0a2f7e12df8f96cb6f", hash: "c6568b8860c8cbc989ada742e8cbcd706cd68323361b2b9043553680412cdadf" },
-  adnan:    { name: "Adnan",          roles: ["sales"],                     salt: "bb5fc4c98a8ccb90bccc0d4643d169d2", hash: "e433348737656403001f8437671413ac9989aa456c8b9427d6fa447497c31998" },
-  nizam:    { name: "Nizam",          roles: ["sales"],                     salt: "d47a879917e5526ed0f6a4a1a3c1e2e7", hash: "973652ea5bfffbf63b5cd895be2643b2455646c392a206540e00f5d740d497db" },
-  aslam:    { name: "Mohammed Aslam", roles: ["sales", "factory"],          salt: "08b9113d0d29bb7e5f1c257a09ad77a8", hash: "b1e444a6c4fe9ac5a13b4c92460bc5b78e21dd4795b75015f93b296da23628e4" },
-  sam:      { name: "Sam",            roles: ["sales", "factory"],          salt: "baee45f03e78cd9ca17b82b2f56b90db", hash: "057b1a36ce267a4ab31515f8302cb672107e30e88301cdf72a85952f3801e6e4" },
+  admin: { name: "Admin", roles: ["sales", "factory", "admin"], salt: "52009a8101b9e4013040a20e6e08f105", hash: "4b55e70893e982a4e49d0a980dc80cd079fe1967c65d29e2565527fcbe8269fa" },
+  mohammed: { name: "Mohammed", roles: ["sales"], salt: "dde948d96b635c2926863aa5516879bf", hash: "4361273ee51ee4e4f5dde4e61e77b1a0af3a2f2d9dd154bf27ffb3e83644bb4a" },
+  abdul: { name: "Abdul", roles: ["sales", "factory"], salt: "12ec47476e4396b29e5c7f78b2dbc8fd", hash: "3feffd85233dcfff44cf07516386e145442ede8d8e8987eb9bf1fbe649a19d72" },
+  zahak: { name: "Zahak", roles: ["sales"], salt: "66f2715a7c0fe3bc6c78890b3df37dba", hash: "8c06bec3f7dcfb41a87a395e7c32385e728ba2a88f7f49a12ede9196c88c5675" },
+  adnan: { name: "Adnan", roles: ["sales"], salt: "c86ed9e0fa1404b6e4c79d9dafd04c8d", hash: "bce48af9049f4f1328048e3b7e764e53042e821c9f91f73185c2c7cb9a297e0c" },
+  nizam: { name: "Nizam", roles: ["sales"], salt: "a08a275b45d6aad0c3e632cdb4123633", hash: "07248fd3a04274086b2b4dd47cd2d7dba648ee46da90d7ca281b9fc655cedd9b" },
+  aslam: { name: "Mohammed Aslam", roles: ["sales", "factory"], salt: "aec9ab7d64cc471c7a5d4013d4a3f00a", hash: "0fefb6223fe8682accc278e5c06bda6acdeed5c5a8332b599c7cb2cec9aa56de" },
+  sam: { name: "Sam", roles: ["sales", "factory"], salt: "2ede4da91610ea4721d4d1a8d9060e20", hash: "ce7b72b2bf918da150befd204441c989e76400bb288a4f496d3020fc3dbd772d" },
 };
 function checkPassword(user, password) {
   if (!user || !password) return false;
