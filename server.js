@@ -81,10 +81,11 @@ function hasRole(req, role) { return req.session && (req.session.roles || []).in
 // price is hidden only for FACTORY-ONLY users (dual sales+factory staff keep prices in their sales view)
 function factoryOnly(req) { return hasRole(req, 'factory') && !hasRole(req, 'sales') && !hasRole(req, 'admin'); }
 
+const SESSION_TTL_SEC = 30 * 60;   // 30-minute idle timeout (renewed on activity)
 function setSessionCookie(res, username) {
-  const exp = Date.now() + 12 * 3600 * 1000; // 12h
+  const exp = Date.now() + SESSION_TTL_SEC * 1000;
   res.setHeader('Set-Cookie',
-    `nfs_session=${sign({ u: username, e: exp })}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
+    `nfs_session=${sign({ u: username, e: exp })}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_SEC}`);
 }
 
 app.post('/api/login', (req, res) => {

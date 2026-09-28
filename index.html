@@ -4798,6 +4798,16 @@ document.addEventListener("click",function(ev){ if(!USER)return; const t=ev.targ
   let label=(t.textContent||t.title||t.id||"").trim().replace(/\s+/g," ").slice(0,40); if(!label&&t.className)label=String(t.className).split(" ")[0];
   track("click",{label:label}); },true);
 window.addEventListener("beforeunload",function(){ if(USER&&TRACK_Q.length){ try{ navigator.sendBeacon("/api/track", new Blob([JSON.stringify({events:TRACK_Q})],{type:"application/json"})); }catch(e){} } });
+/* ---------- idle auto-logout: log out after 30 min of no activity; keep alive while active ---------- */
+var IDLE_LIMIT=30*60*1000, lastActivity=Date.now();
+["mousedown","keydown","touchstart","scroll","wheel"].forEach(function(ev){ document.addEventListener(ev,function(){ lastActivity=Date.now(); },{passive:true,capture:true}); });
+function forceLogout(msg){ USER=null;ROLE=null;curOrderId=null; try{fetch("/api/logout",{method:"POST",credentials:"same-origin"});}catch(e){} showScreen("screen-login"); if(msg){var le=$("loginerr"); if(le){le.style.color="";le.textContent=msg;}} }
+setInterval(function(){
+  if(!USER) return;
+  if(Date.now()-lastActivity > IDLE_LIMIT){ forceLogout("Signed out after 30 minutes of inactivity — please log in again."); return; }
+  /* still active → renew the 30-min server session so active users aren't kicked mid-work */
+  fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){ if(!d||!d.ok){ forceLogout("Your session expired — please log in again."); } }).catch(function(){});
+}, 60000);
 function setProdStageServer(id,line,idx){
   fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } if(ROLE==="factory"){ renderFactoryProd(); } else { renderSalesDash(); } } else { alert("Couldn't update — factory login required."); } })
