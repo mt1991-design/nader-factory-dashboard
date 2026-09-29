@@ -4747,16 +4747,20 @@ function buildFilters(){
   if(box){
     const defs = salesView==="production" ? []
       : salesView==="drafts" ? [["open","Open"],["invoice_sent","Invoice sent"]]
-      : [["needsdrawing","Needs drawing"],["open","Open"],["shipped","Shipped"]];
+      : [["needsdrawing","Needs drawing"],["drawn",drawnLabel()],["open","Open"],["shipped","Shipped"]];
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
   const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. Shipped orders appear for 3 days only (Shipped chip), then roll off automatically. Refunds aren't shown here." : "";
 }
+/* drawing progress across OPEN orders: furniture lines with a finished drawing (template or manual marked complete) */
+function drawingTally(){let done=0,all=0;SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").forEach(o=>o.items.forEach((it,i)=>{if(!isFurnitureLine(it.product))return;all++;if(lineDrawn(o,i))done++;}));return {done,all};}
+function drawnLabel(){const t=drawingTally();return "Drawing complete · "+t.done+" of "+t.all;}
 function toggleStatus(s){ if(salesStatuses.has(s)) salesStatuses.delete(s); else salesStatuses.add(s); buildFilters(); renderSalesDash(); }
 function matchOne(o,s){
   if(o.isDraft){ if(s==="open") return (o.status||"open")==="open"; if(s==="invoice_sent") return o.status==="invoice_sent"; return false; }
   if(s==="needsdrawing") return needsDrawing(o);
+  if(s==="drawn") return o.state==="open"&&o.items.some((it,i)=>isFurnitureLine(it.product)&&lineDrawn(o,i));
   if(s==="open") return o.state==="open";
   if(s==="shipped") return o.state==="shipped";
   if(s==="refunded") return o.state==="refunded";
@@ -4943,7 +4947,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     /* newest first — for drafts sort by the draft number (D1842 > D1841); orders keep newest-date order */
     .sort((a,b)=>{ if(salesView==="drafts"){ const na=parseInt(String(a.order).replace(/\D/g,''))||0, nb=parseInt(String(b.order).replace(/\D/g,''))||0; return nb-na; } return (b.date||"").localeCompare(a.date||""); });
   let html="",shown=0;
-  list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
+  const onlyDrawn=salesView==="orders"&&salesStatuses.size===1&&salesStatuses.has("drawn");
+  list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;if(onlyDrawn&&!lineDrawn(o,i))return;shown++;
     const st=shopifyStatus(o);
     const oid=lineId(o,i),done=DB.getOrder(oid)||SAVED_SPECS.has(specKey(oid));
     const multi=o.items.length>1;
