@@ -42,7 +42,7 @@ function checkPassword(user, password) {
   } catch (e) { return false; }
 }
 
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));   // spec sheets can carry a replaced reference photo
 app.use(cookies);
 
 /* ---------- tiny signed-cookie session (no external deps) ---------- */
@@ -308,6 +308,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       tags: o.tags || '',
       note: o.note || '',
       pdf_url: extractPdf(o.note),
+      edit_state: (String(o.tags || '').match(/state:(s_[a-z0-9]+)/i) || [])[1] || '',
       shipping_address: mapAddress(o.shipping_address),
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
@@ -411,6 +412,42 @@ app.post('/api/mark_paid', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+/* ---------- factory spec sheets (saved per order line in Cloudflare KV via the worker) ---------- */
+const specKey = id => String(id || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 80);
+async function workerJson(pathname, opts) {
+  const r = await fetch(WORKER_URL + pathname, Object.assign({}, opts, {
+    headers: Object.assign({ 'X-Form-Secret': FORM_SECRET, 'Content-Type': 'application/json' }, (opts && opts.headers) || {})
+  }));
+  return r.json().catch(() => ({ ok: false, error: 'bad worker response' }));
+}
+app.get('/api/specs', requireAuth, async (req, res) => {
+  try { res.json(await workerJson('/spec')); } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.get('/api/spec', requireAuth, async (req, res) => {
+  const id = specKey(req.query.id); if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try { res.json(await workerJson('/spec/' + id)); } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.post('/api/spec', requireAuth, async (req, res) => {
+  const b = req.body || {}, id = specKey(b.id), data = b.data;
+  if (!id || !data || typeof data !== 'object') return res.status(400).json({ ok: false, error: 'id and data required' });
+  const c = data.cust || {};
+  try {
+    const out = await workerJson('/spec/' + id, { method: 'POST', body: JSON.stringify({ data,
+      meta: { product: data.product || '', customer: c.name || '', orderNo: data.orderNo || '', by: req.session.username } }) });
+    // log at most one "spec_edit" per user+sheet per 10 min so autosave doesn't flood the audit log
+    const k = req.session.username + '|' + id, now = Date.now();
+    if (!specLogged[k] || now - specLogged[k] > 600000) { specLogged[k] = now; logEvent(req.session.username, 'spec_edit', { id, product: data.product || '' }); }
+    res.json(out);
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+const specLogged = {};
+// The sales form's saved state (field values per item) — proxied because the worker only allows nader.ae origins.
+app.get('/api/formstate', requireAuth, async (req, res) => {
+  const id = String(req.query.id || '').replace(/[^a-z0-9_]/gi, ''); if (!id) return res.status(400).json({ ok: false });
+  try { const r = await fetch(WORKER_URL + '/state/' + id); res.status(r.status).type('json').send(await r.text()); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 
 app.get('/api/health', (req, res) =>

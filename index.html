@@ -199,6 +199,7 @@
     <div class="topttl">Sales · New orders</div>
     <div class="topspacer"></div>
     <a class="small" href="https://nader.ae/pages/sales-form" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
+    <button type="button" class="small" onclick="newDrawing()" title="Create a spec sheet / drawing without a sales form" style="display:inline-flex;align-items:center;gap:6px;background:#fff;color:#1c1a17;border:1px solid #cfc6b4;border-radius:9px;padding:8px 14px;font-weight:600;cursor:pointer">✎ New drawing</button>
     <span class="roleswitch" id="roleSwitch-sales"></span>
     <button class="ghost small" onclick="logout()">Log out</button>
   </div>
@@ -4334,7 +4335,8 @@ let V={},CUR=null,config="lcorner",view="sales",locked=false,lockStamp="",zoom2d
 let ROLE=null,pendingRole="sales",mode="sales",curOrderId=null,activeTab="photo",qcPhotos=[];
 /* Passwords are validated server-side via /api/login (see server.js). */
 const DEFWORKERS=["Rabi","Suvash","Raja","Ahmad","Akash","Jo","Bahador"];
-let SHOPIFY=[];   /* populated live from Shopify via loadShopify() */
+let SHOPIFY=[];
+let SAVED_SPECS=new Set();   /* order lines that have a saved spec sheet */   /* populated live from Shopify via loadShopify() */
 /* Pull real orders + draft orders from the server (which proxies Shopify Admin). */
 async function loadShopify(fresh){
   const qs=fresh?"?fresh=1":"";
@@ -4350,6 +4352,7 @@ async function loadShopify(fresh){
     const orders=(od.orders||[]).map(o=>Object.assign({},o,{isDraft:false}));
     /* drafts first (awaiting spec), then placed orders; both newest-first */
     SHOPIFY=drafts.concat(orders).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    try{const rs=await fetch("/api/specs",{credentials:"same-origin"});const ds=await rs.json();if(ds&&ds.ok)SAVED_SPECS=new Set((ds.items||[]).map(x=>x.id));}catch(e){}
     const err=(!ro.ok&&ro.status!==401?" orders":"")+(!rd.ok&&rd.status!==401?" drafts":"");
     const note=$("salesloading");
     if(note){ if(err){note.textContent="Couldn't load"+err+" from Shopify — check the token scopes.";note.style.color="#c0392b";} else {note.style.display="none";} }
@@ -4919,7 +4922,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   let html="",shown=0;
   list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
     const st=shopifyStatus(o);
-    const oid=lineId(o,i),done=DB.getOrder(oid);
+    const oid=lineId(o,i),done=DB.getOrder(oid)||SAVED_SPECS.has(specKey(oid));
     const multi=o.items.length>1;
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
@@ -4955,7 +4958,12 @@ function orderInfoHTML(o){
   if(o.pdf_url) h+='<div style="margin-top:8px"><a href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" style="color:var(--ox);font-weight:600;font-size:12px">⬇ Signed form (PDF)</a></div>';
   return h;
 }
-function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
+function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;
+  const url="/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:specKey(lineId(o,i))}).toString();
+  SAVED_SPECS.add(specKey(lineId(o,i)));window.open(url,"_blank");setTimeout(renderSalesDash,50);}
+function specKey(id){return String(id||"").replace(/[^A-Za-z0-9-]/g,"");}
+function newDrawing(){window.open("/spec.html?p="+encodeURIComponent("Kobe Corner Sofa"),"_blank");}
+function openOldSpecWorkspace(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
   const oig=$("orderInfoGrp"); if(oig){ oig.style.display=""; $("orderInfo").innerHTML=orderInfoHTML(o); }
   mode="sales";curOrderId=id;
   $("rolechip").textContent="Sales";$("salesbtns").hidden=false;$("factorybtns").hidden=true;
