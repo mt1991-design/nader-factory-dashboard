@@ -4721,7 +4721,7 @@ function monthLabel(ym){const p=String(ym).split("-");return p.length>=2?(MONTHS
 function isShipped(o){return o.state==="shipped";}
 /* Needs drawing = an open order whose drawing hasn't been started yet (production still at Drawing). */
 /* products with a traced DWG template draw automatically on the spec sheet (keep in sync with MODELS in spec.html) */
-const AUTO_DRAW=[/\bkober?\b/i];
+const AUTO_DRAW=[/\bkober?\b/i,/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i];
 const NOT_SOFA=/\b(arm\s*chair|armchair|chair|bed|headboard|table|stool|barstool|bench|ottoman|pouf|cushion|pillow)s?\b/i;
 function drawBase(t){return String(t||"").split(/\s+size\b|\s[-–|]\s|[:|(]|\s\d{2,}/i)[0];}
 function autoDrawable(title){const t=drawBase(title);return AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t);}

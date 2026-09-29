@@ -512,7 +512,7 @@ const MODELS={
     autoSpec(V){const d=KobeDraw.derive(V);const size=d.chaise?`${F2(V.W)} × ${F2(V.RL)} cm`:`${F2(V.W)} × ${F2(V.D)} cm`;
       return [["Size",`${d.n} Seater · ${size}`,1],["Configuration",d.chaise?(V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"):"Straight — no chaise"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],["Arm Width",`${F2(V.A)} cm (top ${F2(Math.min(V.AT,V.A))})`]];}},
-  ladbroke:{pending:true,ver:"dwg2-92-even",match:/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,label:"Ladbroke",name:"Ladbroke Corner Sofa",defaults:LADBROKE_DEFAULT,draw:LadbrokeDraw,photoSide:"R",photo:PHOTO_LADBROKE,
+  ladbroke:{ver:"dwg2-92-even",match:/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,label:"Ladbroke",name:"Ladbroke Corner Sofa",defaults:LADBROKE_DEFAULT,draw:LadbrokeDraw,photoSide:"R",photo:PHOTO_LADBROKE,
     sides:["L","R"],seats:true,fields:LADBROKE_FIELDS,
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`,1],["Configuration",V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],["Arm Height",`${F2(V.AH)} cm`],
