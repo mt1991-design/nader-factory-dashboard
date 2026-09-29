@@ -1620,7 +1620,7 @@ function applyLock(){
     const b=document.getElementById('unlockBtn'); if(b)b.onclick=()=>{ORDER.locked=null;ORDER.unlockedBy=ME;applyLock();save();};
   }else if(LIVE&&drawStatus()==="complete"){
     box.className="lockbox off noprint";
-    box.innerHTML=`Drawing complete — it locks automatically the next time this sheet is opened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
+    box.innerHTML=`Drawing complete — locks when this sheet is next opened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
     document.getElementById('lockBtn').onclick=()=>{ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
   }else{box.className="";box.innerHTML="";}
 }
@@ -1765,7 +1765,9 @@ function start(){
   document.getElementById("app").hidden=false;
   document.getElementById("tbTitle").textContent=(ORDER.product||"Spec")+" · Spec Sheet";
   document.title=(ORDER.orderNo?ORDER.orderNo.split(" ")[0]+" — ":"")+(ORDER.product||"Spec Sheet");
-  if(LIVE&&FROM_SAVE&&!ORDER.locked&&drawStatus()==="complete"){ORDER.locked={by:ORDER.completedBy||"",at:Date.now()};save();}
+  /* complete drawings are locked: saved sheets when reopened, and order lines drawn automatically from their template
+     straight away (their sizes come from the form). Only a brand-new blank "New drawing" stays open until it's reopened / Lock now. */
+  if(LIVE&&(FROM_SAVE||Q.o)&&!ORDER.locked&&drawStatus()==="complete"){ORDER.locked={by:ORDER.completedBy||(FROM_SAVE?"":"Auto-drawn from the order"),at:Date.now()};save();}
   if(!ORDER.locked&&drawStatus()==="complete"&&!ORDER.completedBy)ORDER.completedBy=ME;
   renderSheet();wire();buildDimFields();syncInputs();renderDrawings();
 }
