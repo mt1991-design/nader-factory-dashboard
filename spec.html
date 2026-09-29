@@ -100,7 +100,6 @@
   </div>
   <div class="acts">
     <span class="save" id="saveState"></span>
-    <button class="ghost" id="resetBtn" type="button">Reset sizes to standard</button>
     <button id="printBtn" type="button">⎙ Print / Save PDF</button>
   </div>
 </div>
@@ -402,24 +401,6 @@ async function productPhoto(title){
     return n&&n.featuredImage?n.featuredImage.url+(n.featuredImage.url.includes("?")?"&":"?")+"width=900":"";
   }catch(e){return "";}
 }
-/* read sizes that sales typed free-hand into the product title, the extra order lines or the note
-   e.g. "Kobe corner sofa - 350x200 - RHF", "Seat depth: 90 cm", "Orientation: Left-hand facing (LHF)" */
-function applyOrderText(O,text){
-  const v=O.V, t=String(text||"");
-  if(O.model){
-    const sz=t.match(/(\d{3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/i);
-    if(sz){v.W=+sz[1];if(+sz[2]>v.D+10)v.RL=+sz[2];}
-    if(/\b(rhf|right[\s-]*hand)/i.test(t))v.side="R";else if(/\b(lhf|left[\s-]*hand)/i.test(t))v.side="L";
-    const sd=t.match(/seat\s*depth\D{0,4}(\d{2,3})/i)||t.match(/(\d{2,3})\s*(?:cm)?\s*seat\s*depth/i);
-    if(sd&&+sd[1]>=50&&+sd[1]<=130)v.D=v.B+ +sd[1];
-    const sh=t.match(/seat\s*height\D{0,4}(\d{2})/i);if(sh)v.SH=+sh[1];
-    const bh=t.match(/back\s*height\D{0,4}(\d{2,3})/i);if(bh)v.H=+bh[1];
-    const aw=t.match(/arm\s*width\D{0,4}(\d{1,2})/i);if(aw)v.A=+aw[1];
-    const lg=t.match(/\bleg[^:\n]{0,12}[:\-]\s*(\d{1,2})\s*cm/i);if(lg&&+lg[1]<30)v.LH=+lg[1];
-  }
-  const fab=t.match(/(?:fabric|upholstery)\s*(?:code)?\s*[:\-]\s*([^\n]{2,60})/i);
-  if(fab&&!/swatch|shared with/i.test(fab[1])){const r=O.spec.find(x=>x[0]==="Fabric Catalogue Code");if(r&&!r[1])r[1]=fab[1].trim();}
-}
 async function fromOrder(o,i){
   const it=(o.items||[])[i]||{product:"Unknown product"};
   const O=blankOrder(it.product);
@@ -430,9 +411,9 @@ async function fromOrder(o,i){
     area:[a.city,a.zip].filter(Boolean).join(" "),emirate:a.province||"",agent:"",showroom:""};
   O.notes=String(o.note||"").split("\n").filter(l=>!/\bAED\b|total|SIGNED PDF|https?:\/\//i.test(l)).join("\n").replace(/\n{3,}/g,"\n\n").trim();
   if(it.variant&&!/default title/i.test(it.variant))O.spec.unshift(["Variant",it.variant]);
-  /* free-hand details: this line's title + the order's non-product lines ("Fabric - …") + the note */
+  /* DIMENSIONS COME ONLY FROM THE SALES FORM's dimension boxes (blank / "Standard" = the product's standard size).
+     The title, extra lines and note are shown as Workshop Notes only — never read as sizes. */
   const extra=(o.items||[]).filter((x,j)=>j!==i&&!modelFor(x.product)&&!/sofa|bed|chair|table|stool|ottoman/i.test(x.product)).map(x=>x.product);
-  applyOrderText(O,[it.product].concat(extra).join("\n")+"\n"+(o.note||""));
   if(extra.length)O.notes=[extra.join("\n"),O.notes].filter(Boolean).join("\n");
   /* keep what sales actually typed in the product line (e.g. "- puffy - back cushion like the Namba") */
   if(it.product.replace(/\s+/g," ").trim().length>28||/[-–]\s/.test(it.product))O.notes=["Ordered as: "+it.product.trim(),O.notes].filter(Boolean).join("\n");
@@ -463,10 +444,10 @@ function applyFormSpec(O,spec){
     if(/^product|quantity|price|aed|total|unit/.test(L))return;
     if(/customisation notes|special requests|cushion notes/.test(L)){notes.push(val);return;}
     if(m){
-      if(L==="size"){const x=val.match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)/);if(x){v.W=+x[1];if(v.side!=="N")v.RL=+x[2];}set("Size (as ordered)",val);return;}
+      if(L==="size"){const x=val.match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)/);if(x){v.W=+x[1];if(v.side!=="N")v.RL=+x[2];}return;}
       if(/total sofa width/.test(L)){const n=num(val);if(n>0)v.W=n;return;}
       if(/left chaise/.test(L)){const n=num(val);if(n>0){v.RL=n;}return;}
-      if(L==="configuration"){if(/right/i.test(val))v.side="R";else if(/left/i.test(val))v.side="L";set("Configuration (as ordered)",val);return;}
+      if(L==="configuration"){if(/right/i.test(val))v.side="R";else if(/left/i.test(val))v.side="L";return;}
       if(/seat depth/.test(L)){const n=num(val);if(n>0)v.D=v.B+n;return;}
       if(/seat height/.test(L)){const n=num(val);if(n>0)v.SH=n;return;}
       if(/back height/.test(L)){const n=num(val);if(n>0)v.H=n;return;}
@@ -605,7 +586,6 @@ function wire(){
     img.src=url;
   });
   document.getElementById('printBtn').addEventListener('click',()=>{document.activeElement&&document.activeElement.blur();window.print();});
-  document.getElementById('resetBtn').addEventListener('click',()=>{if(!ORDER.model)return;Object.assign(V,MODELS[ORDER.model].defaults);syncInputs();renderDrawings();save();});
   document.getElementById('savedSel').addEventListener('change',e=>{if(e.target.value)location.href="/spec.html?id="+encodeURIComponent(e.target.value);});
 }
 async function loadSavedList(){
