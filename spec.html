@@ -444,7 +444,8 @@ const LadbrokeDraw=WarpDraw.make({
     const stops=[0,V.A];for(let i=1;i<nm;i++)stops.push(V.A+i*s1);stops.push(V.W-V.CW,V.W-V.A2,V.W);
     let o=hChain(stops,null,Y(0)-G,Y(0));
     o+=hChain([0,V.W],null,Y(0)-2*G,Y(0));
-    o+=hChain([V.W-V.CW,V.W],null,Y(V.RL)+G,Y(V.RL));
+    /* chaise width written as seat + arm (92+17) so it reads as the same seat size as the others */
+    o+=hChain([V.W-V.CW,V.W],[`${F(V.CW-V.A2)}+${F(V.A2)}`],Y(V.RL)+G,Y(V.RL));
     const x0=X(0), xW=X(V.W);
     o+=K.chainV([Y(0),Y(V.B),Y(V.D)],x0+out*G,x0,[F(V.B),F(V.D-V.B)]);
     const armLen=fy(110);                                       // plain-side arm runs to 110 in the DWG (seat front at 117)
@@ -504,11 +505,11 @@ const MODELS={
     autoSpec(V){const d=KobeDraw.derive(V);const size=d.chaise?`${F2(V.W)} × ${F2(V.RL)} cm`:`${F2(V.W)} × ${F2(V.D)} cm`;
       return [["Size",`${d.n} Seater · ${size}`,1],["Configuration",d.chaise?(V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"):"Straight — no chaise"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],["Arm Width",`${F2(V.A)} cm (top ${F2(Math.min(V.AT,V.A))})`]];}},
-  ladbroke:{pending:true,match:/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,label:"Ladbroke",name:"Ladbroke Corner Sofa",defaults:LADBROKE_DEFAULT,draw:LadbrokeDraw,photoSide:"R",photo:PHOTO_LADBROKE,
+  ladbroke:{pending:true,ver:"dwg2-92",match:/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,label:"Ladbroke",name:"Ladbroke Corner Sofa",defaults:LADBROKE_DEFAULT,draw:LadbrokeDraw,photoSide:"R",photo:PHOTO_LADBROKE,
     sides:["L","R"],seats:true,fields:LADBROKE_FIELDS,
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`,1],["Configuration",V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],["Arm Height",`${F2(V.AH)} cm`],
-        ["Arm Width",`${F2(V.A)} cm · chaise side ${F2(V.A2)} cm`],["Chaise Width",`${F2(V.CW)} cm`]];}},
+        ["Arm Width",`${F2(V.A)} cm · chaise side ${F2(V.A2)} cm`],["Chaise Width",`${F2(V.CW-V.A2)} + ${F2(V.A2)} cm (seat + arm)`]];}},
 };
 /* a sofa template only for a SOFA line: "Kobe Armchair" / "Kobe Ottoman" must not get the Kobe sofa drawing */
 const NOT_SOFA=/\b(arm\s*chair|armchair|chair|bed|headboard|table|stool|barstool|bench|ottoman|pouf|cushion|pillow)s?\b/i;
@@ -699,7 +700,7 @@ function applyFormSpec(O,spec){
 let saveT=null;
 function setSaveState(t,cls){const e=document.getElementById("saveState");e.textContent=t;e.className="save"+(cls?" "+cls:"");}
 function save(){
-  if(!LIVE){try{localStorage.setItem("nader-spec-demo-"+ORDER.model,JSON.stringify(ORDER));}catch(e){}return;}
+  if(!LIVE){try{localStorage.setItem("nader-spec-demo-"+ORDER.model+((MODELS[ORDER.model]||{}).ver||""),JSON.stringify(ORDER));}catch(e){}return;}
   setSaveState("Saving…");clearTimeout(saveT);
   saveT=setTimeout(async()=>{
     try{
@@ -900,7 +901,7 @@ async function boot(){
   if(!sess||!sess.ok){
     if(Q.o||Q.id){document.getElementById("gate").hidden=false;return;}
     /* offline / preview: demo sheet */
-    ORDER=DEMO();try{const s=JSON.parse(localStorage.getItem("nader-spec-demo-"+ORDER.model)||"null");if(s&&s.V)ORDER=s;}catch(e){}
+    ORDER=DEMO();try{const s=JSON.parse(localStorage.getItem("nader-spec-demo-"+ORDER.model+((MODELS[ORDER.model]||{}).ver||""))||"null");if(s&&s.V)ORDER=s;}catch(e){}
     document.getElementById("backLink").hidden=true;start();return;
   }
   LIVE=true;
