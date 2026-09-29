@@ -506,10 +506,22 @@ app.post('/api/spec', requireAuth, async (req, res) => {
   const b = req.body || {}, id = specKey(b.id), data = b.data;
   if (!id || !data || typeof data !== 'object') return res.status(400).json({ ok: false, error: 'id and data required' });
   const c = data.cust || {};
+  let status = b.status;
   try {
+    /* a LOCKED drawing (drawing complete) can only be changed/unlocked by an admin — everyone else can still edit
+       notes & customer details, but the drawing parts are kept exactly as they were locked */
+    if (!hasRole(req, 'admin')) {
+      const cur = await workerJson('/spec/' + id).catch(() => null);
+      const old = cur && cur.data;
+      if (old && old.locked) {
+        ['model', 'V', 'drawings', 'drawStatus', 'photo', 'photoSide', 'mirror', 'photoManual', 'photoCleared', 'manualChosen', 'locked', 'completedBy']
+          .forEach(k => { if (k in old) data[k] = old[k]; else delete data[k]; });
+        status = (cur.meta && cur.meta.status) || 'complete';
+      }
+    }
     const out = await workerJson('/spec/' + id, { method: 'POST', body: JSON.stringify({ data,
       meta: { product: data.product || '', customer: c.name || '', orderNo: data.orderNo || '', by: req.session.username,
-        status: ['complete', 'manual', 'check'].includes(b.status) ? b.status : '' } }) });
+        status: ['complete', 'manual', 'check'].includes(status) ? status : '' } }) });
     // log at most one "spec_edit" per user+sheet per 10 min so autosave doesn't flood the audit log
     const k = req.session.username + '|' + id, now = Date.now();
     if (!specLogged[k] || now - specLogged[k] > 600000) { specLogged[k] = now; logEvent(req.session.username, 'spec_edit', { id, product: data.product || '' }); }
