@@ -619,7 +619,7 @@ const MODELS={
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`,1],["Configuration",V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],["Arm Height",`${F2(V.AH)} cm`],
         ["Arm Width",`${F2(V.A)} cm · chaise side ${F2(V.A2)} cm`],["Seat Width",`${F2(LAD_SEAT(V))} cm each (× ${V.n})`],["Chaise Width",`${F2(LAD_SEAT(V))} + ${F2(V.A2)} cm (seat + arm)`]];}},
-  thistle:{pending:true,ver:"dwg1q",match:/\b(thistle|thistel|thristle|thrstle|thisle)\b/i,label:"Thistle",name:"Thistle Corner Sofa",defaults:THISTLE_DEFAULT,draw:ThistleDraw,photoSide:"L",photo:PHOTO_THISTLE,
+  thistle:{ver:"dwg1q",match:/\b(thistle|thistel|thristle|thrstle|thisle)\b/i,label:"Thistle",name:"Thistle Corner Sofa",defaults:THISTLE_DEFAULT,draw:ThistleDraw,photoSide:"L",photo:PHOTO_THISTLE,
     sides:["L","R"],seats:true,fields:THISTLE_FIELDS,
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`,1],["Configuration",V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.HB)} cm (${F2(V.H)} with crown)`],
