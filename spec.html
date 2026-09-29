@@ -425,12 +425,20 @@ const WarpDraw=(function(){
       K.setFS(22);
       const s=drawW/V.W, flip=V.side!==M.native, H=M.frontHeight(V);
       /* chaise side carries 3 height chains, the plain side one — margins follow the side they're on */
-      const sideC=G*3+30, sideP=G*2+40, LM=flip?sideC:sideP, RM=flip?sideP:sideC, TM=G+22, BM=22+12;
+      const sideC=G*3+30, sideP=G*2+40, LM=flip?sideC:sideP, RM=flip?sideP:sideC, TM=G+22, BM=M.callouts?64:34;
       const X=c=>LM+(flip?V.W-c:c)*s, Y=h=>TM+(H-h)*s;
       /* the front view can have its own stretch points (some DWGs draw the front a little off the top view) */
       const fx=pw(M.xbF||M.xb,(M.xtF||M.xt)(V)), fh=pw(M.hb,M.ht(V));
       const g=drawView(FRONT,V,X,fx,h=>Y(fh(h)),M.geom.front);
-      const dm=M.dimsFront(V,{X,Y,fx,fh,s,flip,G,hChain:(cs,vals,y,y0)=>hChain(X,cs,vals,y,y0),K,F,out:flip?1:-1})
+      /* small heights (feet, base) spelled out: a little dimension at x from h0→h1, then a leader down to a
+         worded label under the drawing ("Feet 4") — so the factory can read it without the editor */
+      const callout=(x,h0,h1,text,edge)=>{const DC="#9a7b45",ya=Y(h1),yb=Y(h0),yl=Y(0)+46;
+        return `<line x1="${edge}" y1="${ya}" x2="${x}" y2="${ya}" stroke="${DC}" stroke-width=".8"/><line x1="${edge}" y1="${yb}" x2="${x}" y2="${yb}" stroke="${DC}" stroke-width=".8"/>`
+          +`<line x1="${x}" y1="${ya}" x2="${x}" y2="${yb}" stroke="${DC}" stroke-width="1.1"/>`+K.tick(x,ya)+K.tick(x,yb)
+          +`<line x1="${x}" y1="${yb}" x2="${x}" y2="${yl-14}" stroke="${DC}" stroke-width=".9" stroke-dasharray="3 2"/>`
+          +`<path d="M${x-4},${yl-20}L${x},${yl-13}L${x+4},${yl-20}" fill="none" stroke="${DC}" stroke-width="1.2"/>`
+          +`<text x="${x}" y="${yl}" text-anchor="middle" dominant-baseline="central" font-size="19" font-weight="800" fill="#1c1a17">${text}</text>`;};
+      const dm=M.dimsFront(V,{X,Y,fx,fh,s,flip,G,hChain:(cs,vals,y,y0)=>hChain(X,cs,vals,y,y0),K,F,out:flip?1:-1,callout})
         +`<line x1="${Math.min(X(0),X(V.W))-8}" y1="${Y(0)}" x2="${Math.max(X(0),X(V.W))+8}" y2="${Y(0)}" stroke="#9a7b45" stroke-width=".6" stroke-dasharray="4 3"/>`;
       /* front view: flip swaps LM/RM visually — widen both sides equally so dims never clip */
       return `<svg viewBox="0 0 ${LM+V.W*s+RM} ${TM+H*s+BM}" font-family="Helvetica Neue,Helvetica,Arial,sans-serif">${g}${dm}</svg>`;
@@ -563,12 +571,17 @@ const ThistleDraw=WarpDraw.make({
     lv.forEach((t,i)=>{o+=`<text x="${(xl-out*6).toFixed(1)}" y="${((ys[i]+ys[i+1])/2).toFixed(1)}" text-anchor="${out<0?"start":"end"}" dominant-baseline="central" font-size="18" font-weight="800" fill="#1c1a17" paint-order="stroke" stroke="#fff" stroke-width="4">${t}</text>`;});
     return o;
   },
+  callouts:true,
   dimsFront(V,c){
-    const {X,Y,G,K,F,out}=c, xC=X(0), xP=X(V.W);
+    const {X,Y,G,K,F,out,callout,fx}=c, xC=X(0), xP=X(V.W);
     let o=K.chainV([Y(0),Y(V.HB)],xC+out*G,xC,[F(V.HB)]);
     o+=K.chainV([Y(0),Y(V.H)],xC+out*2*G,xC,[F(V.H)]);
-    o+=K.chainV([Y(0),Y(V.LH),Y(V.LH+V.BH),Y(V.SH)],xP-out*G,xP,[F(V.LH),F(V.BH),F(V.SH-V.LH-V.BH)]);
+    /* seat cushion + seat height on the plain side; feet and base split to opposite ends, each named */
+    o+=K.chainV([Y(V.LH+V.BH),Y(V.SH)],xP-out*G,xP,[F(V.SH-V.LH-V.BH)]);
     o+=K.chainV([Y(0),Y(V.SH)],xP-out*2*G,xP,[F(V.SH)]);
+    o+=callout(xP-out*G,V.LH,V.LH+V.BH,"Base "+F(V.BH),xP);
+    const xFoot=X(fx(39.5));                                         // the DWG's first foot, next to the chaise-side arm
+    o+=callout(xC+out*G*.55,0,V.LH,"Feet "+F(V.LH),xFoot);
     return o;
   },
   check(V){
