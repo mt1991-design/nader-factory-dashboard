@@ -4828,7 +4828,10 @@ setInterval(function(){
   if(!USER) return;
   if(Date.now()-lastActivity > IDLE_LIMIT){ forceLogout("Signed out after 30 minutes of inactivity — please log in again."); return; }
   /* still active → renew the 30-min server session so active users aren't kicked mid-work */
-  fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){ if(!d||!d.ok){ forceLogout("Your session expired — please log in again."); } }).catch(function(){});
+  fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){ if(!d||!d.ok){ forceLogout("Your session expired — please log in again."); return; }
+    /* a new version was deployed (e.g. a new drawing template went live): reload onto it — but never while someone is typing */
+    if(d.build){ if(!window.__BUILD) window.__BUILD=d.build; else if(d.build!==window.__BUILD){ const a=document.activeElement; if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))) location.reload(); } }
+  }).catch(function(){});
 }, 60000);
 function setProdStageServer(id,line,idx){
   fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
@@ -5053,6 +5056,6 @@ function addWorker(){const inp=$("newworker"),n=(inp.value||"").trim();if(!n)ret
 function delWorker(i){const w=DB.workers();w.splice(i,1);DB.saveWorkers(w);renderWorkers();}
 
 ["loginlogo","dashlogo","worklogo","saleslogo","adminlogo"].forEach(id=>{if($(id))$(id).src=LOGO.uri;});
-function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){USER={username:d.username,name:d.name,roles:d.roles||[]};ROLE=defaultView(USER.roles);renderRoleSwitch();enterDash();}}).catch(function(){});}
+function restoreSession(){fetch("/api/session",{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){window.__BUILD=d.build;USER={username:d.username,name:d.name,roles:d.roles||[]};ROLE=defaultView(USER.roles);renderRoleSwitch();enterDash();}}).catch(function(){});}
 initProducts();renderQC();loadProduct();try{init3D();}catch(e){}applyZoom();showScreen("screen-login");restoreSession();
 </script>

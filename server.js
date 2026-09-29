@@ -138,12 +138,14 @@ app.post('/api/login', (req, res) => {
 });
 
 // Restore an existing session on page load/refresh, and slide it forward 12h on use.
+/* changes on every deploy — open dashboards compare it and reload themselves onto the new version */
+const BUILD = String(Date.now());
 app.get('/api/session', (req, res) => {
   const sess = verify(req.cookies.nfs_session);
   const user = sess && USERS[sess.u];
   if (!user) return res.json({ ok: false });
   setSessionCookie(res, sess.u);
-  res.json({ ok: true, username: sess.u, name: user.name, roles: user.roles });
+  res.json({ ok: true, username: sess.u, name: user.name, roles: user.roles, build: BUILD });
 });
 
 app.post('/api/logout', (req, res) => {

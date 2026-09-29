@@ -1007,9 +1007,14 @@ function syncInputs(){
 }
 function wire(){
   document.getElementById('f-model').addEventListener('change',e=>{
-    ORDER.model=e.target.value;
+    const prev=MODELS[ORDER.model];
+    ORDER.model=e.target.value;ORDER.manualChosen=!ORDER.model;
     if(ORDER.model){const M=MODELS[ORDER.model];V=ORDER.V=Object.assign({...M.defaults},{side:M.sides.includes(V.side)?V.side:M.defaults.side});
-      ORDER.photoSide=M.photoSide;if(!ORDER.photo&&M.photo){ORDER.photo=M.photo;renderSheet();}}
+      /* the product name + reference photo follow the template — unless someone typed their own name / uploaded a photo */
+      if(!ORDER.product||(prev&&ORDER.product===prev.name))ORDER.product=M.name;
+      if(!ORDER.photoManual&&M.photo){ORDER.photo=M.photo;ORDER.photoCleared=false;ORDER.mirror=false;}
+      ORDER.photoSide=M.photoSide;
+      document.getElementById("tbTitle").textContent=ORDER.product+" · Spec Sheet";renderSheet();}
     buildDimFields();syncInputs();renderDrawings();save();});
   document.getElementById('sheet').addEventListener('input',e=>{
     const t=e.target, txt=t.innerText.trim();
@@ -1062,6 +1067,8 @@ async function loadSavedList(){
 }
 
 function start(){
+  if(!ORDER.model&&!ORDER.manualChosen){const m=modelFor(ORDER.orderedAs||ORDER.product);
+    if(m){ORDER.model=m;ORDER.V=Object.assign({...MODELS[m].defaults},{side:(ORDER.V&&MODELS[m].sides.includes(ORDER.V.side))?ORDER.V.side:MODELS[m].defaults.side});ORDER.photoSide=MODELS[m].photoSide;}}
   V=ORDER.V=Object.assign({...modelDefaults()},ORDER.V||{});
   document.getElementById('f-model').innerHTML=Object.keys(MODELS).filter(liveModel).map(k=>`<option value="${k}">${MODELS[k].label} (DWG)</option>`).join("")+'<option value="">Needs manual drawing</option>';
   document.getElementById("app").hidden=false;
