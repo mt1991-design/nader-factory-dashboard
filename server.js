@@ -435,7 +435,8 @@ app.post('/api/spec', requireAuth, async (req, res) => {
   const c = data.cust || {};
   try {
     const out = await workerJson('/spec/' + id, { method: 'POST', body: JSON.stringify({ data,
-      meta: { product: data.product || '', customer: c.name || '', orderNo: data.orderNo || '', by: req.session.username } }) });
+      meta: { product: data.product || '', customer: c.name || '', orderNo: data.orderNo || '', by: req.session.username,
+        status: ['complete', 'manual', 'check'].includes(b.status) ? b.status : '' } }) });
     // log at most one "spec_edit" per user+sheet per 10 min so autosave doesn't flood the audit log
     const k = req.session.username + '|' + id, now = Date.now();
     if (!specLogged[k] || now - specLogged[k] > 600000) { specLogged[k] = now; logEvent(req.session.username, 'spec_edit', { id, product: data.product || '' }); }

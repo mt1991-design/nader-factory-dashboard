@@ -70,7 +70,7 @@
     body{background:#fff}
     .toolbar,.ed{display:none!important}
     .wrap{padding:0;display:block}
-    .sheet{box-shadow:none;min-height:0;height:296mm;overflow:hidden}
+    .sheet{box-shadow:none;min-height:0;height:auto;overflow:visible;margin:0 auto;break-inside:avoid}
     [contenteditable]:hover,[contenteditable]:focus{background:none;box-shadow:none}
     .auto::after{display:none}
   }
@@ -87,6 +87,15 @@
   .gate{max-width:420px;margin:80px auto;background:#fff;border-radius:12px;padding:28px;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,.15)}
   .gate a{display:inline-block;margin-top:14px;background:var(--ink);color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600}
   #photo{transition:transform .25s}
+  .mdraw{position:relative;width:100%;display:flex;justify-content:center}
+  .mdraw img{max-width:100%;max-height:74mm;object-fit:contain}
+  .bigfront .mdraw img{max-height:54mm}
+  .mdraw-acts{position:absolute;top:4px;right:4px;display:flex;gap:4px}
+  .mdraw-acts button,.upbtn{border:1px solid var(--gold-dk);background:#fff;color:var(--gold-dk);border-radius:6px;padding:5px 10px;font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+  .upbtn{margin-top:6px;background:var(--ink);color:#fff;border-color:var(--ink);padding:8px 14px}
+  .stsel{appearance:none;-webkit-appearance:none;border:1px dashed var(--gold);border-radius:4px;background:#fffdf6;font:inherit;font-size:12px;font-weight:700;padding:1px 18px 1px 4px;margin-top:1px;cursor:pointer;max-width:100%;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A98B54'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 5px center}
+  .stsel.done{color:#2f7a3a}.stsel.warn{color:var(--maroon)}
+  @media print{.noprint{display:none!important}.stsel{border:none;background:none;padding:0}}
   .ed .model-note{font-size:11.5px;line-height:1.45;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin:8px 0 2px;color:var(--muted)}
   .ed .model-note b{color:var(--ink)}
   @media print{.manual{border-color:#c9a3a3}}
@@ -144,6 +153,7 @@
       <button class="photo-btn" type="button" id="photoBtn">Replace photo…</button>
       <button class="photo-btn" type="button" id="mirrorBtn" style="margin-top:6px">Mirror photo ⇆</button>
       <input type="file" id="photoIn" accept="image/*" hidden>
+      <input type="file" id="drawIn" accept="image/*" hidden>
     </div>
     <p class="edit-tip">Tip: click any text on the sheet — specification, customer, notes, order details — to edit it. Values marked <b style="color:var(--gold-dk)">AUTO</b> follow the drawing. Changes save to this order automatically.</p>
   </aside>
@@ -489,7 +499,7 @@ function save(){
   setSaveState("Saving…");clearTimeout(saveT);
   saveT=setTimeout(async()=>{
     try{
-      const r=await fetch("/api/spec",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:SPEC_ID,data:ORDER})});
+      const r=await fetch("/api/spec",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:SPEC_ID,data:ORDER,status:drawStatus()})});
       const d=await r.json().catch(()=>({}));
       if(r.status===401){document.getElementById("app").hidden=true;document.getElementById("gate").hidden=false;return;}
       if(d.ok)setSaveState("✓ Saved "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),"ok");else setSaveState("Not saved — retrying","err"),setTimeout(save,4000);
@@ -515,7 +525,7 @@ function renderSheet(){
   const c=ORDER.cust;
   document.getElementById('sheet').innerHTML=`
 <div class="mast"><div class="mast-l"><div class="wm">NADER</div><div class="sub">DARE TO BE RARE</div></div><div class="mast-r"><div class="doc">Factory Spec Sheet</div><div class="prod" contenteditable="true" spellcheck="false" data-k="product">${esc(ORDER.product)}</div></div></div>
-<div class="mast-meta"><div><div class="k">Order No.</div>${ce("orderNo",ORDER.orderNo)}</div><div><div class="k">Date</div>${ce("date",ORDER.date)}</div><div><div class="k">Assigned To</div>${ce("assigned",ORDER.assigned)}</div><div><div class="k">Status</div><div class="v done" id="status">Drawing complete</div></div></div>
+<div class="mast-meta"><div><div class="k">Order No.</div>${ce("orderNo",ORDER.orderNo)}</div><div><div class="k">Date</div>${ce("date",ORDER.date)}</div><div><div class="k">Assigned To</div>${ce("assigned",ORDER.assigned)}</div><div><div class="k">Status</div><div id="statusBox"></div></div></div>
 <div class="section-h"><span class="t">Reference &amp; Top View</span><span class="rule"></span></div>
 <div class="grid2c">
   <div class="panel"><div class="cap"><span>Reference Photo</span><b>AS ORDERED</b></div><div class="body">${ORDER.photo?`<img id="photo" src="${esc(ORDER.photo)}" alt="Reference photo">`:'<div class="manual" style="border-color:var(--line);background:none;color:var(--muted)"><span>No photo — use “Replace photo…”</span></div>'}</div></div>
@@ -547,23 +557,58 @@ function photoFlip(){
   const auto=!!(ORDER.model&&ORDER.photoSide&&V.side!=="N"&&V.side!==ORDER.photoSide);
   img.style.transform=(auto!==!!ORDER.mirror)?"scaleX(-1)":"";
 }
+/* overall drawing status: auto template → complete (unless sizes don't work); manual → whatever the team picked */
+function drawStatus(){
+  if(ORDER.model)return MODELS[ORDER.model].draw.check(V).length?"check":"complete";
+  return ORDER.drawStatus==="complete"?"complete":"manual";
+}
+function manualPanel(key,label){
+  const img=(ORDER.drawings||{})[key];
+  if(img)return `<div class="mdraw"><img src="${esc(img)}" alt="${label} drawing"><div class="mdraw-acts noprint"><button type="button" data-up="${key}">Replace</button><button type="button" data-rm="${key}">Remove</button></div></div>`;
+  return `<div class="manual"><b>Needs manual drawing</b><span>No CAD template for “${esc(ORDER.product)}” yet. Upload the hand drawing for the ${label.toLowerCase()} here.</span><button type="button" class="upbtn noprint" data-up="${key}">⬆ Upload ${label.toLowerCase()} drawing</button></div>`;
+}
+function renderStatus(){
+  const box=document.getElementById('statusBox'); if(!box)return;
+  const st=drawStatus();
+  if(ORDER.model){
+    box.innerHTML=`<div class="v ${st==="check"?"warn":"done"}">${st==="check"?"Check dimensions":"Drawing complete"}</div>`;
+  }else{
+    box.innerHTML=`<select id="statusSel" class="stsel ${st==="complete"?"done":"warn"}" aria-label="Drawing status">
+      <option value="manual"${st!=="complete"?" selected":""}>Needs manual drawing</option>
+      <option value="complete"${st==="complete"?" selected":""}>Drawing complete</option></select>`;
+    document.getElementById('statusSel').addEventListener('change',e=>{
+      if(e.target.value==="complete"&&!((ORDER.drawings||{}).top||(ORDER.drawings||{}).front)){
+        const n=document.getElementById('saveState');n.textContent="Tip: upload the drawing too";n.className="save err";}
+      ORDER.drawStatus=e.target.value;renderStatus();save();});
+  }
+}
 function renderDrawings(){
-  const st=document.getElementById('status'), w=document.getElementById('warn');
-  const manual=`<div class="manual"><b>Needs manual drawing</b><span>There is no CAD template for “${esc(ORDER.product)}” yet. Draw it by hand and attach it, or pick a template in the drawing options.</span></div>`;
+  const w=document.getElementById('warn');
   if(!ORDER.model){
-    document.getElementById('topBody').innerHTML=manual;document.getElementById('frontBody').innerHTML=manual;
-    st.textContent="Needs manual drawing";st.className="v warn";w.classList.remove('show');
+    document.getElementById('topBody').innerHTML=manualPanel("top","Top view");
+    document.getElementById('frontBody').innerHTML=manualPanel("front","Front elevation");
+    w.classList.remove('show');
   }else{
     const M=MODELS[ORDER.model];
     document.getElementById('topBody').innerHTML=M.draw.top(V,640);
     document.getElementById('frontBody').innerHTML=M.draw.front(V,880);
     const errs=M.draw.check(V);
     w.innerHTML=errs.map(e=>"• "+esc(e)).join("<br>");w.classList.toggle('show',errs.length>0);
-    st.textContent=errs.length?"Check dimensions":"Drawing complete";st.className="v "+(errs.length?"warn":"done");
   }
-  photoFlip();renderSpec();
+  renderStatus();photoFlip();renderSpec();
 }
-
+function uploadDrawing(key){
+  const inp=document.getElementById('drawIn');inp.dataset.key=key;inp.value="";inp.click();
+}
+/* ---------- print: always ONE A4 page — long notes / extra spec rows shrink the sheet slightly instead of
+   pushing the notes end + production tick-boxes off the page ---------- */
+function fitToPage(){
+  const sh=document.getElementById('sheet'); if(!sh)return;
+  sh.style.zoom=""; const prevMin=sh.style.minHeight; sh.style.minHeight="0";
+  const h=sh.scrollHeight, page=293*96/25.4;          // A4 height in CSS px, small safety margin
+  sh.style.minHeight=prevMin;
+  sh.style.zoom=h>page?String(Math.floor(page/h*1000)/1000):"";
+}
 /* ---------- editor wiring ---------- */
 const FIELDS=["W","RL","D","B","BC","A","H","SH","BH","LH","AT"];
 function syncInputs(){
@@ -606,7 +651,25 @@ function wire(){
       renderSheet();renderDrawings();save();};
     img.src=url;
   });
-  document.getElementById('printBtn').addEventListener('click',()=>{document.activeElement&&document.activeElement.blur();window.print();});
+  document.getElementById('sheet').addEventListener('click',e=>{
+    const up=e.target.closest('[data-up]'),rm=e.target.closest('[data-rm]');
+    if(up)uploadDrawing(up.dataset.up);
+    if(rm){if(ORDER.drawings)delete ORDER.drawings[rm.dataset.rm];renderDrawings();save();}
+  });
+  document.getElementById('drawIn').addEventListener('change',e=>{
+    const file=e.target.files[0],key=e.target.dataset.key;if(!file||!key)return;
+    const img=new Image(),url=URL.createObjectURL(file);
+    img.onload=()=>{ /* keep line drawings sharp but the saved sheet small */
+      const k=Math.min(1,2000/Math.max(img.width,img.height)),c=document.createElement('canvas');
+      c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);const g=c.getContext('2d');g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);
+      ORDER.drawings=Object.assign({},ORDER.drawings,{[key]:c.toDataURL('image/jpeg',0.88)});URL.revokeObjectURL(url);
+      renderDrawings();save();};
+    img.onerror=()=>{const n=document.getElementById('saveState');n.textContent="That file isn’t an image — save the drawing as JPG/PNG (or screenshot the PDF)";n.className="save err";};
+    img.src=url;
+  });
+  document.getElementById('printBtn').addEventListener('click',()=>{document.activeElement&&document.activeElement.blur();fitToPage();window.print();});
+  window.addEventListener('beforeprint',fitToPage);
+  window.addEventListener('afterprint',()=>{document.getElementById('sheet').style.zoom="";});
   document.getElementById('savedSel').addEventListener('change',e=>{if(e.target.value)location.href="/spec.html?id="+encodeURIComponent(e.target.value);});
 }
 async function loadSavedList(){

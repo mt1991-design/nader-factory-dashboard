@@ -4339,7 +4339,7 @@ let ROLE=null,pendingRole="sales",mode="sales",curOrderId=null,activeTab="photo"
 /* Passwords are validated server-side via /api/login (see server.js). */
 const DEFWORKERS=["Rabi","Suvash","Raja","Ahmad","Akash","Jo","Bahador"];
 let SHOPIFY=[];
-let SAVED_SPECS=new Set();   /* order lines that have a saved spec sheet */   /* populated live from Shopify via loadShopify() */
+let SAVED_SPECS=new Map();   /* id → {status,…} */   /* order lines that have a saved spec sheet */   /* populated live from Shopify via loadShopify() */
 /* Pull real orders + draft orders from the server (which proxies Shopify Admin). */
 async function loadShopify(fresh){
   const qs=fresh?"?fresh=1":"";
@@ -4355,7 +4355,7 @@ async function loadShopify(fresh){
     const orders=(od.orders||[]).map(o=>Object.assign({},o,{isDraft:false}));
     /* drafts first (awaiting spec), then placed orders; both newest-first */
     SHOPIFY=drafts.concat(orders).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-    try{const rs=await fetch("/api/specs",{credentials:"same-origin"});const ds=await rs.json();if(ds&&ds.ok)SAVED_SPECS=new Set((ds.items||[]).map(x=>x.id));}catch(e){}
+    try{const rs=await fetch("/api/specs",{credentials:"same-origin"});const ds=await rs.json();if(ds&&ds.ok)SAVED_SPECS=new Map((ds.items||[]).map(x=>[x.id,x]));}catch(e){}
     const err=(!ro.ok&&ro.status!==401?" orders":"")+(!rd.ok&&rd.status!==401?" drafts":"");
     const note=$("salesloading");
     if(note){ if(err){note.textContent="Couldn't load"+err+" from Shopify — check the token scopes.";note.style.color="#c0392b";} else {note.style.display="none";} }
@@ -4722,12 +4722,15 @@ function isShipped(o){return o.state==="shipped";}
 const AUTO_DRAW=[/\bkobe\b/i];
 function autoDrawable(title){return AUTO_DRAW.some(r=>r.test(title||""));}
 function isFurnitureLine(title){return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
-function drawTypeChip(title){
+/* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
+function lineDrawn(o,i){const it=o.items[i]||{};if(autoDrawable(it.product))return true;const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="complete");}
+function drawTypeChip(title,o,i){
+  if(o&&lineDrawn(o,i))return '<span class="dwchip auto" title="Drawing done">✓ Drawing complete</span>';
   if(autoDrawable(title))return '<span class="dwchip auto" title="Drawn automatically from the CAD file">✓ Drawing complete</span>';
   if(isFurnitureLine(title))return '<span class="dwchip manual" title="No CAD template yet — draw by hand">✎ Needs manual drawing</span>';
   return "";
 }
-function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some(it=>isFurnitureLine(it.product)&&!autoDrawable(it.product)); }
+function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some((it,i)=>isFurnitureLine(it.product)&&!lineDrawn(o,i)); }
 function buildFilters(){
   const ms=$("salesmonth");
   if(ms){
@@ -4852,8 +4855,8 @@ function renderProduction(q){
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();
       if(q&&hay.indexOf(q)<0) return; shown++;
       const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
-      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product);
-      const spec=(cur>=1||autoDrawable(it.product))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
+      const spec=(cur>=1||lineDrawn(o,i))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
       const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
       // every line item gets its OWN progress bar
       html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td colspan="4">'+prodBar(o,i,cur,editable)+'</td></tr>';
@@ -4954,7 +4957,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
         +'</select>'
       :"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
-    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product);
+    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
@@ -4972,7 +4975,7 @@ function orderInfoHTML(o){
 }
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;
   const url="/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:specKey(lineId(o,i))}).toString();
-  SAVED_SPECS.add(specKey(lineId(o,i)));window.open(url,"_blank");setTimeout(renderSalesDash,50);}
+  if(!SAVED_SPECS.has(specKey(lineId(o,i))))SAVED_SPECS.set(specKey(lineId(o,i)),{});window.open(url,"_blank");setTimeout(renderSalesDash,50);}
 function specKey(id){return String(id||"").replace(/[^A-Za-z0-9-]/g,"");}
 function newDrawing(){window.open("/spec.html?p="+encodeURIComponent("Kobe Corner Sofa"),"_blank");}
 function openOldSpecWorkspace(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);
@@ -5005,8 +5008,8 @@ function renderFactoryProd(){
     o.items.forEach(function(it,i){
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return; shown++;
       const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
-      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product);
-      const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':(autoDrawable(it.product)?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>');
+      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
+      const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':(lineDrawn(o,i)?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>');
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
       html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td>'+draw+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
     });
