@@ -470,6 +470,8 @@ const LadbrokeDraw=WarpDraw.make({
     /* plain arm: 13 at the top, 17 at the bottom (the 17 cm frame under the 10 cm curve) */
     o+=hChain([0,V.AT],[F(V.AT)],Y(fh(67.5))-20,Y(fh(67.5)));
     o+=hChain([fx(9.3),fx(26.3)],[F(V.A-V.CV)],Y(fh(29))+2,Y(fh(29)));
+    /* the arm's rake: its outside edge steps in 10 cm from the top to the bottom — shown as in the DWG ("10" under the arm) */
+    o+=hChain([0,fx(9)],[F(V.CV)],Y(fh(4)),Y(fh(10)));
     /* chaise-side arm: 13 at the top */
     o+=hChain([V.W-V.AT2,V.W],[F(V.AT2)],Y(V.AH)-20,Y(V.AH));
     o+=K.innerV([Y(V.SH),Y(V.H)],X(V.A+(nm-.5)*s1),[F(V.H-V.SH)]);
