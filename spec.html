@@ -403,12 +403,29 @@ const DEMO=()=>Object.assign(blankOrder("Kobe Corner Sofa"),{
 
 /* ---------- build the sheet from a Shopify order (+ the sales-form data when it came through the form) ---------- */
 function decodeState(s){try{if(typeof s==="string")return JSON.parse(decodeURIComponent(escape(atob(s))));return s;}catch(e){try{return JSON.parse(s);}catch(_){return null;}}}
+/* store photo for an order line. Sales often add details to the line ("Antiparos Dining Table size: 240x120cm",
+   "Ladbroke Sofa - 350x200 - Lhf") or use a shorter name than the store ("Ladbroke corner sofa" vs
+   "Ladbroke Corner Black Sofa") — so strip the extras, search by name, and pick the closest product title. */
+function baseName(title){
+  return String(title||"").split(/\s+size\b|\s[-–|]\s|[:|(]|\s\d{2,}/i)[0].replace(/\s+/g," ").trim();
+}
+async function sfSearch(q){
+  const r=await fetch(SF.url,{method:"POST",headers:{"Content-Type":"application/json","X-Shopify-Storefront-Access-Token":SF.token},
+    body:JSON.stringify({query:'query($q:String!){products(first:15,query:$q){nodes{title featuredImage{url}}}}',variables:{q}})});
+  const d=await r.json();return (((d.data||{}).products||{}).nodes||[]).filter(n=>n.featuredImage);
+}
 async function productPhoto(title){
   try{
-    const r=await fetch(SF.url,{method:"POST",headers:{"Content-Type":"application/json","X-Shopify-Storefront-Access-Token":SF.token},
-      body:JSON.stringify({query:'query($q:String!){products(first:1,query:$q){nodes{title featuredImage{url}}}}',variables:{q:'title:"'+String(title).replace(/"/g,"")+'"'}})});
-    const d=await r.json();const n=(((d.data||{}).products||{}).nodes||[])[0];
-    return n&&n.featuredImage?n.featuredImage.url+(n.featuredImage.url.includes("?")?"&":"?")+"width=900":"";
+    const base=baseName(title); if(!base)return "";
+    const words=base.toLowerCase().split(" ").filter(w=>w.length>1);
+    let nodes=await sfSearch('title:"'+base.replace(/"/g,"")+'"');
+    if(!nodes.length)nodes=await sfSearch(words.join(" "));
+    if(!nodes.length)nodes=await sfSearch(words[0]);
+    if(!nodes.length)return "";
+    const score=n=>{const t=n.title.toLowerCase().split(/\s+/);const hit=words.filter(w=>t.includes(w)).length;return hit*10-(t.length-hit)+(t[0]===words[0]?5:0);};
+    const best=nodes.slice().sort((a,b)=>score(b)-score(a))[0];
+    if(!best.title.toLowerCase().includes(words[0]))return "";      // never show a different product's photo
+    const u=best.featuredImage.url;return u+(u.includes("?")?"&":"?")+"width=900";
   }catch(e){return "";}
 }
 /* read sizes that sales typed free-hand into the product title, the extra order lines or the note
@@ -714,6 +731,7 @@ async function boot(){
   if(!ORDER){ORDER=blankOrder(Q.p||"Kobe Corner Sofa");fresh=true;
     if(Q.p){const p=await productPhoto(Q.p);if(p)ORDER.photo=p;}}
   setSaveState(fresh?"New drawing — edits save automatically":"✓ Saved","ok");
+  if(!ORDER.photo&&ORDER.product){const p=await productPhoto(ORDER.product);if(p){ORDER.photo=p;save();}}
   start();loadSavedList();
 }
 boot();
