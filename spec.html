@@ -879,6 +879,9 @@ function applyOrderText(O,text){
     const aw=t.match(/arm\s*width\D{0,4}(\d{1,2})/i);if(aw)v.A=+aw[1];
     const lg=t.match(/\bleg[^:\n]{0,12}[:\-]\s*(\d{1,2})\s*cm/i);if(lg&&+lg[1]<30)v.LH=+lg[1];
     applyArms(v,t);
+    /* older Shopify orders: "2 seats in the middle" = 2 middle seats + the two end seats; "4 seater"/"4 modules" as said */
+    const mid=t.match(/(\d)\s*(seats?|modules?|pieces?)\s*in\s*the\s*middle/i), mods=t.match(/(\d)\s*(modules|seats)\b(?!\s*in)/i);
+    if("n" in v){ if(mid)v.n=Math.min(6,+mid[1]+2); else if(mods&&+mods[1]>=2&&+mods[1]<=6)v.n=+mods[1]; }
   }
   const fab=t.match(/(?:fabric|upholstery)\s*(?:code)?\s*[:\-]\s*([^\n]{2,60})/i);
   if(fab&&!/swatch|shared with/i.test(fab[1])){const r=O.spec.find(x=>x[0]==="Fabric Catalogue Code");if(r&&!r[1])r[1]=fab[1].trim();}
