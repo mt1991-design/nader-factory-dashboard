@@ -249,6 +249,7 @@
       <div class="cardhdr"><span>Open orders · production</span><input type="text" id="ordersearch" placeholder="Search order # / product / customer" oninput="renderFactoryProd()"></div>
       <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
       <div id="dashempty" class="dashempty">No open orders in production yet.</div>
+      <div id="factoryhidden" class="muted" style="font-size:12px;padding:8px 12px"></div>
     </div>
     <div class="card dashside">
       <div class="cardhdr"><span>Factory team</span></div>
@@ -5011,10 +5012,15 @@ function renderFactoryProd(){
   const list=SHOPIFY.filter(o=>!o.isDraft && o.state==="open")
     .sort((a,b)=>(b.prod_stage||0)-(a.prod_stage||0));   // drawing-ready first
   let html="",shown=0;
-  list.forEach(function(o){ const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[];
+  let hidden=0;
+  list.forEach(function(o){ const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[]; let firstShown=true;
     o.items.forEach(function(it,i){
-      const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return; shown++;
-      const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
+      const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return;
+      const cur=stages[i]||0;
+      /* the factory only sees lines whose drawing is complete (or already in production) — not "awaiting drawing" */
+      if(!(lineDrawn(o,i)||cur>=1)){ if(isFurnitureLine(it.product)) hidden++; return; }
+      shown++;
+      const first=firstShown, multi=o.items.length>1; firstShown=false;
       const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
       const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':(lineDrawn(o,i)?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>');
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
@@ -5022,7 +5028,8 @@ function renderFactoryProd(){
     });
   });
   tb.innerHTML=shown?html:"";
-  const de=$("dashempty"); if(de) de.style.display=shown?"none":"block";
+  const de=$("dashempty"); if(de){ de.style.display=shown?"none":"block"; de.textContent="No orders with a completed drawing yet."; }
+  const hn=$("factoryhidden"); if(hn) hn.textContent=hidden?(hidden+" order line"+(hidden===1?" is":"s are")+" awaiting a drawing and not shown here yet."):"";
   renderLeaderboard();
 }
 function exitWork(){if(mode==="factory"){curOrderId=null;renderDash();renderWorkers();showScreen("screen-factory");}else{logout();}}
