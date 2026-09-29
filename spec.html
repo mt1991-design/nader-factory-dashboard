@@ -1413,6 +1413,8 @@ function applyOrderText(O,text){
   }
   else if(O.model){
     const sz=t.match(/(\d{3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/i);
+    /* corner sofas: the bigger number is the overall width, the smaller the chaise ("220 × 290" = 290 wide, 220 chaise) */
+    if(sz&&v.side!=="U"&&+sz[2]>+sz[1]){const w=sz[2];sz[2]=sz[1];sz[1]=w;}
     if(sz){v.W=+sz[1];if(+sz[2]>v.D+10)v.RL=+sz[2];}
     const hand=/\b(rhf|right[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?right|right[\s-]*(side\s*)?chaise/i.test(t)?"R":
                /\b(lhf|left[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?left|left[\s-]*(side\s*)?chaise/i.test(t)?"L":null;
