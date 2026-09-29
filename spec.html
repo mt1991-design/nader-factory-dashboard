@@ -719,7 +719,7 @@ const MODELS={
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`,1],["Configuration",V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.HB)} cm (${F2(V.H)} with crown)`],
         ["Seat Widths",TH_SEATS(V).map(F2).join(" · ")+" cm"],["Arm Width",`${F2(V.A)} cm`]];}},
-  ueno:{pending:true,ver:"dwg1-int",match:/\b(ueno|ueeno|ueno's)\b/i,label:"Ueno",name:"Ueno Corner Sofa",defaults:UENO_DEFAULT,draw:UenoDraw,photoSide:"R",photo:PHOTO_UENO,
+  ueno:{ver:"dwg1-int",match:/\b(ueno|ueeno|ueno's)\b/i,label:"Ueno",name:"Ueno Corner Sofa",defaults:UENO_DEFAULT,draw:UenoDraw,photoSide:"R",photo:PHOTO_UENO,
     sides:["L","R"],seats:true,fields:UENO_FIELDS,
     autoSpec(V){const w=UENO_SEATS(V);return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`,1],["Configuration",V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],
