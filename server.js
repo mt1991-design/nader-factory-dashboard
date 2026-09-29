@@ -42,7 +42,43 @@ function checkPassword(user, password) {
   } catch (e) { return false; }
 }
 
-app.use(express.json({ limit: '8mb' }));   // spec sheets can carry a replaced reference photo
+app.use(express.json({ limit: '8mb' }));
+
+/* ---------- gzip: JSON + HTML shrink ~5–8× over the wire (built-in zlib, no extra package) ---------- */
+const zlib = require('zlib');
+app.use((req, res, next) => {
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return next();
+  const send = res.send.bind(res);
+  res.send = function (body) {
+    try {
+      if ((typeof body === 'string' || Buffer.isBuffer(body)) && !res.getHeader('Content-Encoding')) {
+        const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
+        if (buf.length > 2048) {
+          if (!res.getHeader('Content-Type')) res.type(typeof body === 'string' ? 'html' : 'bin');
+          res.setHeader('Content-Encoding', 'gzip'); res.setHeader('Vary', 'Accept-Encoding');
+          return send(zlib.gzipSync(buf, { level: 6 }));
+        }
+      }
+    } catch (e) { /* fall through uncompressed */ }
+    return send(body);
+  };
+  next();
+});
+/* the pages themselves: gzip once, serve from memory */
+const PAGE_GZ = {};
+function servePage(file) {
+  return (req, res, next) => {
+    try {
+      if (!PAGE_GZ[file]) { const raw = require('fs').readFileSync(path.join(__dirname, file)); PAGE_GZ[file] = { raw, gz: zlib.gzipSync(raw, { level: 9 }) }; }
+      res.type('html'); res.setHeader('Cache-Control', 'no-cache');
+      if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.setHeader('Content-Encoding', 'gzip'); res.setHeader('Vary', 'Accept-Encoding'); return res.end(PAGE_GZ[file].gz); }
+      return res.end(PAGE_GZ[file].raw);
+    } catch (e) { next(); }
+  };
+}
+app.get(['/', '/index.html'], servePage('index.html'));
+app.get(['/spec', '/spec.html'], servePage('spec.html'));
+app.get('/meshes.json', (req, res, next) => { res.setHeader('Cache-Control', 'public, max-age=86400'); next(); });   // spec sheets can carry a replaced reference photo
 app.use(cookies);
 
 /* ---------- tiny signed-cookie session (no external deps) ---------- */
@@ -201,17 +237,54 @@ async function shopify(pathAndQuery, maxPages = 60) {
   return out;
 }
 
-// 60s in-memory cache so repeated dashboard loads don't re-scan the whole store.
-// Pass ?fresh=1 (the Refresh button) to bypass it.
+// In-memory cache, served instantly and refreshed in the BACKGROUND (stale-while-revalidate) — nobody waits on
+// Shopify except the very first request after a deploy. A timer also re-warms it every minute.
+// ?fresh=1 (the Refresh button) waits for a fresh copy.
 const CACHE = {};
 const TTL = 60 * 1000;
+function refresh(name, fetcher) {
+  const h = CACHE[name] || (CACHE[name] = {});
+  if (h.pending) return h.pending;
+  h.pending = fetcher().then(data => { CACHE[name] = { at: Date.now(), data }; return data; })
+    .finally(() => { if (CACHE[name]) CACHE[name].pending = null; });
+  return h.pending;
+}
 async function cached(name, fetcher, fresh) {
   const hit = CACHE[name];
-  if (!fresh && hit && (Date.now() - hit.at) < TTL) return hit.data;
-  const data = await fetcher();
-  CACHE[name] = { at: Date.now(), data };
-  return data;
+  if (hit && hit.data && !fresh) {
+    if (Date.now() - hit.at > TTL) refresh(name, fetcher).catch(() => {});
+    return hit.data;
+  }
+  /* Refresh button: don't settle for a fetch that started before the click (e.g. just after marking paid) */
+  if (fresh && hit && hit.pending) await hit.pending.catch(() => {});
+  return refresh(name, fetcher);
 }
+const byNewest = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''));
+const dedupe = arr => { const seen = new Set(); return arr.filter(o => !seen.has(o.id) && seen.add(o.id)); };
+const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at';
+/* Only what the dashboard shows: orders not yet shipped + orders shipped in the last few days
+   (was: every order ever placed, ~1,800, then filtered). */
+const FETCH = {
+  orders: async () => {
+    const since = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+    const [open, shipped] = await Promise.all([
+      shopify(`orders.json?status=any&fulfillment_status=unfulfilled&limit=250&fields=${ORDER_FIELDS}`),
+      shopify(`orders.json?status=any&fulfillment_status=shipped&updated_at_min=${encodeURIComponent(since)}&limit=250&fields=${ORDER_FIELDS}`)
+    ]);
+    return dedupe(open.concat(shipped)).sort(byNewest);
+  },
+  /* completed drafts already appear as orders — only open / invoice-sent drafts are needed (was: all ~1,500) */
+  drafts: async () => {
+    const [open, sent] = await Promise.all([
+      shopify('draft_orders.json?status=open&limit=250'),
+      shopify('draft_orders.json?status=invoice_sent&limit=250')
+    ]);
+    return dedupe(open.concat(sent)).sort(byNewest);
+  }
+};
+function warm() { Object.keys(FETCH).forEach(k => refresh(k, FETCH[k]).catch(() => {})); }
+setTimeout(warm, 2000);
+setInterval(warm, TTL);
 
 function custName(c) {
   if (!c) return '';
@@ -270,9 +343,7 @@ function mapAddress(a) {
 app.get('/api/orders', requireAuth, async (req, res) => {
   try {
     const fresh = req.query.fresh === '1';
-    const raw = await cached('orders', () => shopify(
-      'orders.json?status=any&limit=250&fields=id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at'
-    ), fresh);
+    const raw = await cached('orders', FETCH.orders, fresh);
     // Limit what the sales team sees: hide refunded/voided/cancelled orders entirely,
     // and hide shipped orders more than 3 days after they shipped. Owners use Shopify for the full history.
     const nowMs = Date.now(), THREE_DAYS = 3 * 24 * 3600 * 1000;
@@ -327,7 +398,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
 app.get('/api/draft_orders', requireAuth, async (req, res) => {
   try {
     const fresh = req.query.fresh === '1';
-    const raw = await cached('drafts', () => shopify('draft_orders.json?limit=250'), fresh);
+    const raw = await cached('drafts', FETCH.drafts, fresh);
     const drafts = raw.map(d => ({
       id: d.id,
       order: d.name,
