@@ -111,6 +111,9 @@
   .specbtn.done{background:transparent;color:#2f7a3a;border-color:#2f7a3a}
   .pdflink{display:inline-block;font:600 11.5px var(--ui);color:var(--ox);text-decoration:none;border:1px solid var(--panelline);border-radius:7px;padding:6px 9px;white-space:nowrap}
   .pdflink:hover{border-color:var(--ox)}
+  .dwchip{display:inline-block;font:700 10px var(--ui,inherit);letter-spacing:.02em;padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;vertical-align:1px}
+  .dwchip.auto{background:#e6f4ea;color:#1e7d43}
+  .dwchip.manual{background:rgba(179,38,30,.10);color:#b3261e}
   .drawchip{display:inline-block;font:600 10px var(--mono);letter-spacing:.03em;padding:2px 7px;border-radius:20px;background:rgba(179,38,30,.10);color:#b3261e;margin-top:5px;white-space:nowrap}
   .oddraw select{font:600 12px var(--ui);padding:5px 8px;border:1px solid var(--fieldline);border-radius:7px;background:var(--field);color:var(--ink)}
   .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
@@ -4715,7 +4718,16 @@ const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 function monthLabel(ym){const p=String(ym).split("-");return p.length>=2?(MONTHS[(+p[1])-1]||p[1])+" "+p[0]:ym;}
 function isShipped(o){return o.state==="shipped";}
 /* Needs drawing = an open order whose drawing hasn't been started yet (production still at Drawing). */
-function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1; }
+/* products with a traced DWG template draw automatically on the spec sheet (keep in sync with MODELS in spec.html) */
+const AUTO_DRAW=[/\bkobe\b/i];
+function autoDrawable(title){return AUTO_DRAW.some(r=>r.test(title||""));}
+function isFurnitureLine(title){return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
+function drawTypeChip(title){
+  if(autoDrawable(title))return '<span class="dwchip auto" title="Drawn automatically from the CAD file">✓ Drawing complete</span>';
+  if(isFurnitureLine(title))return '<span class="dwchip manual" title="No CAD template yet — draw by hand">✎ Needs manual drawing</span>';
+  return "";
+}
+function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some(it=>isFurnitureLine(it.product)&&!autoDrawable(it.product)); }
 function buildFilters(){
   const ms=$("salesmonth");
   if(ms){
@@ -4840,8 +4852,8 @@ function renderProduction(q){
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();
       if(q&&hay.indexOf(q)<0) return; shown++;
       const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
-      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
-      const spec=cur>=1?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product);
+      const spec=(cur>=1||autoDrawable(it.product))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
       const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
       // every line item gets its OWN progress bar
       html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td colspan="4">'+prodBar(o,i,cur,editable)+'</td></tr>';
@@ -4942,7 +4954,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
         +'</select>'
       :"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
-    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
+    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
@@ -4993,8 +5005,8 @@ function renderFactoryProd(){
     o.items.forEach(function(it,i){
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return; shown++;
       const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
-      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"");
-      const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':'<span class="speccomplete no">Awaiting drawing</span>';
+      const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product);
+      const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':(autoDrawable(it.product)?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>');
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
       html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td>'+draw+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
     });
