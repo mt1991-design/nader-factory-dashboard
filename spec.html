@@ -1620,7 +1620,7 @@ function applyLock(){
     const b=document.getElementById('unlockBtn'); if(b)b.onclick=()=>{ORDER.locked=null;ORDER.unlockedBy=ME;applyLock();save();};
   }else if(LIVE&&drawStatus()==="complete"){
     box.className="lockbox off noprint";
-    box.innerHTML=`Drawing complete — locks when this sheet is next opened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
+    box.innerHTML=`New drawing — you can edit it now; it locks as soon as it's closed and reopened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
     document.getElementById('lockBtn').onclick=()=>{ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
   }else{box.className="";box.innerHTML="";}
 }
@@ -1636,7 +1636,7 @@ function renderStatus(){
     document.getElementById('statusSel').addEventListener('change',e=>{if(isLocked())return;
       if(e.target.value==="complete"&&!((ORDER.drawings||{}).top||(ORDER.drawings||{}).front)){
         const n=document.getElementById('saveState');n.textContent="Tip: upload the drawing too";n.className="save err";}
-      ORDER.drawStatus=e.target.value;renderStatus();save();});
+      ORDER.drawStatus=e.target.value;if(e.target.value==="complete"){ORDER.locked={by:ME,at:Date.now()};ORDER.completedBy=ME;}renderStatus();applyLock();save();});
   }
 }
 function renderDrawings(){
@@ -1765,8 +1765,9 @@ function start(){
   document.getElementById("app").hidden=false;
   document.getElementById("tbTitle").textContent=(ORDER.product||"Spec")+" · Spec Sheet";
   document.title=(ORDER.orderNo?ORDER.orderNo.split(" ")[0]+" — ":"")+(ORDER.product||"Spec Sheet");
-  /* complete drawings are locked: saved sheets when reopened, and order lines drawn automatically from their template
-     straight away (their sizes come from the form). Only a brand-new blank "New drawing" stays open until it's reopened / Lock now. */
+  /* every complete drawing is locked — order lines drawn from their template are locked from the start (sizes come from
+     the form), manual ones the moment they're set to Drawing complete. Only a brand-new blank "New drawing" stays open
+     while it's being drawn (locks on reopen / Lock now). */
   if(LIVE&&(FROM_SAVE||Q.o)&&!ORDER.locked&&drawStatus()==="complete"){ORDER.locked={by:ORDER.completedBy||(FROM_SAVE?"":"Auto-drawn from the order"),at:Date.now()};save();}
   if(!ORDER.locked&&drawStatus()==="complete"&&!ORDER.completedBy)ORDER.completedBy=ME;
   renderSheet();wire();buildDimFields();syncInputs();renderDrawings();
