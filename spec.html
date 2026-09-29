@@ -1292,7 +1292,8 @@ function applyOrderText(O,text){
   if(O.model){
     const sz=t.match(/(\d{3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/i);
     if(sz){v.W=+sz[1];if(+sz[2]>v.D+10)v.RL=+sz[2];}
-    const hand=/\b(rhf|right[\s-]*hand)/i.test(t)?"R":/\b(lhf|left[\s-]*hand)/i.test(t)?"L":null;
+    const hand=/\b(rhf|right[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?right|right[\s-]*(side\s*)?chaise/i.test(t)?"R":
+               /\b(lhf|left[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?left|left[\s-]*(side\s*)?chaise/i.test(t)?"L":null;
     if(v.side==="U"){ if("SHAPE" in v&&hand&&!/\bu[\s-]*shape/i.test(t)){v.SHAPE=hand==="R"?"CR":"CL"; if(hand==="R"&&"RR" in v&&sz&&+sz[2]>v.D+10)v.RR=+sz[2];} }
     else if(v.side!=="N"&&hand)v.side=hand;
     const sd=t.match(/seat\s*depth\D{0,4}(\d{2,3})/i)||t.match(/(\d{2,3})\s*(?:cm)?\s*seat\s*depth/i);
@@ -1305,7 +1306,9 @@ function applyOrderText(O,text){
     if(/\bstraight\b|no\s*chaise|without\s*(the\s*)?chaise|standard\s*sofa/i.test(t)){if("SHAPE" in v)v.SHAPE="S";else if(O.model&&MODELS[O.model].sides.includes("N"))v.side="N";}
     /* older Shopify orders: "2 seats in the middle" = 2 middle seats + the two end seats; "4 seater"/"4 modules" as said */
     const mid=t.match(/(\d)\s*(seats?|modules?|pieces?)\s*in\s*the\s*middle/i), mods=t.match(/(\d)\s*(modules|seats)\b(?!\s*in)/i);
-    if("n" in v){ if(mid)v.n=Math.min(6,+mid[1]+2); else if(mods&&+mods[1]>=2&&+mods[1]<=6)v.n=+mods[1]; }
+    if("n" in v){ if(mid)v.n=Math.min(6,+mid[1]+2); else if(mods&&+mods[1]>=2&&+mods[1]<=6)v.n=+mods[1];
+      else if(sz&&MODELS[O.model]){ const d=MODELS[O.model].defaults, arms=(d.A||0)+(d.A2!=null?d.A2:(d.A||0)), std=(d.W-arms)/d.n;
+        if(v.W!==d.W)v.n=Math.max(2,Math.min(6,Math.round((v.W-arms)/std))); } }
   }
   const fab=t.match(/(?:fabric|upholstery)\s*(?:code)?\s*[:\-]\s*([^\n]{2,60})/i);
   if(fab&&!/swatch|shared with/i.test(fab[1])){const r=O.spec.find(x=>x[0]==="Fabric Catalogue Code");if(r&&!r[1])r[1]=fab[1].trim();}
@@ -1324,6 +1327,17 @@ function applyArms(v,t){
     if(re.test(t)){ if(lr===side)offC(); else offO(); }
   }
 }
+/* Multi-item orders often have ONE note describing every item ("1. Bed … 6. Thistle Corner Sofa …").
+   Return just this line's section (matched by its number and product name), or the whole note if it isn't numbered. */
+function itemSection(note,i,product){
+  const t=String(note||""), parts=t.split(/\n(?=\s*\d{1,2}[.)]\s+\S)/);
+  if(parts.length<2)return t;
+  const name=words(baseName(product)).find(w=>!GENERIC.has(w)&&!/^\d/.test(w))||"";
+  const num=p=>+((p.match(/^\s*(\d{1,2})[.)]/)||[])[1]||0);
+  const byNum=parts.find(p=>num(p)===i+1), byName=name?parts.find(p=>words(p.split("\n")[0]).some(w=>nameSim(name,w,true))):null;
+  if(byNum&&(!name||words(byNum.split("\n")[0]).some(w=>nameSim(name,w,true))))return byNum.trim();
+  return (byName||byNum||t).trim();
+}
 async function fromOrder(o,i){
   const it=(o.items||[])[i]||{product:"Unknown product"};
   const O=blankOrder(it.product);O.orderedAs=it.product;
@@ -1332,7 +1346,8 @@ async function fromOrder(o,i){
   O.date=o.date?new Date(o.date+"T12:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):today();
   O.cust={name:o.customer||"",phone:o.phone||a.phone||"",email:o.email||"",addr:[a.address1,a.address2].filter(Boolean).join(", "),
     area:[a.city,a.zip].filter(Boolean).join(" "),emirate:a.province||"",agent:"",showroom:""};
-  O.notes=String(o.note||"").split("\n").filter(l=>!/\bAED\b|total|SIGNED PDF|https?:\/\//i.test(l)).join("\n").replace(/\n{3,}/g,"\n\n").trim();
+  const itemNote=(o.items||[]).length>1?itemSection(o.note,i,it.product):String(o.note||"");
+  O.notes=itemNote.split("\n").filter(l=>!/\bAED\b|total|SIGNED PDF|https?:\/\//i.test(l)).join("\n").replace(/\n{3,}/g,"\n\n").trim();
   if(it.variant&&!/default title/i.test(it.variant))O.spec.unshift(["Variant",it.variant]);
   /* form orders: sizes ONLY from the form's dimension boxes (blank / "Standard" = the product's DWG standard size) */
   const extra=(o.items||[]).filter((x,j)=>j!==i&&!modelFor(x.product)&&!/sofa|bed|chair|table|stool|ottoman/i.test(x.product)).map(x=>x.product);
@@ -1357,7 +1372,7 @@ async function fromOrder(o,i){
   }
   /* orders made WITHOUT the sales form (typed straight into Shopify): read sizes from the title / extra lines / note.
      Orders made WITH the form use ONLY the form's dimension boxes. */
-  if(!fromForm)applyOrderText(O,[it.product].concat(extra).join("\n")+"\n"+(o.note||""));
+  if(!fromForm)applyOrderText(O,[it.product].concat(extra).join("\n")+"\n"+itemNote);
   if(!O.photo||/^data:/.test(O.photo)){const p=await productPhoto(it.product);if(p)O.photo=p;}
   return O;
 }
