@@ -453,6 +453,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     }));
     const out = factoryOnly(req) ? orders.map(stripPrice) : orders;
     let stats = raw; try { stats = await cached('stats', FETCH.stats, false); } catch (e) {}
+    let fab = {}; try { fab = await fabricIndex(false); } catch (e) {}
+    out.forEach(o => { const f = {}; (o.items || []).forEach((it, i) => { const r = fab[o.id + ':' + i]; if (r) f[i] = r; }); o.fabric = f; });
     res.json({ ok: true, orders: out, lead: leadTime(stats), weekly: weeklyOrders(stats) });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
@@ -664,6 +666,74 @@ app.get('/api/formstate', requireAuth, async (req, res) => {
   const id = String(req.query.id || '').replace(/[^a-z0-9_]/gi, ''); if (!id) return res.status(400).json({ ok: false });
   try { const r = await fetch(WORKER_URL + '/state/' + id); res.status(r.status).type('json').send(await r.text()); }
   catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+
+/* ---------- fabric ordered / delivered per order line: dates + attachments (POs, invoices, photos) in Cloudflare KV ---------- */
+let FABRIC = null, FABRIC_AT = 0;
+async function fabricIndex(fresh) {
+  if (!fresh && FABRIC && Date.now() - FABRIC_AT < 20000) return FABRIC;
+  const d = await workerJson('/fabric'); if (d && d.ok) { FABRIC = d.index || {}; FABRIC_AT = Date.now(); }
+  return FABRIC || {};
+}
+let fabricQ = Promise.resolve();   // one write at a time (read-modify-write of the shared index)
+function fabricUpdate(key, fn) {
+  const run = fabricQ.then(async () => {
+    const idx = await fabricIndex(true);
+    const rec = fn(JSON.parse(JSON.stringify(idx[key] || { ordered: '', delivered: '', files: { ordered: [], delivered: [] } })));
+    const out = await workerJson('/fabric', { method: 'POST', body: JSON.stringify({ key, rec }) });
+    if (!out || !out.ok) throw new Error('save failed');
+    FABRIC[key] = out.rec; return out.rec;
+  });
+  fabricQ = run.catch(() => {}); return run;
+}
+const fabKey = (id, line) => String(parseInt(id, 10) || 0) + ':' + Math.max(0, parseInt(line, 10) || 0);
+const fabKind = k => (k === 'delivered' ? 'delivered' : 'ordered');
+app.post('/api/fabric', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'factory')) return res.status(403).json({ ok: false, error: 'factory only' });
+  const b = req.body || {}, kind = fabKind(b.kind), date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : '';
+  try {
+    const rec = await fabricUpdate(fabKey(b.id, b.line), r => { r[kind] = date; return r; });
+    logEvent(req.session.username, 'fabric_' + kind, { id: b.id, line: b.line, date, ip: clientIp(req) });
+    res.json({ ok: true, rec });
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.post('/api/fabric/upload', requireAuth, express.raw({ type: () => true, limit: '20mb' }), async (req, res) => {
+  if (!hasRole(req, 'factory')) return res.status(403).json({ ok: false, error: 'factory only' });
+  const q = req.query, kind = fabKind(q.kind), name = String(q.name || 'file').replace(/[\r\n"]/g, '').slice(0, 120);
+  const buf = req.body; if (!buf || !buf.length) return res.status(400).json({ ok: false, error: 'empty file' });
+  const fid = crypto.randomBytes(12).toString('hex');
+  try {
+    const up = await fetch(WORKER_URL + '/file/' + fid, { method: 'PUT', body: buf,
+      headers: { 'X-Form-Secret': FORM_SECRET, 'Content-Type': req.headers['content-type'] || 'application/octet-stream', 'X-File-Name': name } });
+    if (!up.ok) throw new Error('upload failed ' + up.status);
+    const file = { id: fid, name, type: String(req.headers['content-type'] || ''), size: buf.length, by: req.session.name || req.session.username, at: uaeNow() };
+    const rec = await fabricUpdate(fabKey(q.id, q.line), r => { r.files = r.files || {}; (r.files[kind] = r.files[kind] || []).push(file); return r; });
+    logEvent(req.session.username, 'fabric_upload', { id: q.id, line: q.line, kind, name, ip: clientIp(req) });
+    res.json({ ok: true, rec });
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.post('/api/fabric/remove', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'factory')) return res.status(403).json({ ok: false, error: 'factory only' });
+  const b = req.body || {}, kind = fabKind(b.kind), fid = String(b.fid || '').replace(/[^a-f0-9]/g, '');
+  try {
+    const rec = await fabricUpdate(fabKey(b.id, b.line), r => { r.files = r.files || {}; r.files[kind] = (r.files[kind] || []).filter(f => f.id !== fid); return r; });
+    fetch(WORKER_URL + '/file/' + fid, { method: 'DELETE', headers: { 'X-Form-Secret': FORM_SECRET } }).catch(() => {});
+    logEvent(req.session.username, 'fabric_remove', { id: b.id, line: b.line, kind, ip: clientIp(req) });
+    res.json({ ok: true, rec });
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+// download an attachment (any logged-in user — sales can see them too)
+app.get('/api/file/:fid', requireAuth, async (req, res) => {
+  const fid = String(req.params.fid || '').replace(/[^a-f0-9]/g, '');
+  try {
+    const r = await fetch(WORKER_URL + '/file/' + fid, { headers: { 'X-Form-Secret': FORM_SECRET } });
+    if (!r.ok) return res.status(404).send('Not found');
+    const name = decodeURIComponent(r.headers.get('x-file-name') || 'file');
+    res.set('Content-Type', r.headers.get('content-type') || 'application/octet-stream');
+    res.set('Content-Disposition', 'attachment; filename="' + name.replace(/[^\w .()-]/g, '_') + '"; filename*=UTF-8\'\'' + encodeURIComponent(name));
+    res.send(Buffer.from(await r.arrayBuffer()));
+    logEvent(req.session.username, 'file_download', { fid, name, ip: clientIp(req) });
+  } catch (e) { res.status(502).send('Download failed'); }
 });
 
 app.get('/api/health', (req, res) =>

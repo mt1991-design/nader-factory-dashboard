@@ -51,8 +51,8 @@ function setupBars(){
     sb.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="wr-lbl">Jump to an order…</span><span class="wr-kbd">⌘K</span>';
     sb.onclick=openPal; sp.after(sb);
     if(id!=="screen-admin"){
-      const wb=document.createElement("button"); wb.type="button"; wb.className="wr-ib wr-wsbtn"; wb.title="Workshop mode (W): bigger buttons for the tablet on the floor";
-      wb.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg><span class="wr-lbl">Workshop</span>';
+      const wb=document.createElement("button"); wb.type="button"; wb.className="wr-ib wr-wsbtn"; wb.title="Tablet mode (T): bigger buttons and text for the tablet on the factory floor";
+      wb.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg><span class="wr-lbl">Tablet mode</span>';
       wb.onclick=()=>setWorkshop(!document.body.classList.contains("wr-workshop"));
       bar.querySelector(".roleswitch").before(wb);
     }
@@ -91,7 +91,7 @@ function setWorkshop(on,silent,noSave){
   document.body.classList.toggle("wr-workshop",on);
   document.querySelectorAll(".wr-wsbtn").forEach(b=>b.setAttribute("aria-pressed",String(on)));
   if(!noSave)store.set("workshop",on?"1":"0");
-  if(!silent)toast(on?"Workshop mode on: bigger buttons for the tablet":"Workshop mode off");
+
 }
 
 /* ================= KPI strip (Sales) ================= */
@@ -222,9 +222,7 @@ function factoryExtras(){
 }
 const _renderFactory=renderFactoryProd;
 renderFactoryProd=function(){
-  factoryExtras();
   _renderFactory.apply(this,arguments);
-  renderToday($("wrTodayF"));
   paintGreet();
   if(SPRING){const el=document.querySelector(`.crew[data-ck="${SPRING}"]`);if(el)el.classList.add("wr-spring");SPRING="";}
 };
@@ -266,8 +264,7 @@ renderWorkers=function(){
     r.addEventListener("click",e=>{if(e.target.closest(".del"))return;CREW_PICK=CREW_PICK===n?"":n;renderWorkers();});
     r.querySelector(".del").onclick=e=>{e.stopPropagation();delWorker(i);};
     box.appendChild(r);});
-  const tip=document.createElement("div");tip.className="hint";tip.style.margin="4px 0 0";
-  tip.textContent=CREW_PICK?("Now tap a stage's + to add "+CREW_PICK+"."):"Drag a name onto a stage's + (or tap a name, then the +). Several people can share a stage. Hover a name for their profile.";box.appendChild(tip);
+  if(CREW_PICK){const tip=document.createElement("div");tip.className="hint wr-picktip";tip.textContent="Now tap a stage's + to add "+CREW_PICK+".";box.appendChild(tip);}
 };
 let pcard=null,pTimer=0;
 function showP(el){ const n=el.dataset.wrName||(el.classList.contains("crew")?el.firstChild&&el.firstChild.nodeValue:"")||""; if(!n)return;
@@ -313,7 +310,8 @@ openOrderDetail=function(o){
 
 /* ================= toast / confetti ================= */
 let tEl,tTimer;
-function toast(msg,undo){ if(!tEl)return; clearTimeout(tTimer);
+/* pop-up notifications switched off (Mariam: not needed) — kept as a no-op so callers stay simple */
+function toast(msg,undo){ return; clearTimeout(tTimer);
   tEl.innerHTML=`<span></span>${undo?'<button type="button">Undo</button>':""}`; tEl.firstChild.textContent=msg;
   if(undo)tEl.querySelector("button").onclick=()=>{tEl.classList.remove("on");undo();};
   tEl.classList.add("on"); tTimer=setTimeout(()=>tEl.classList.remove("on"),undo?6000:3000); }
@@ -332,7 +330,7 @@ function commands(){
   if(has("sales"))c.push({t:"New drawing",s:"Spec sheet without a sales form",k:"D",run:()=>newDrawing()});
   ["sales","factory","admin"].forEach((r,i)=>{if(has(r)&&ROLE!==r)c.push({t:"Go to "+ROLE_LABEL[r],k:String(i+1),run:()=>switchView(r)});});
   if(has("sales"))c.push({t:"Production status",s:"Every piece and its stage",run:()=>{if(ROLE!=="sales")switchView("sales");setSalesView("production");}});
-  if(ROLE!=="admin")c.push({t:(document.body.classList.contains("wr-workshop")?"Turn off":"Turn on")+" workshop mode",k:"W",run:()=>setWorkshop(!document.body.classList.contains("wr-workshop"))});
+  if(ROLE!=="admin")c.push({t:(document.body.classList.contains("wr-workshop")?"Turn off":"Turn on")+" tablet mode",s:"Bigger buttons and text",k:"T",run:()=>setWorkshop(!document.body.classList.contains("wr-workshop"))});
   c.push({t:"Refresh orders",run:()=>{if(ROLE==="factory")loadShopify(true).then(renderFactoryProd);else if(ROLE==="admin")loadAdmin();else refreshSales();}});
   c.push({t:"Keyboard shortcuts",k:"?",run:openHelp});
   c.push({t:"Log out",run:logout});
@@ -378,7 +376,7 @@ document.addEventListener("keydown",e=>{
   if(k==="/"){e.preventDefault();const s=curScreen()==="screen-factory"?$("ordersearch"):$("salessearch");if(s&&curScreen()!=="screen-admin")s.focus();}
   else if(k==="?"){e.preventDefault();openHelp();}
   else if(k==="1"||k==="2"||k==="3"){const r=["sales","factory","admin"][+k-1];if(has(r))switchView(r);}
-  else if((k==="w"||k==="W")&&curScreen()!=="screen-admin")setWorkshop(!document.body.classList.contains("wr-workshop"));
+  else if((k==="t"||k==="T")&&curScreen()!=="screen-admin")setWorkshop(!document.body.classList.contains("wr-workshop"));
   else if((k==="n"||k==="N")&&has("sales"))openSalesForm(null,"");
   else if((k==="d"||k==="D")&&has("sales"))newDrawing();
 });
@@ -394,7 +392,7 @@ function mountOverlays(){
       <div class="kr"><span>Search this list</span><span class="wr-kbd">/</span></div>
       <div class="kr"><span>Sales · Factory · Admin</span><span><span class="wr-kbd">1</span> <span class="wr-kbd">2</span> <span class="wr-kbd">3</span></span></div>
       <div class="kr"><span>New order · New drawing</span><span><span class="wr-kbd">N</span> <span class="wr-kbd">D</span></span></div>
-      <div class="kr"><span>Workshop mode</span><span class="wr-kbd">W</span></div>
+      <div class="kr"><span>Tablet mode (bigger buttons)</span><span class="wr-kbd">T</span></div>
       <div class="kr"><span>Close anything</span><span class="wr-kbd">esc</span></div>
       <button type="button" class="close">Close</button></div>
     <div class="wr-toast" role="status" aria-live="polite"></div><div class="wr-pcard" aria-hidden="true"></div><canvas id="wrConfetti"></canvas>`;

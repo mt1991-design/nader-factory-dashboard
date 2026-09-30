@@ -1,4 +1,6 @@
 <title>Nader — Factory Spec Sheet Generator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5E161D">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="/workroom.css">
@@ -125,6 +127,24 @@
   .pbar2{min-width:540px;padding:6px 4px 2px}
   .crewcell{flex-direction:column;align-items:center;gap:4px}
   .crewcell:first-child{align-items:flex-start}.crewcell:last-child{align-items:flex-end}
+  .fab{display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:250px}
+  .fabbox{border:1px solid var(--panelline);border-radius:10px;padding:8px;background:var(--field);display:flex;flex-direction:column;gap:6px;min-width:0}
+  .fabbox.done{border-color:rgba(47,122,58,.45);background:rgba(47,122,58,.06)}
+  .fabh{font:600 10px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+  .fab input.fabdate{width:100%;font:600 12px var(--ui);padding:6px 6px;border-radius:7px}
+  .fabday{font:600 12.5px var(--ui);color:var(--ink2)}.fabday.set{color:#2f7a3a}
+  .fabfile{display:flex;align-items:center;gap:4px;min-width:0}
+  .fabfile a{flex:1;min-width:0;display:flex;gap:4px;font:600 11.5px var(--ui);color:var(--ox);text-decoration:none;padding:4px 6px;border-radius:6px;background:var(--panel);border:1px solid var(--panelline)}
+  .fabfile a span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fabfile a:hover{border-color:var(--ox)}
+  .fabx{flex:0 0 auto;border:0;background:none;color:var(--ink2);font-size:15px;padding:0 3px;cursor:pointer;line-height:1}
+  .fabup{display:inline-flex;justify-content:center;align-items:center;gap:4px;font:700 11.5px var(--ui);color:var(--ox);border:1px dashed var(--ox);border-radius:7px;padding:6px 8px;cursor:pointer;background:transparent}
+  .fabup:hover{background:rgba(94,22,29,.06)}
+  .fabup input{display:none}
+  .fabup.busy{opacity:.6;pointer-events:none}
+  .teamhint{font:500 11.5px var(--ui);letter-spacing:0;text-transform:none;color:var(--ink2)}
+  .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
+  .teamstrip .addrow{max-width:420px}
   .delrow{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--panelline);font:600 12px var(--ui);color:var(--ink2)}
   .delrow.booked{color:#2f7a3a}
   .delrow input[type=date],.delrow select{width:auto;font:600 12.5px var(--ui);padding:6px 8px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink)}
@@ -245,7 +265,7 @@
       </div>
       <div id="salesnote" class="hint" style="margin:-4px 2px 10px;font-size:11px"></div>
       <div id="salesloading" class="hint" style="margin:8px 2px 0">Loading orders from Shopify…</div>
-      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th><th></th></tr></thead><tbody id="salesrows"></tbody></table></div>
+      <div class="otablewrap"><table class="otable" id="salestable"><thead id="saleshead"><tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th><th></th></tr></thead><tbody id="salesrows"></tbody></table></div>
       <p class="hint" style="margin:12px 2px 0">Live from Shopify. Click any order to see the customer, address and full details. Orders with more than one product show a row per item.</p>
     </div>
   </div>
@@ -268,17 +288,17 @@
     <span class="roleswitch" id="roleSwitch-factory"></span>
     <button class="ghost small" onclick="logout()">Log out</button>
   </div>
-  <div class="dashgrid">
-    <div class="card dashmain">
-      <div class="cardhdr"><span>Open orders · production</span><input type="text" id="ordersearch" placeholder="Search order # / product / customer" oninput="renderFactoryProd()"></div>
-      <div class="otablewrap"><table class="otable"><thead><tr><th>Order</th><th>Product</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
-      <div id="dashempty" class="dashempty">No open orders in production yet.</div>
-      <div id="factoryhidden" class="muted" style="font-size:12px;padding:8px 12px"></div>
-    </div>
-    <div class="card dashside">
-      <div class="cardhdr"><span>Factory team</span></div>
+  <div class="dashgrid" style="grid-template-columns:1fr">
+    <div class="card dashside teamstrip">
+      <div class="cardhdr"><span>Factory team</span><span class="teamhint">Drag a name onto a stage's + · or tap a name, then the +</span></div>
       <div id="workerlist" class="workerlist"></div>
       <div class="addrow"><input type="text" id="newworker" placeholder="Add a name" onkeydown="if(event.key=='Enter')addWorker()"><button class="ghost small" onclick="addWorker()">Add</button></div>
+    </div>
+    <div class="card dashmain">
+      <div class="cardhdr"><span>Open orders · production</span><input type="text" id="ordersearch" placeholder="Search order # / product / customer" oninput="renderFactoryProd()"></div>
+      <div class="otablewrap"><table class="otable prodtable"><thead><tr><th>Order</th><th>Product</th><th>Fabric</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
+      <div id="dashempty" class="dashempty">No open orders in production yet.</div>
+      <div id="factoryhidden" class="muted" style="font-size:12px;padding:8px 12px"></div>
     </div>
     <div class="card lbcard">
       <div class="cardhdr"><span>Leaderboard · pieces finished per stage</span>
@@ -4938,6 +4958,56 @@ function saveDelivery(id,line,clear){
       rerenderProd(); })
     .catch(()=>alert("Network error saving the delivery booking."));
 }
+/* ---- fabric ordered / delivered: date + attachments (factory uploads POs, invoices, photos; sales can view + download) ---- */
+function fabRec(o,line){return ((o.fabric||{})[line])||{ordered:"",delivered:"",files:{ordered:[],delivered:[]}};}
+function fmtDay(d){if(!d)return"";const x=new Date(d+"T12:00:00+04:00");return x.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",timeZone:"Asia/Dubai"});}
+function fileIcon(f){return /^image\//.test(f.type||"")?"🖼":(/pdf/.test(f.type||"")||/\.pdf$/i.test(f.name)?"📄":"📎");}
+function fabricCell(o,line,editable){
+  const r=fabRec(o,line), oid=esc(String(o.id));
+  const box=(kind,label)=>{
+    const d=r[kind]||"", files=((r.files||{})[kind])||[];
+    const list=files.map(f=>'<div class="fabfile"><a href="/api/file/'+esc(f.id)+'" download title="Download '+esc(f.name)+(f.by?' · added by '+esc(f.by):'')+'">'+fileIcon(f)+' <span>'+esc(f.name)+'</span></a>'
+      +(editable?'<button type="button" class="fabx" title="Remove '+esc(f.name)+'" onclick="removeFabricFile(\''+oid+'\','+line+',\''+kind+'\',\''+esc(f.id)+'\')">×</button>':'')+'</div>').join("");
+    const up=editable?'<label class="fabup" id="fu-'+oid+'-'+line+'-'+kind+'">⬆ Upload<input type="file" accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx" multiple onchange="uploadFabric(this,\''+oid+'\','+line+',\''+kind+'\')"></label>':'';
+    const date=editable?'<input type="date" class="fabdate" value="'+d+'" aria-label="'+label+' date" onchange="setFabric(\''+oid+'\','+line+',\''+kind+'\',this.value)">'
+      :'<div class="fabday'+(d?" set":"")+'">'+(d?fmtDay(d):"Not yet")+'</div>';
+    return '<div class="fabbox'+(d?" done":"")+'"><div class="fabh">'+label+'</div>'+date+list+up+'</div>';
+  };
+  return '<div class="fab" onclick="event.stopPropagation()">'+box("ordered","Fabric ordered")+box("delivered","Fabric delivered")+'</div>';
+}
+function applyFabric(id,line,rec){const o=SHOPIFY.find(x=>String(x.id)===String(id));if(o&&rec){o.fabric=o.fabric||{};o.fabric[line]=rec;}rerenderProd();}
+function setFabric(id,line,kind,date){
+  fetch("/api/fabric",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,kind,date})})
+    .then(r=>r.json()).then(d=>{if(!d||!d.ok){alert("Couldn't save the date — factory login required.");return;}applyFabric(id,line,d.rec);})
+    .catch(()=>alert("Network error saving the date."));
+}
+/* phone photos are shrunk before upload (long side 2200px, JPEG) so they're quick on mobile data */
+function shrinkImage(file){
+  return new Promise(res=>{ if(!/^image\/(jpe?g|png|webp|heic|heif)$/i.test(file.type)||file.size<900*1024){res(file);return;}
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{const k=Math.min(1,2200/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+      c.toBlob(b=>{if(!b){res(file);return;}res(new File([b],file.name.replace(/\.\w+$/,"")+".jpg",{type:"image/jpeg"}));},"image/jpeg",.85);};
+    img.onerror=()=>{URL.revokeObjectURL(url);res(file);};img.src=url;});
+}
+async function uploadFabric(inp,id,line,kind){
+  const files=[...(inp.files||[])]; if(!files.length)return;
+  const lab=$("fu-"+id+"-"+line+"-"+kind); if(lab){lab.classList.add("busy");lab.firstChild.nodeValue="Uploading…";}
+  let rec=null;
+  for(const f0 of files){
+    if(f0.size>20*1024*1024){alert(f0.name+" is too big (max 20 MB).");continue;}
+    const f=await shrinkImage(f0);
+    try{const r=await fetch("/api/fabric/upload?"+new URLSearchParams({id,line,kind,name:f.name}),{method:"POST",credentials:"same-origin",headers:{"Content-Type":f.type||"application/octet-stream"},body:f});
+      const d=await r.json();if(d&&d.ok)rec=d.rec;else alert("Couldn't upload "+f.name+".");}
+    catch(e){alert("Network error uploading "+f0.name+".");}
+  }
+  inp.value=""; if(rec)applyFabric(id,line,rec); else if(lab){lab.classList.remove("busy");lab.firstChild.nodeValue="⬆ Upload";}
+}
+function removeFabricFile(id,line,kind,fid){
+  if(!confirm("Remove this attachment?"))return;
+  fetch("/api/fabric/remove",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,kind,fid})})
+    .then(r=>r.json()).then(d=>{if(d&&d.ok)applyFabric(id,line,d.rec);else alert("Couldn't remove it.");}).catch(()=>alert("Network error."));
+}
 function prodBar(o,line,cur,editable){
   const n=PROD_STAGES.length;
   let row="";
@@ -4947,7 +5017,8 @@ function prodBar(o,line,cur,editable){
     row+='<div class="'+dcls+'"'+click+' title="'+PROD_STAGES[i]+'"></div>';
     if(i<n-1) row+='<div class="pconn'+(i<cur?" done":"")+'"></div>';
   }
-  const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur?" on":"")+'">'+nm+'</span>').join("");
+  const SHORT=["Draw","Carp","Foam","Fab","Pack","Deliver"];   /* phones show the short names */
+  const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur?" on":"")+'" data-s="'+SHORT[i]+'"><span class="plf">'+nm+'</span></span>').join("");
   return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div>'+crewRow(o,line,editable)+'</div>';
 }
 function renderProduction(q){
@@ -4966,7 +5037,7 @@ function renderProduction(q){
       const spec=(cur>=1||lineDrawn(o,i))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
       const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
       // every line item gets its OWN progress bar
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td colspan="4">'+prodBar(o,i,cur,editable)+'</td></tr>';
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,editable)+'</td><td colspan="3">'+prodBar(o,i,cur,editable)+'</td></tr>';
     });
   });
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No open orders in production.</td></tr>';
@@ -5035,6 +5106,9 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
   if($("tab-production"))$("tab-production").textContent="Production status"+(nProd?" ("+nProd+")":"");
+  const th=$("saleshead"), tbl=$("salestable");
+  if(th) th.innerHTML = salesView==="production" ? '<tr><th>Order</th><th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>' : '<tr><th>Order</th><th>Product</th><th>Customer</th><th>Ordered</th><th>Status</th><th></th></tr>';
+  if(tbl) tbl.classList.toggle("prodtable", salesView==="production");
   if(salesView==="production"){ renderProduction(q); return; }
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
@@ -5130,7 +5204,7 @@ function renderFactoryProd(){
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
       const oq=esc(o.order).replace(/'/g,"");
       const specBtn='<button class="specbtn done" style="margin-top:6px" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')" title="Open the spec sheet — check, edit and print / save PDF">📄 Spec sheet</button>';
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,true)+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
     });
   });
   tb.innerHTML=shown?html:"";

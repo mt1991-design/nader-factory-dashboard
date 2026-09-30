@@ -262,3 +262,62 @@ body.wr-workshop .wrs{--w-muted:#5E4E4B}
 .wr-search{flex:0 1 auto}
 .wr-pal input[type=text]{border:0;border-bottom:1px solid var(--w-line);border-radius:0;background:transparent;box-shadow:none}
 body.wr-workshop .wr-adv{flex-basis:100%}
+
+/* ---- factory team as a strip above the orders ---- */
+.teamstrip .workerlist{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px}
+.teamstrip .wr-person{flex:0 0 auto;min-width:180px}
+.teamstrip .cardhdr{flex-wrap:wrap}
+.wr-picktip{flex-basis:100%;margin:0!important;color:var(--w-gold-ink)!important;font-weight:600}
+
+/* ================= phones ================= */
+@media (max-width:760px){
+  .wrs .topbar.wr-bar{padding:8px 12px calc(8px) 12px;gap:8px}
+  .wr-bar .roleswitch{order:10;flex:1 1 100%;display:flex}
+  .wr-bar .rsbtn{flex:1}
+  .wr-bar .worklogo{height:30px}
+  .wr-new{padding:0 10px}
+  .wrs .dashgrid{padding:12px!important;gap:12px}
+  .wr-greet{padding:14px 14px 0}
+  .wr-kpiwrap{padding:10px 12px 0}
+  .wrs .card{padding:14px 12px}
+  .wrs .cardhdr{flex-wrap:wrap}
+  .wrs .cardhdr input,.wrs .cardhdr>div{width:100%!important;flex:1 1 100%}
+  .wrs .roletabs{max-width:none!important}
+  .wrs .roletab{padding:9px 6px;font-size:12.5px}
+  /* inputs at 16px so iPhone doesn't zoom in when tapping them */
+  .wrs input,.wrs select,.wr-pal input{font-size:16px!important}
+  /* tables become stacked cards — nothing scrolls sideways */
+  .wrs .otablewrap{overflow:visible}
+  .wrs .otable thead{display:none}
+  .wrs .otable,.wrs .otable tbody,.wrs .otable tr,.wrs .otable td{display:block;width:100%}
+  .wrs .otable tr{padding:12px 4px 14px;border-bottom:1px solid var(--w-line)}
+  .wrs .otable td{border:0;padding:4px 6px}
+  .wrs .otable td:empty{display:none}
+  .wrs .otable td[style*="text-align:right"]{text-align:left!important;white-space:normal!important}
+  .wrs .otable tbody tr.wr-row td:first-child{box-shadow:none}
+  .wrs .otable tbody tr.wr-row{box-shadow:inset 3px 0 0 var(--stripe,transparent)}
+  .wrs .pbar2{min-width:0!important;padding:8px 0 2px}
+  .wrs .plabel{font-size:9px;line-height:1.15}
+  .wrs .crew{max-width:100%;font-size:10px;padding:0 6px}
+  .wrs .fab{min-width:0}
+  .wrs .delrow{justify-content:flex-start}
+  .wrs .delrow>span{flex-basis:100%}
+  #screen-factory .teamstrip .workerlist{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+  #screen-factory .teamstrip .wr-person{scroll-snap-align:start}
+  .wrs .plabels{gap:2px}
+  .wrs .plabel{min-width:0}
+  .wrs .plabel .plf{display:none}
+  .wrs .plabel::after{content:attr(data-s);font-size:10px}
+  #screen-factory .fab,#screen-sales .fab{grid-template-columns:1fr}
+  .wrs .fabbox{display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px 8px}
+  .wrs .fabbox .fabh,.wrs .fabbox .fabfile{grid-column:1 / -1}
+  .wrs .fabbox .fabday{grid-column:1 / -1}
+  .wrs .fab input.fabdate{min-width:0;padding:6px}
+  .wrs .fabup{padding:8px 10px}
+  .teamstrip .wr-person{min-width:150px}
+  .teamhint{display:none}
+  .wr-podium{height:130px}
+  .aerow{grid-template-columns:1fr!important;gap:2px!important}
+  #orderdetail .odcard{width:100vw}
+  .logincard{margin-top:8vh!important}
+}
