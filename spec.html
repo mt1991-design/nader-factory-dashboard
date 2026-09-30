@@ -1033,8 +1033,9 @@ const RivoliDraw=WarpDraw.make({
     return o;
   },
   dimsFront(V,c){
-    const {X,Y,G,K,F,callout}=c, xL=X(0), xR=X(V.W);
-    let o=K.chainV([Y(0),Y(V.H)],xL-G,xL,[F(V.H)]);
+    const {X,Y,G,K,F,callout,hChain}=c, xL=X(0), xR=X(V.W);
+    let o0="";if(RI_AL(V)>0)o0=hChain([0,V.A-V.CV],[F(V.A-V.CV)],Y(V.H)-G*.8,Y(V.H));      // arm top 11 (the other 5 is the curve), as the DWG
+    let o=o0+K.chainV([Y(0),Y(V.H)],xL-G,xL,[F(V.H)]);
     o+=K.chainV([Y(0),Y(V.LH),Y(V.LH+V.BH),Y(V.SH)],xR+G,xR,[F(V.LH),F(V.BH),F(V.SH-V.LH-V.BH)]);
     o+=K.chainV([Y(0),Y(V.SH)],xR+2*G,xR,[F(V.SH)]);
     return o;
@@ -1164,7 +1165,7 @@ const DouglasDraw=WarpDraw.make({
 /* ---------------- LUNA BED (from "Luna Bed.dwg") — super king 200 × 200 ----------------
    Top: 18 | 201 | 18 = 237; headboard 15 with curved wings, frame 219 in two 109.5 halves, foot 18.
    Front: plinth base 30, headboard 106.8 in 10 channels of 23.7 (the two end ones curve). */
-const LUNA_DEFAULT={MW:201,ML:201,FR:18,FT:18,HB:15,MS:8,H:106.8,BH:30,LH:0,n:10,side:"N"};
+const LUNA_DEFAULT={MW:201,ML:201,FR:18,FT:18,HB:15,MS:8,H:107,BH:30,LH:0,n:10,WC:18,side:"N"};
 /* channels: all equal where the width allows; otherwise whole-cm middles and the two curved ends share the rest */
 const LU_BAYS=V=>{const n=Math.max(3,Math.round(V.n)||10);if(Math.abs(V.W-237)<1e-6&&n===10)return Array(10).fill(23.7);
   if(V.W%n===0)return Array(n).fill(V.W/n);const m=Math.round(V.W/n),e=(V.W-m*(n-2))/2;return [e,...Array(n-2).fill(m),e];};
@@ -1185,6 +1186,10 @@ const LunaDraw=WarpDraw.make({
     const stops=[0];let at=0;w.forEach(x=>{at+=x;stops.push(at);});
     let o=hChain(stops,w.map(F),Y(V.H)-G,Y(V.H));
     o+=K.chainV([Y(0),Y(V.BH),Y(V.H)],xL-G,xL,[F(V.BH),F(V.H-V.BH)]);
+    /* the curved end panels: narrowest width (middle of the curve), as the DWG — and the word CURVE on the left one */
+    const e=w[w.length-1], hm=V.BH+(V.H-V.BH)*.5, xa=X(V.W-e), xb=X(V.W-e+V.WC), cx=X(w[0]/2), cy=Y(V.H)+18;
+    o+=`<line x1="${xa}" y1="${Y(hm)}" x2="${xb}" y2="${Y(hm)}" stroke="#9a7b45" stroke-width=".9"/>`+K.tick(xa,Y(hm))+K.tick(xb,Y(hm))+K.lab((xa+xb)/2,Y(hm)-15,F(V.WC));
+    o+=`<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" font-size="14" font-weight="700" fill="#1c1a17" transform="rotate(-8 ${cx.toFixed(1)} ${cy.toFixed(1)})">CURVE</text>`;
     o+=K.chainV([Y(0),Y(V.H)],xL-2*G,xL,[F(V.H)]);
     return o;
   },
@@ -1375,7 +1380,7 @@ const NAMBA_FIELDS=[["Top view",[["SHAPE","Shape","as you face it","shape"],["W"
   ["Front elevation",[["H","Back cushion height","top of the back cushions"],["AH","Arm height"],["SH","Seat height"],["LH","Feet height"]]]];
 const BED_TOP=[["MW","Mattress space width","mattress + 1 cm"],["ML","Mattress space length","mattress + 1 cm"],["FR","Side frame width","each side"],["FT","Foot frame width"],["HB","Headboard depth"],["MS","Mattress depth","how deep it sits in the frame"]];
 const DOUG_FIELDS=[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","from the floor, incl. legs"],["LH","Leg height"]]]];
-const LUNA_FIELDS=[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","plinth base, from the floor"],["n","Headboard channels","incl. the two curved ends"]]]];
+const LUNA_FIELDS=[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","plinth base, from the floor"],["n","Headboard channels","incl. the two curved ends"],["WC","Curved end — narrowest width","as the DWG (18)"]]]];
 const EST="estimated from photo";
 const SAGA_FIELDS=[["Seat",[["SW","Seat width","store size"],["SDP","Seat depth","store size"],["SC","Cushion thickness","crowned · "+EST],["SB","Seat base thickness",EST],["ZS","Back of back rest → back of seat",EST]]],
   ["Back rest (padded roll)",[["RW","Width","end to end · "+EST],["BRH","Height",EST],["BRT","Thickness","front to back · "+EST],["WRAP","How far it comes round","back of the roll → front of its ends · "+EST]]],
@@ -1442,7 +1447,7 @@ const MODELS={
     autoSpec(V){return [["Size",`${F2(V.W)} × ${F2(V.D)} cm`,1],["Configuration","Straight sofa"],
         ["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],
         ["Seat Cushions",RI_SEATS(V).map(F2).join(" · ")+" cm"],["Arm Width",armText(V,`${F2(V.A)} cm (${F2(V.A-V.CV)} + ${F2(V.CV)} cm curve)`)]];}},
-  douglas:{pending:true,bed:true,ver:"dwg1",match:/\b(douglas|duglas|douglass|dougles)\b/i,label:"Douglas Bed",name:"Douglas Bed",defaults:DOUG_DEFAULT,draw:DouglasDraw,photoSide:"N",photo:PHOTO_DOUG,
+  douglas:{bed:true,ver:"dwg1",match:/\b(douglas|duglas|douglass|dougles)\b/i,label:"Douglas Bed",name:"Douglas Bed",defaults:DOUG_DEFAULT,draw:DouglasDraw,photoSide:"N",photo:PHOTO_DOUG,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec:bedSpec},
   luna:{pending:true,bed:true,ver:"dwg1",match:/\b(luna|lunna|luna's)\b/i,label:"Luna Bed",name:"Luna Bed",defaults:LUNA_DEFAULT,draw:LunaDraw,photoSide:"N",photo:PHOTO_LUNA,
     sides:["N"],seats:false,fields:LUNA_FIELDS,

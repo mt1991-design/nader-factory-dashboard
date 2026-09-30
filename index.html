@@ -4725,7 +4725,10 @@ function isShipped(o){return o.state==="shipped";}
 const AUTO_DRAW=[/\bkober?\b/i,/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,/\b(thistle|thistel|thristle|thrstle|thisle)\b/i,/\b(ueno|ueeno)\b/i,/\b(yokohama|yokohoma|yakohama|yokohma|yokahama)\b/i,/\b(namba|nambas|nanba)\b/i,/\b(asakusa|asakosa|asakousa|asaksa)\b/i,/\b(fukuoka|fukoka|fukoku|fukuoko|fukouka)\b/i];
 const NOT_SOFA=/\b(arm\s*chair|armchair|chair|bed|headboard|table|stool|barstool|bench|ottoman|pouf|cushion|pillow)s?\b/i;
 function drawBase(t){return String(t||"").split(/\s+size\b|\s[-–|]\s|[:|(]|\s\d{2,}/i)[0];}
-function autoDrawable(title){const t=drawBase(title);return AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t);}
+/* bed templates: only for BED lines (never bedside tables / daybeds / sofa beds) */
+const AUTO_BED=[/\b(douglas|duglas|douglass|dougles)\b/i];
+const IS_BED=t=>/\b(bed|headboard)s?\b/i.test(t)&&!/\b(bedside|side\s*table|day\s*-?bed|sofa\s*bed|bed\s*side)\b/i.test(t);
+function autoDrawable(title){const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")));}
 function isFurnitureLine(title){return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
 function lineDrawn(o,i){const it=o.items[i]||{};if(autoDrawable(it.product))return true;const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="complete");}
