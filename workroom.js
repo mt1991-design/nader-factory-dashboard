@@ -33,7 +33,7 @@ function openLines(factoryOnly){
   SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").forEach(o=>o.items.forEach((it,i)=>{
     if(!isFurnitureLine(it.product))return;
     const L=lineInfo(o,i);
-    if(factoryOnly&&!(lineDrawn(o,i)||L.cur>=1))return;
+    if(factoryOnly&&!lineDrawn(o,i))return;
     out.push(L);
   }));
   return out;
