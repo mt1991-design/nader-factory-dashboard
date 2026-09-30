@@ -311,15 +311,25 @@ function extractPdf(note) {
   const m = String(note).match(/https?:\/\/\S+\/pdf\/[a-zA-Z0-9]+/);
   return m ? m[0] : '';
 }
-// Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing). Shared + persistent.
-const PROD_STAGE_COUNT = 5;
+// Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing, 5=Delivery booked). Shared + persistent.
+const PROD_STAGE_COUNT = 6;
 const clampStage = n => Math.max(0, Math.min(PROD_STAGE_COUNT - 1, parseInt(n, 10) || 0));
-// Who did each production stage of each line: tags `crew:<line>:<stage>:<Name>@<yyyy-mm-dd>` (stage 1 Carpentry … 4 Packing)
+// Who worked on each production stage of each line: tags `crew:<line>:<stage>:<Name>@<yyyy-mm-dd>` (stage 0 Drawing … 4 Packing).
+// Several people can share a stage (one tag each) → crew[line][stage] = [{n,d}, …]
 function crewFromTags(tags) {
   const out = {};
   String(tags || '').split(',').map(t => t.trim()).forEach(t => {
     const m = t.match(/^crew:(\d+):(\d):(.+?)@(\d{4}-\d{2}-\d{2})$/);
-    if (m) { (out[m[1]] = out[m[1]] || {})[m[2]] = { n: m[3], d: m[4] }; }
+    if (m) { const L = out[m[1]] = out[m[1]] || {}; (L[m[2]] = L[m[2]] || []).push({ n: m[3], d: m[4] }); }
+  });
+  return out;
+}
+// Delivery booked with the customer, per line: tag `delivery:<line>:<yyyy-mm-ddThh:mm>` (UAE time)
+function deliveryFromTags(tags) {
+  const out = {};
+  String(tags || '').split(',').map(t => t.trim()).forEach(t => {
+    const m = t.match(/^delivery:(\d+):(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/);
+    if (m) out[m[1]] = m[2];
   });
   return out;
 }
@@ -436,6 +446,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       crew: crewFromTags(o.tags),
       prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length),
       prod_dates: stageDatesFromTags(o.tags),
+      delivery: deliveryFromTags(o.tags),
       prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
       items: mapLineItems(o.line_items)
@@ -525,21 +536,49 @@ app.post('/api/crew', requireAuth, async (req, res) => {
   if (!hasRole(req, 'factory')) return res.status(403).json({ ok: false, error: 'factory only' });
   const b = req.body || {}, id = b.id, line = Math.max(0, parseInt(b.line, 10) || 0), stage = parseInt(b.stage, 10);
   const name = String(b.name || '').replace(/[,@:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 24);
-  if (!id || !(stage >= 1 && stage <= 4)) return res.status(400).json({ ok: false, error: 'bad request' });
+  const op = b.op === 'remove' ? 'remove' : 'add';   // add one person to the stage, or remove one (no name = clear the stage)
+  if (!id || !(stage >= 0 && stage <= 4)) return res.status(400).json({ ok: false, error: 'bad request' });
   try {
     const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
     if (!r.ok) throw new Error('Shopify ' + r.status);
     const cur = ((await r.json()).order || {}).tags || '';
-    const tags = cur.split(',').map(t => t.trim()).filter(t => t && !t.startsWith('crew:' + line + ':' + stage + ':'));
-    const day = new Date().toISOString().slice(0, 10);
-    if (name) tags.push('crew:' + line + ':' + stage + ':' + name + '@' + day);
+    const pre = 'crew:' + line + ':' + stage + ':';
+    const tags = cur.split(',').map(t => t.trim()).filter(t => t && !(t.startsWith(pre) && (!name || t.slice(pre.length).split('@')[0] === name)));
+    const day = uaeNow().slice(0, 10);
+    if (name && op === 'add') tags.push(pre + name + '@' + day);
     const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
       method: 'PUT', headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
       body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });
     if (!up.ok) throw new Error('Shopify PUT ' + up.status);
     if (CACHE.orders) delete CACHE.orders;
-    logEvent(req.session.username, 'crew', { id, line, stage, name, ip: clientIp(req) });
-    res.json({ ok: true, line, stage, name, date: day });
+    logEvent(req.session.username, 'crew', { id, line, stage, name, op, ip: clientIp(req) });
+    res.json({ ok: true, line, stage, name, op, date: day });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Book (or clear) the delivery date + time agreed with the customer for one line. Booking moves the line to stage 5.
+app.post('/api/delivery', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'factory') && !hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
+  const b = req.body || {}, id = b.id, line = Math.max(0, parseInt(b.line, 10) || 0);
+  const when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(b.when || '')) ? b.when : '';
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try {
+    const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    if (!r.ok) throw new Error('Shopify ' + r.status);
+    const cur = ((await r.json()).order || {}).tags || '';
+    const pdStage = t => { const m = t.match(/^pd:(\d+):(\d)@/); return m && +m[1] === line ? +m[2] : null; };
+    let tags = cur.split(',').map(t => t.trim()).filter(t => t && !t.startsWith('delivery:' + line + ':'));
+    const s = when ? 5 : 4;
+    tags = tags.filter(t => !new RegExp('^prodstage:' + line + ':').test(t) && !/^prodstage:\d+$/.test(t) && !(pdStage(t) != null && pdStage(t) > s));
+    tags.push('prodstage:' + line + ':' + s);
+    if (when) { tags.push('delivery:' + line + ':' + when); if (!tags.some(t => pdStage(t) === 5)) tags.push('pd:' + line + ':5@' + uaeNow()); }
+    const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
+      method: 'PUT', headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });
+    if (!up.ok) throw new Error('Shopify PUT ' + up.status);
+    if (CACHE.orders) delete CACHE.orders;
+    logEvent(req.session.username, 'delivery', { id, line, when, ip: clientIp(req) });
+    res.json({ ok: true, line, when, stage: s });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

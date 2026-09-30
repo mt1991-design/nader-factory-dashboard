@@ -122,7 +122,13 @@
   .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
   .fchip{font:600 11.5px var(--ui);padding:6px 11px;border:1px solid var(--fieldline);border-radius:20px;background:var(--field);color:var(--ink2);cursor:pointer}
   .fchip.on{background:var(--ox);color:#fff;border-color:var(--ox)}
-  .pbar2{min-width:380px;padding:6px 4px 2px}
+  .pbar2{min-width:540px;padding:6px 4px 2px}
+  .crewcell{flex-direction:column;align-items:center;gap:4px}
+  .crewcell:first-child{align-items:flex-start}.crewcell:last-child{align-items:flex-end}
+  .delrow{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--panelline);font:600 12px var(--ui);color:var(--ink2)}
+  .delrow.booked{color:#2f7a3a}
+  .delrow input[type=date],.delrow select{width:auto;font:600 12.5px var(--ui);padding:6px 8px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink)}
+  .delrow .delclear{flex:0 0 auto;padding:5px 10px;font:600 11.5px var(--ui);background:transparent;color:var(--ink2);border:1px solid var(--fieldline);border-radius:8px}
   .prow{display:flex;align-items:center}
   .pdot{width:15px;height:15px;border-radius:50%;background:var(--field);border:2px solid var(--panelline);flex:0 0 auto}
   .pdot.done{background:#2f7a3a;border-color:#2f7a3a}
@@ -4800,7 +4806,7 @@ function matchStatus(o){ if(salesStatuses.size===0) return o.isDraft?true:(o.sta
 function salesRowClick(tr){const i=+tr.getAttribute("data-oi");const o=SHOPIFY[i];if(o)openOrderDetail(o);}
 /* ---- production timeline (factory edits, sales views) ---- */
 let FACTORY_MODE=false;
-const PROD_STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing"];
+const PROD_STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing","Delivery booked"];
 function applyRoleMode(){
   const dt=$("tab-drafts"); if(dt) dt.style.display=FACTORY_MODE?"none":"";
   const nb=document.querySelector('#screen-sales .topbar a'); if(nb) nb.style.display=FACTORY_MODE?"none":"";
@@ -4872,27 +4878,65 @@ function setProdStageServer(id,line,idx){
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } if(ROLE==="factory"){ renderFactoryProd(); } else { renderSalesDash(); } } else { alert("Couldn't update — factory login required."); } })
     .catch(function(){ alert("Network error updating production."); });
 }
-/* ---- crew: who did Carpentry / Foaming / Fabrication / Packing on each line (drag a name from the Factory team) ---- */
-const CREW_ROLES={1:"Carpenter",2:"Foamer",3:"Fabricator",4:"Packer"};
+/* ---- crew: who worked on each stage of each line — several people per stage (drag names from the Factory team) ---- */
+const CREW_ROLES={0:"Drawer",1:"Carpenter",2:"Foamer",3:"Fabricator",4:"Packer"};
 let CREW_PICK="";   /* touch: tap a name, then tap a stage */
+function crewList(o,line,st){const c=((o.crew||{})[line]||{})[st];return Array.isArray(c)?c:(c?[c]:[]);}
 function crewRow(o,line,editable){
-  const c=((o.crew||{})[line])||{};
-  let cells='<div class="crewcell"></div>';                                  /* Drawing: done by sales / automatically */
-  for(let st=1;st<=4;st++){const a=c[st],oid=esc(String(o.id));
+  let cells="";const oid=esc(String(o.id));
+  for(let st=0;st<=4;st++){
     const drop=editable?(' ondragover="crewOver(event,this)" ondragleave="this.classList.remove(\'over\')" ondrop="crewDrop(event,\''+oid+'\','+line+','+st+',this)" onclick="event.stopPropagation();crewTap(\''+oid+'\','+line+','+st+')"'):'';
-    cells+='<div class="crewcell">'+(a
-      ?'<span class="crew'+(editable?' edit':'')+'" title="'+PROD_STAGES[st]+' — '+esc(a.n)+' · '+esc(a.d)+'"'+drop+'>'+esc(a.n)+(editable?'<span class="x" title="Remove" onclick="event.stopPropagation();setCrew(\''+oid+'\','+line+','+st+',\'\')">×</span>':'')+'</span>'
-      :(editable?'<span class="crew empty edit" title="Drop a name for '+PROD_STAGES[st]+'"'+drop+'>+</span>':''))+'</div>';}
-  return '<div class="crewrow">'+cells+'</div>';
+    const chips=crewList(o,line,st).map(a=>'<span class="crew'+(editable?' edit':'')+'" data-ck="'+oid+':'+line+':'+st+':'+esc(a.n)+'" data-wr-name="'+esc(a.n)+'" title="'+PROD_STAGES[st]+' — '+esc(a.n)+' · '+esc(a.d)+'"'+drop+'>'+esc(a.n)+(editable?'<span class="x" title="Remove '+esc(a.n)+'" onclick="event.stopPropagation();removeCrew(\''+oid+'\','+line+','+st+',\''+esc(a.n).replace(/'/g,"")+'\')">×</span>':'')+'</span>').join("");
+    cells+='<div class="crewcell">'+chips+(editable?'<span class="crew empty edit" title="Drop a name for '+PROD_STAGES[st]+' (more than one is fine)"'+drop+'>+</span>':'')+'</div>';
+  }
+  cells+='<div class="crewcell"></div>';   /* Delivery booked: date + time below */
+  return '<div class="crewrow">'+cells+'</div>'+deliveryRow(o,line,editable);
 }
 function crewOver(ev,el){ev.preventDefault();el.classList.add('over');}
 function crewDrop(ev,id,line,st,el){ev.preventDefault();ev.stopPropagation();el.classList.remove('over');const n=ev.dataTransfer.getData('text/plain');if(n)setCrew(id,line,st,n);}
 function crewTap(id,line,st){if(CREW_PICK){const n=CREW_PICK;CREW_PICK="";renderWorkers();setCrew(id,line,st,n);}}
-function setCrew(id,line,st,name){
-  const o=SHOPIFY.find(x=>String(x.id)===String(id));
-  if(o){o.crew=o.crew||{};const c=o.crew[line]=o.crew[line]||{};if(name)c[st]={n:name,d:new Date().toISOString().slice(0,10)};else delete c[st];renderFactoryProd();}   /* show it straight away */
-  fetch("/api/crew",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,stage:st,name})})
+function rerenderProd(){ if(ROLE==="factory")renderFactoryProd(); else renderSalesDash(); }
+function crewPost(id,line,st,name,op){
+  fetch("/api/crew",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,stage:st,name,op})})
     .then(r=>r.json()).then(d=>{if(!d||!d.ok)alert("Couldn't save — factory login required.");}).catch(()=>alert("Network error saving the name."));
+}
+/* add one person to a stage (no duplicates) */
+function setCrew(id,line,st,name){
+  const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(!name)return;
+  if(o){o.crew=o.crew||{};const c=o.crew[line]=o.crew[line]||{};const L=c[st]=crewList(o,line,st);if(L.some(a=>a.n===name))return;L.push({n:name,d:new Date(Date.now()+4*3600e3).toISOString().slice(0,10)});rerenderProd();}
+  crewPost(id,line,st,name,"add");
+}
+function removeCrew(id,line,st,name){
+  const o=SHOPIFY.find(x=>String(x.id)===String(id));
+  if(o&&o.crew&&o.crew[line]){o.crew[line][st]=crewList(o,line,st).filter(a=>a.n!==name);rerenderProd();}
+  crewPost(id,line,st,name,"remove");
+}
+/* ---- delivery booked with the customer: calendar + time (shown from Packing onwards) ---- */
+const DELIVERY_TIMES=(function(){const t=[];for(let h=8;h<=21;h++){t.push((h<10?"0":"")+h+":00");if(h<21)t.push((h<10?"0":"")+h+":30");}return t;})();
+function fmtDelivery(w){const d=new Date(w+":00+04:00");return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"Asia/Dubai"})+", "+w.slice(11,16);}
+function deliveryRow(o,line,editable){
+  const w=((o.delivery||{})[line])||"", cur=(o.prod_stages||[])[line]||0;
+  if(!w&&cur<4)return "";
+  const oid=esc(String(o.id));
+  if(!editable) return '<div class="delrow'+(w?" booked":"")+'">🚚 '+(w?'Delivery booked · <b>'+esc(fmtDelivery(w))+'</b>':'Delivery not booked yet')+'</div>';
+  const date=w.slice(0,10), time=w.slice(11,16);
+  return '<div class="delrow edit'+(w?" booked":"")+'" onclick="event.stopPropagation()"><span>🚚 Delivery booked with customer</span>'
+    +'<input type="date" id="dd-'+oid+'-'+line+'" value="'+date+'" onchange="saveDelivery(\''+oid+'\','+line+')" aria-label="Delivery date">'
+    +'<select id="dt-'+oid+'-'+line+'" onchange="saveDelivery(\''+oid+'\','+line+')" aria-label="Delivery time"><option value="">Time…</option>'+DELIVERY_TIMES.map(t=>'<option'+(t===time?" selected":"")+'>'+t+'</option>').join("")+'</select>'
+    +(w?'<button type="button" class="delclear" onclick="saveDelivery(\''+oid+'\','+line+',true)" title="Clear the delivery booking">Clear</button>':'')+'</div>';
+}
+function saveDelivery(id,line,clear){
+  const d=$("dd-"+id+"-"+line), t=$("dt-"+id+"-"+line);
+  const when=clear?"":((d&&d.value&&t&&t.value)?d.value+"T"+t.value:null);
+  if(when===null)return;   /* wait until both date and time are picked */
+  const o=SHOPIFY.find(x=>String(x.id)===String(id));
+  fetch("/api/delivery",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,when})})
+    .then(r=>r.json()).then(r=>{ if(!r||!r.ok){alert("Couldn't save the delivery booking.");return;}
+      if(o){o.delivery=o.delivery||{};if(when)o.delivery[line]=when;else delete o.delivery[line];o.prod_stages=o.prod_stages||[];o.prod_stages[line]=r.stage;o.prod_stage=Math.min.apply(null,o.prod_stages);
+        o.prod_dates=o.prod_dates||{};const P=o.prod_dates[line]=o.prod_dates[line]||{};if(when&&!P[5])P[5]=new Date(Date.now()+4*3600e3).toISOString().slice(0,16);if(!when)delete P[5];}
+      if(window.wrToast)wrToast(when?"Delivery booked · "+fmtDelivery(when):"Delivery booking cleared");
+      rerenderProd(); })
+    .catch(()=>alert("Network error saving the delivery booking."));
 }
 function prodBar(o,line,cur,editable){
   const n=PROD_STAGES.length;
@@ -5070,7 +5114,7 @@ function renderFactoryProd(){
   const tb=$("orderrows"); if(!tb) return;
   const q=($("ordersearch").value||"").toLowerCase();
   const list=SHOPIFY.filter(o=>!o.isDraft && o.state==="open")
-    .sort((a,b)=>(b.prod_stage||0)-(a.prod_stage||0));   // drawing-ready first
+    .sort((a,b)=>(b.date||"").localeCompare(a.date||"")||String(b.order).localeCompare(String(a.order)));   // fixed order: rows never move when a stage changes
   let html="",shown=0;
   let hidden=0;
   list.forEach(function(o){ const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[]; let firstShown=true;
@@ -5109,7 +5153,7 @@ function leaderboard(role,days){const cutoff=Date.now()-days*864e5,c={};DB.order
 function setLbDays(d){lbDays=d;document.querySelectorAll(".lbtab").forEach(b=>b.classList.toggle("on",+b.dataset.d===d));renderLeaderboard();}
 /* pieces each person finished per stage: their name is on the stage AND the line has moved past it (dated by when they were given it) */
 function crewBoard(st,days){const cutoff=Date.now()-days*864e5,c={};(typeof SHOPIFY!=="undefined"?SHOPIFY:[]).forEach(o=>{const cr=o.crew||{},ps=o.prod_stages||[];
-  Object.keys(cr).forEach(line=>{const a=cr[line][st];if(!a)return;const done=(ps[line]||0)>st||o.state==="shipped";if(!done)return;const t=Date.parse(a.d);if(isNaN(t)||t<cutoff)return;c[a.n]=(c[a.n]||0)+1;});});
+  Object.keys(cr).forEach(line=>{const done=(ps[line]||0)>st||o.state==="shipped";if(!done)return;crewList(o,line,st).forEach(a=>{const t=Date.parse(a.d);if(isNaN(t)||t<cutoff)return;c[a.n]=(c[a.n]||0)+1;});});});
   return Object.keys(c).map(k=>[k,c[k]]).sort((a,b)=>b[1]-a[1]);}
 function renderLeaderboard(){[[1,"carpenter"],[2,"foamer"],[3,"fabricator"],[4,"packer"]].forEach(([st,role])=>{const box=$("lb-"+role);if(!box)return;const rows=crewBoard(st,lbDays);if(!rows.length){box.innerHTML='<div class="hint" style="margin:0">Nothing finished in this period yet.</div>';return;}box.innerHTML=rows.map((r,i)=>`<div class="lbrow${i===0?" top":""}"><span class="lbrank">${i+1}</span><span class="lbname"></span><span class="lbcount">${r[1]}<span>piece${r[1]===1?"":"s"}</span></span></div>`).join("");[].forEach.call(box.querySelectorAll(".lbname"),(el,i)=>el.textContent=rows[i][0]);});}
 function openOrder(id){const o=DB.getOrder(id);if(!o)return;curOrderId=id;mode="factory";

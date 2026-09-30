@@ -8,8 +8,8 @@
 const $=id=>document.getElementById(id);
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;
 const STG=PROD_STAGES;                         /* Drawing, Carpentry, Foaming, Fabrication, Packing */
-const LATE=[3,6,3,6,2];                        /* days in a stage before the badge turns amber */
-const ROLE_NAME={1:"Carpenter",2:"Foamer",3:"Fabricator",4:"Packer"};
+const LATE=[3,6,3,6,2,7];                      /* days in a stage before the badge turns amber */
+const ROLE_NAME={0:"Drawer",1:"Carpenter",2:"Foamer",3:"Fabricator",4:"Packer"};
 const COLORS=["#8A4B2A","#5F6B3A","#3F5E73","#6B1A22","#7A5A9A","#2E6A5E","#94702F","#9A4C62","#4F5D8A","#6E6259"];
 const colorOf=n=>COLORS[drawHash(String(n).toLowerCase())%COLORS.length];
 const initials=n=>String(n||"?").trim().split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase();
@@ -109,7 +109,7 @@ function renderKpis(){
   const open=SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").length;
   const wk=window.WEEKLY||null, thisWeek=wk?wk[wk.length-1]:null;
   const t=drawingTally(), pct=t.all?t.done/t.all:0, C=2*Math.PI*26;
-  const lines=openLines(false), per=[0,0,0,0,0]; lines.forEach(L=>per[L.cur]++); const mx=Math.max(1,...per);
+  const lines=openLines(false), per=STG.map(()=>0); lines.forEach(L=>per[L.cur]++); const mx=Math.max(1,...per);
   const lead=window.LEAD;
   const leadHTML=lead&&lead.ready
     ?`<div class="big" data-n="${lead.avg}">${lead.avg}<small>days</small></div><div class="note">Order placed → packed · from ${lead.n} pieces</div>`
@@ -153,6 +153,7 @@ function decorateRows(){
     const st=Math.max(...(o.prod_stages&&o.prod_stages.length?o.prod_stages:[0]));
     if(o.items.some((it,i)=>lineCheck(o,i))){p.textContent="Check dimensions";p.classList.add("wr-pill-wait");}
     else if(needsDrawing(o)){p.textContent="Awaiting drawing";p.classList.add("wr-pill-wait");}
+    else if(st===5){const w=Object.values(o.delivery||{})[0];p.textContent=w?"Delivery "+fmtDelivery(w):"Delivery booked";p.classList.add("wr-pill-ready");}
     else if(st>=1){p.textContent="In "+STG[st].toLowerCase();p.classList.add("wr-pill-prod");}
     else{p.textContent="Ready for carpentry";p.classList.add("wr-pill-ready");}
   });
@@ -165,65 +166,12 @@ const _loadShopify=loadShopify;
 loadShopify=function(){ LOADING=true; if(!SHOPIFY.length){ if(!$("screen-sales").hidden)skeleton($("salesrows"),6); if(!$("screen-factory").hidden)skeleton($("orderrows"),4); }
   return _loadShopify.apply(this,arguments).finally(()=>{LOADING=false;}); };
 
-/* ================= Board / List ================= */
-let VIEWMODE=store.get("prodview","board");
-function segHTML(){return `<div class="wr-seg" role="group" aria-label="Production view"><button type="button" data-m="board" aria-pressed="${VIEWMODE==="board"}">Board</button><button type="button" data-m="list" aria-pressed="${VIEWMODE==="list"}">List</button></div>`;}
-function wireSeg(el){ el.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>setViewMode(b.dataset.m)); }
-function setViewMode(m){ VIEWMODE=m; store.set("prodview",m); document.querySelectorAll(".wr-seg [data-m]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.m===m)));
-  if(!$("screen-factory").hidden)renderFactoryProd(); else renderSalesDash(); }
-
-function cardHTML(L,editable){
-  const {o,i,it,cur,days,crew}=L, late=days>=LATE[cur];
-  const multi=o.items.length>1, oid=esc(String(o.id));
-  const names=[];for(let s=1;s<=4;s++){if(crew[s]&&names.indexOf(crew[s].n)<0)names.push(crew[s].n);}
-  const faces=names.map(n=>`<span class="wr-face" data-wr-name="${esc(n)}" style="background:${colorOf(n)}">${esc(initials(n))}</span>`).join("");
-  const segs=STG.map((s,k)=>`<i class="${k<cur?"d":k===cur?"c":""}" title="${s}"></i>`).join("");
-  const awaiting=cur===0&&!lineDrawn(o,i);
-  const btn=editable&&cur<4?`<button type="button" class="wr-adv" data-adv="${oid}:${i}:${cur}">${STG[cur]} done →</button>`:(cur===4?'<span class="wr-readytxt">Ready to deliver</span>':"");
-  const drop=editable?` data-drop="${oid}:${i}:${cur}"`:"";
-  return `<article class="wr-pc" data-oi="${SHOPIFY.indexOf(o)}" data-key="${oid}:${i}"${drop} tabindex="0">
-    <div class="top"><span class="onum">${esc(o.order)}${multi?" · "+(i+1)+"/"+o.items.length:""}</span><span class="wr-age${late?" late":""}" title="Days in ${STG[cur]}">${days}d</span></div>
-    <b>${esc(drawBase(it.product)||it.product)}</b><div class="who">${esc(o.customer||"")}</div>
-    ${awaiting?'<span class="tag">Awaiting drawing</span>':lineCheck(o,i)?'<span class="tag">Check dimensions</span>':""}
-    <div class="wr-segs">${segs}</div><div class="foot"><div class="wr-faces">${faces}</div>${btn}</div></article>`;
-}
-function renderBoard(box,lines,editable){
-  if(!box)return;
-  const cols=STG.map(()=>[]); lines.forEach(L=>cols[L.cur].push(L));
-  cols.forEach(c=>c.sort((a,b)=>b.days-a.days));
-  box.innerHTML='<div class="wr-board">'+STG.map((s,k)=>`<section class="wr-col" aria-label="${s}"><div class="wr-colh"><span class="i">${k+1}</span><b>${s}</b><span class="c">${cols[k].length}</span></div>${cols[k].length?cols[k].map(L=>cardHTML(L,editable)).join(""):'<div class="wr-colempty">Nothing here</div>'}</section>`).join("")+"</div>";
-  if(SPRING_CARD){const el=box.querySelector(`.wr-pc[data-key="${SPRING_CARD}"]`);if(el&&!RM)el.animate([{transform:"translateX(-26px) scale(.96)",opacity:.2},{transform:"none",opacity:1}],{duration:600,easing:"cubic-bezier(.34,1.56,.64,1)"});SPRING_CARD="";}
-}
-let SPRING_CARD="";
-function boardFilter(lines,q){ return q?lines.filter(L=>(L.o.order+" "+L.it.product+" "+(L.o.customer||"")).toLowerCase().indexOf(q)>=0):lines; }
-
-/* board interactions (delegated) */
-document.addEventListener("click",e=>{
-  const adv=e.target.closest(".wr-adv"); if(adv){e.stopPropagation();const [id,line,cur]=adv.dataset.adv.split(":");advance(id,+line,+cur,adv.closest(".wr-pc"));return;}
-  const card=e.target.closest(".wr-pc"); if(card){
-    if(CREW_PICK&&card.dataset.drop){const [id,line,cur]=card.dataset.drop.split(":");const n=CREW_PICK;CREW_PICK="";renderWorkers();assignOnCard(id,+line,+cur,n);return;}
-    const o=SHOPIFY[+card.dataset.oi]; if(o)openOrderDetail(o); return; }
-  const ev=e.target.closest("[data-ev]"); if(ev){const o=byId(ev.dataset.ev);if(o)openOrderDetail(o);}
-});
-document.addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("wr-pc")){const o=SHOPIFY[+e.target.dataset.oi];if(o)openOrderDetail(o);} });
-document.addEventListener("dragover",e=>{const c=e.target.closest&&e.target.closest(".wr-pc[data-drop]");if(c){e.preventDefault();c.classList.add("over");}});
-document.addEventListener("dragleave",e=>{const c=e.target.closest&&e.target.closest(".wr-pc");if(c&&!c.contains(e.relatedTarget))c.classList.remove("over");});
-document.addEventListener("drop",e=>{const c=e.target.closest&&e.target.closest(".wr-pc[data-drop]");if(!c)return;e.preventDefault();c.classList.remove("over");
-  const n=e.dataTransfer.getData("text/plain");const [id,line,cur]=c.dataset.drop.split(":");if(n)assignOnCard(id,+line,+cur,n);});
-function assignOnCard(id,line,cur,name){ if(cur<1){toast("Move it to Carpentry first, then add who's working on it.");return;} setCrew(id,line,cur,name); }
-
-function advance(id,line,cur,card){
-  const o=byId(id); if(!o||cur>=4)return; const next=cur+1;
-  if(card&&!RM){const s=document.createElement("div");s.className="wr-stamp";s.innerHTML=`<span>${STG[cur]} done</span>`;card.appendChild(s);}
-  setTimeout(()=>{ SPRING_CARD=id+":"+line; setProdStageServer(id,line,next);
-    if(next===4)confetti();
-    toast(`${STG[cur]} done on ${o.order}, now in ${STG[next]}`,()=>setProdStageServer(id,line,cur)); }, card&&!RM?520:0);
-}
-
 /* keep stage dates in step locally so days-in-stage and Today update straight away */
 const _setStage=setProdStageServer;
 setProdStageServer=function(id,line,idx){ const o=byId(id);
   if(o){o.prod_dates=o.prod_dates||{};const P=o.prod_dates[line]=o.prod_dates[line]||{};Object.keys(P).forEach(k=>{if(+k>idx)delete P[k];});if(idx>0&&!P[idx])P[idx]=uaeISO();}
+  const was=o&&o.prod_stages?(o.prod_stages[line]||0):0;
+  if(idx===4&&was<4)setTimeout(confetti,300);   /* a piece reaching Packing gets a little gold burst */
   return _setStage(id,line,idx); };
 
 /* ================= Today on the floor ================= */
@@ -232,8 +180,8 @@ function todayEvents(){
   SHOPIFY.forEach(o=>{ if(o.isDraft)return;
     Object.keys(o.prod_dates||{}).forEach(line=>{const P=o.prod_dates[line];Object.keys(P).forEach(s=>{if(String(P[s]).slice(0,10)!==day)return;
       const it=o.items[line]||{};ev.push({t:P[s].slice(11,16),id:o.id,x:`${o.order} ${drawBase(it.product)||it.product||""} moved to ${STG[s]}`});});});
-    Object.keys(o.crew||{}).forEach(line=>{const c=o.crew[line];Object.keys(c).forEach(s=>{if(c[s].d!==day)return;
-      const it=o.items[line]||{};ev.push({t:"",id:o.id,x:`${c[s].n} on ${STG[s].toLowerCase()} · ${o.order} ${drawBase(it.product)||it.product||""}`});});});
+    Object.keys(o.crew||{}).forEach(line=>{Object.keys(o.crew[line]).forEach(s=>{crewList(o,line,s).forEach(a=>{if(a.d!==day)return;
+      const it=o.items[line]||{};ev.push({t:"",id:o.id,x:`${a.n} on ${STG[s].toLowerCase()} · ${o.order} ${drawBase(it.product)||it.product||""}`});});});});
   });
   return ev.sort((a,b)=>(a.t||"99").localeCompare(b.t||"99"));
 }
@@ -256,23 +204,14 @@ function renderToday(box){
 
 /* ================= Sales screen hooks ================= */
 function salesExtras(){
-  const card=document.querySelector("#screen-sales .card"); if(!card)return;
   if(!$("wrKpis")){const w=document.createElement("div");w.className="wr-kpiwrap";w.innerHTML='<div id="wrKpis"></div>';document.querySelector("#screen-sales .dashgrid").before(w);}
-  const tw=card.querySelector(".otablewrap");
-  if(!$("wrTodayS")){const t=document.createElement("div");t.id="wrTodayS";tw.before(t);const b=document.createElement("div");b.id="wrBoardS";tw.after(b);}
-  if(!$("wrSegS")){const f=$("salesfilters"),s=document.createElement("span");s.id="wrSegS";s.innerHTML=segHTML();f.insertBefore(s,f.firstChild);wireSeg(s);}
 }
 const _renderSales=renderSalesDash;
 renderSalesDash=function(){
   salesExtras();
   if(LOADING&&!SHOPIFY.length){skeleton($("salesrows"),6);renderKpis();return;}
   _renderSales.apply(this,arguments);
-  const prod=salesView==="production", board=prod&&VIEWMODE==="board";
-  $("wrSegS").hidden=!prod; $("wrTodayS").hidden=!prod; if(prod)renderToday($("wrTodayS"));
-  document.querySelector("#screen-sales .otablewrap").hidden=board; $("wrBoardS").hidden=!board;
-  if(board){const q=($("salessearch").value||"").toLowerCase();const lines=boardFilter(openLines(false),q).filter(L=>salesMonth==="all"||(L.o.date||"").slice(0,7)===salesMonth);
-    renderBoard($("wrBoardS"),lines,ROLE==="factory");const c=$("salescount");if(c)c.textContent=lines.length+" piece"+(lines.length===1?"":"s")+" in production";}
-  else decorateRows();
+  if(salesView!=="production")decorateRows();
   renderKpis(); paintGreet();
 };
 
@@ -280,39 +219,34 @@ renderSalesDash=function(){
 function factoryExtras(){
   const grid=document.querySelector("#screen-factory .dashgrid"); if(!grid||$("wrTodayF"))return;
   const t=document.createElement("div");t.id="wrTodayF";t.style.gridColumn="1 / -1";grid.insertBefore(t,grid.firstChild);
-  const main=grid.querySelector(".dashmain"),tw=main.querySelector(".otablewrap");
-  const b=document.createElement("div");b.id="wrBoardF";tw.after(b);
-  const hdr=main.querySelector(".cardhdr"),s=document.createElement("span");s.id="wrSegF";s.style.marginLeft="auto";s.innerHTML=segHTML();hdr.querySelector("input").before(s);wireSeg(s);
-  hdr.style.flexWrap="wrap";
 }
 const _renderFactory=renderFactoryProd;
 renderFactoryProd=function(){
   factoryExtras();
   _renderFactory.apply(this,arguments);
   renderToday($("wrTodayF"));
-  const board=VIEWMODE==="board";
-  document.querySelector("#screen-factory .dashmain .otablewrap").hidden=board; $("wrBoardF").hidden=!board;
-  if(board){const q=($("ordersearch").value||"").toLowerCase();const lines=boardFilter(openLines(true),q);renderBoard($("wrBoardF"),lines,true);
-    const de=$("dashempty");if(de)de.style.display=lines.length?"none":"block";}
   paintGreet();
   if(SPRING){const el=document.querySelector(`.crew[data-ck="${SPRING}"]`);if(el)el.classList.add("wr-spring");SPRING="";}
 };
 
 /* ================= crew: Undo toast + spring ================= */
 let SPRING="";
-const _setCrew=setCrew;
+const _setCrew=setCrew, _removeCrew=removeCrew;
 setCrew=function(id,line,st,name,quiet){
-  const o=byId(id), prev=o&&o.crew&&o.crew[line]&&o.crew[line][st]?o.crew[line][st].n:"";
-  if(name)SPRING=id+":"+line+":"+st;
+  const o=byId(id); if(!name||(o&&crewList(o,line,st).some(a=>a.n===name)))return;
+  SPRING=id+":"+line+":"+st+":"+name;
   _setCrew(id,line,st,name);
-  if(quiet||!o)return;
-  toast(name?`${name} on ${STG[st].toLowerCase()} · ${o.order}`:`Removed from ${STG[st].toLowerCase()} · ${o.order}`,()=>setCrew(id,line,st,prev,true));
+  if(!quiet&&o)toast(`${name} on ${STG[st].toLowerCase()} · ${o.order}`,()=>removeCrew(id,line,st,name,true));
+};
+removeCrew=function(id,line,st,name,quiet){
+  const o=byId(id); _removeCrew(id,line,st,name);
+  if(!quiet&&o)toast(`${name} removed from ${STG[st].toLowerCase()} · ${o.order}`,()=>setCrew(id,line,st,name,true));
 };
 
 /* ================= people: team list + profile cards ================= */
 function personStats(name){
   const cutW=Date.now()-7*864e5, cutM=Date.now()-30*864e5, roles=new Set(), days=new Set(); let wk=0,mo=0; const now=[];
-  SHOPIFY.forEach(o=>{const cr=o.crew||{},ps=o.prod_stages||[];Object.keys(cr).forEach(line=>{Object.keys(cr[line]).forEach(st=>{const a=cr[line][st];if(a.n!==name)return;
+  SHOPIFY.forEach(o=>{const cr=o.crew||{},ps=o.prod_stages||[];Object.keys(cr).forEach(line=>{Object.keys(cr[line]).forEach(st=>{const a=crewList(o,line,st).find(x=>x.n===name);if(!a)return;
     roles.add(ROLE_NAME[st]); days.add(a.d);
     const done=(ps[line]||0)>+st||o.state==="shipped", t=pdMs(a.d);
     if(done&&t>=cutW)wk++; if(done&&t>=cutM)mo++;
@@ -329,11 +263,11 @@ renderWorkers=function(){
     r.innerHTML=`<span class="wr-pic" style="background:${colorOf(n)}">${esc(initials(n))}</span><span class="nm"><b></b><span>${esc(s.roles.join(" · ")||"Factory team")}</span></span><span class="wk"><em>${s.wk}</em>this wk</span><button class="del" type="button" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button>`;
     r.querySelector(".nm b").textContent=n;
     r.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",n);e.dataTransfer.effectAllowed="copy";hideP();});
-    r.addEventListener("click",e=>{if(e.target.closest(".del"))return;CREW_PICK=CREW_PICK===n?"":n;renderWorkers();document.querySelectorAll(".wr-pc[data-drop]").forEach(c=>c.classList.toggle("armed",!!CREW_PICK));});
+    r.addEventListener("click",e=>{if(e.target.closest(".del"))return;CREW_PICK=CREW_PICK===n?"":n;renderWorkers();});
     r.querySelector(".del").onclick=e=>{e.stopPropagation();delWorker(i);};
     box.appendChild(r);});
   const tip=document.createElement("div");tip.className="hint";tip.style.margin="4px 0 0";
-  tip.textContent=CREW_PICK?("Now tap a stage or a card to give it to "+CREW_PICK+"."):"Drag a name onto a stage or a board card (or tap a name, then a stage). Hover a name for their profile.";box.appendChild(tip);
+  tip.textContent=CREW_PICK?("Now tap a stage's + to add "+CREW_PICK+"."):"Drag a name onto a stage's + (or tap a name, then the +). Several people can share a stage. Hover a name for their profile.";box.appendChild(tip);
 };
 let pcard=null,pTimer=0;
 function showP(el){ const n=el.dataset.wrName||(el.classList.contains("crew")?el.firstChild&&el.firstChild.nodeValue:"")||""; if(!n)return;
@@ -371,7 +305,7 @@ openOrderDetail=function(o){
   const lines=o.items.map((it,i)=>i).filter(i=>isFurnitureLine(o.items[i].product));
   if(!lines.length)return;
   const html=lines.map(i=>{const L=lineInfo(o,i),shipped=o.state==="shipped";
-    const steps=STG.map((s,k)=>{const done=shipped||k<L.cur,cur=!shipped&&k===L.cur;const who=L.crew[k]?L.crew[k].n:"";const when=k===0?(lineDrawn(o,i)?"Drawing complete":"Awaiting drawing"):(L.pd[k]?"Started "+L.pd[k].slice(8,10)+"/"+L.pd[k].slice(5,7)+" "+L.pd[k].slice(11,16):"");
+    const steps=STG.map((s,k)=>{const done=shipped||k<L.cur,cur=!shipped&&k===L.cur;const who=crewList(o,i,k).map(a=>a.n).join(", ");const when=k===0?(lineDrawn(o,i)?"Drawing complete":"Awaiting drawing"):k===5?((o.delivery||{})[i]?fmtDelivery(o.delivery[i]):""):(L.pd[k]?"Started "+L.pd[k].slice(8,10)+"/"+L.pd[k].slice(5,7)+" "+L.pd[k].slice(11,16):"");
       return `<div class="s${done?" d":cur?" c":""}"><span class="b">${done?"✓":k+1}</span><div><div class="n">${s}${cur?' <span class="wr-age'+(L.days>=LATE[k]?" late":"")+'">'+L.days+"d</span>":""}</div><div class="m">${esc([who,when].filter(Boolean).join(" · "))||(done||cur?"":"Not started")}</div></div><span></span></div>`;}).join("");
     return (lines.length>1?`<div class="wr-line">${esc(o.items[i].product)}</div>`:"")+`<div class="wr-vt">${steps}</div>`;}).join("");
   $("od-body").insertAdjacentHTML("afterbegin",`<div class="odsec"><h4>Production</h4>${html}</div>`);
@@ -397,7 +331,7 @@ function commands(){
   if(has("sales"))c.push({t:"New order",s:"Opens the sales form",k:"N",run:()=>openSalesForm(null,"")});
   if(has("sales"))c.push({t:"New drawing",s:"Spec sheet without a sales form",k:"D",run:()=>newDrawing()});
   ["sales","factory","admin"].forEach((r,i)=>{if(has(r)&&ROLE!==r)c.push({t:"Go to "+ROLE_LABEL[r],k:String(i+1),run:()=>switchView(r)});});
-  if(has("sales"))c.push({t:"Production board",s:"Every piece by stage",run:()=>{if(ROLE!=="sales")switchView("sales");setSalesView("production");setViewMode("board");}});
+  if(has("sales"))c.push({t:"Production status",s:"Every piece and its stage",run:()=>{if(ROLE!=="sales")switchView("sales");setSalesView("production");}});
   if(ROLE!=="admin")c.push({t:(document.body.classList.contains("wr-workshop")?"Turn off":"Turn on")+" workshop mode",k:"W",run:()=>setWorkshop(!document.body.classList.contains("wr-workshop"))});
   c.push({t:"Refresh orders",run:()=>{if(ROLE==="factory")loadShopify(true).then(renderFactoryProd);else if(ROLE==="admin")loadAdmin();else refreshSales();}});
   c.push({t:"Keyboard shortcuts",k:"?",run:openHelp});
@@ -447,7 +381,6 @@ document.addEventListener("keydown",e=>{
   else if((k==="w"||k==="W")&&curScreen()!=="screen-admin")setWorkshop(!document.body.classList.contains("wr-workshop"));
   else if((k==="n"||k==="N")&&has("sales"))openSalesForm(null,"");
   else if((k==="d"||k==="D")&&has("sales"))newDrawing();
-  else if((k==="b"||k==="B")&&(curScreen()==="screen-factory"||salesView==="production"))setViewMode(VIEWMODE==="board"?"list":"board");
 });
 
 /* ================= boot ================= */
@@ -461,7 +394,6 @@ function mountOverlays(){
       <div class="kr"><span>Search this list</span><span class="wr-kbd">/</span></div>
       <div class="kr"><span>Sales · Factory · Admin</span><span><span class="wr-kbd">1</span> <span class="wr-kbd">2</span> <span class="wr-kbd">3</span></span></div>
       <div class="kr"><span>New order · New drawing</span><span><span class="wr-kbd">N</span> <span class="wr-kbd">D</span></span></div>
-      <div class="kr"><span>Board or list (production)</span><span class="wr-kbd">B</span></div>
       <div class="kr"><span>Workshop mode</span><span class="wr-kbd">W</span></div>
       <div class="kr"><span>Close anything</span><span class="wr-kbd">esc</span></div>
       <button type="button" class="close">Close</button></div>
@@ -482,13 +414,6 @@ enterDash=function(){ paintAvatar(); const pref=store.get("workshop",null);
   return _enterDash.apply(this,arguments); };
 const _renderRoleSwitch=renderRoleSwitch;
 renderRoleSwitch=function(){ _renderRoleSwitch.apply(this,arguments); paintAvatar(); };
-
-/* crew chips in list view: tag each with its key + name (spring + profile card) */
-const _crewRow=crewRow;
-crewRow=function(o,line,editable){ let h=_crewRow(o,line,editable); const c=((o.crew||{})[line])||{};
-  for(let st=1;st<=4;st++){ if(!c[st])continue; const nm=esc(c[st].n);
-    h=h.replace(new RegExp('<span class="crew'+(editable?" edit":"")+'" title="'+PROD_STAGES[st]+' — '),'<span data-ck="'+esc(String(o.id))+":"+line+":"+st+'" class="crew'+(editable?" edit":"")+'" data-wr-name="'+nm+'" title="'+PROD_STAGES[st]+' — '); }
-  return h; };
 
 mountOverlays(); setupBars();
 })();

@@ -76,7 +76,7 @@
 .wr-kpi .note{font-size:12px;color:var(--w-muted);line-height:1.4}
 .wr-kpi .delta{font-weight:700;color:var(--w-ok)}
 .wr-gauge{display:flex;align-items:center;gap:14px}
-.wr-sc{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.wr-sc{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
 .wr-sc>div{display:flex;flex-direction:column;gap:5px;min-width:0}
 .wr-sc .v{font:500 26px/1 var(--w-display)}
 .wr-sc .bar{height:5px;border-radius:3px;background:var(--w-line);overflow:hidden}
