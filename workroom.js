@@ -220,9 +220,21 @@ function factoryExtras(){
   const grid=document.querySelector("#screen-factory .dashgrid"); if(!grid||$("wrTodayF"))return;
   const t=document.createElement("div");t.id="wrTodayF";t.style.gridColumn="1 / -1";grid.insertBefore(t,grid.firstChild);
 }
+/* Factory screen tabs: Production | Leaderboard (no scrolling to the bottom to see the board) */
+let FTAB="prod";
+function factoryTabs(){
+  const grid=document.querySelector("#screen-factory .dashgrid"); if(!grid)return;
+  if(!$("wrFTabs")){const t=document.createElement("div");t.id="wrFTabs";t.className="roletabs wr-ftabs";t.setAttribute("role","tablist");
+    t.innerHTML='<button class="roletab" data-t="prod" role="tab">Production</button><button class="roletab" data-t="lb" role="tab">Leaderboard</button>';
+    grid.before(t); t.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{FTAB=b.dataset.t;factoryTabs();});}
+  $("wrFTabs").querySelectorAll("[data-t]").forEach(b=>{const on=b.dataset.t===FTAB;b.classList.toggle("on",on);b.setAttribute("aria-selected",String(on));});
+  grid.querySelectorAll(".teamstrip,.dashmain").forEach(el=>el.hidden=FTAB!=="prod");
+  const lb=grid.querySelector(".lbcard"); if(lb)lb.hidden=FTAB!=="lb";
+}
 const _renderFactory=renderFactoryProd;
 renderFactoryProd=function(){
   _renderFactory.apply(this,arguments);
+  factoryTabs();
   paintGreet();
   if(SPRING){const el=document.querySelector(`.crew[data-ck="${SPRING}"]`);if(el)el.classList.add("wr-spring");SPRING="";}
 };

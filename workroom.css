@@ -321,3 +321,7 @@ body.wr-workshop .wr-adv{flex-basis:100%}
   #orderdetail .odcard{width:100vw}
   .logincard{margin-top:8vh!important}
 }
+
+/* factory tabs: Production | Leaderboard */
+.wr-ftabs{max-width:1356px;margin:14px auto 0!important;width:calc(100% - 44px)}
+@media (max-width:760px){.wr-ftabs{width:calc(100% - 24px);margin-top:10px!important}}
