@@ -2187,22 +2187,22 @@ const F2=v=>KobeDraw.fmt(v);
 /* ---------- OTTOMAN — any sofa order can include one (form: "Add Matching Ottoman" + its W × D × H; older orders: "+ ottoman" in the notes).
    Drawn in its own small panel (plan + front). No size in the order → "Check dimensions" until someone enters it. ---------- */
 const hasOtt=M=>M&&!M.bed&&!M.stool&&!M.ownOttoman;
-const OTT_FIELDS=["Ottoman",[["OTT","Ottoman","included with this order","yn"],["OTW","Ottoman width"],["OTD","Ottoman depth"],["OTH","Ottoman height","usually the seat height"]]];
+const OTT_FIELDS=["Ottoman",[["OTT","Ottoman","included with this order","yn"],["OTSH","Ottoman shape","","oshape"],["OTW","Ottoman width","diameter if round"],["OTD","Ottoman depth","same as width if square / round"],["OTH","Ottoman height","usually the seat height"]]];
 const fieldsOf=M=>hasOtt(M)?M.fields.concat([OTT_FIELDS]):M.fields;
 function ottErrors(V){return +V.OTT&&!+V.OTS?["Ottoman size not in the order — ask sales and enter width × depth × height."]:[];}
 function allErrors(){const M=MODELS[ORDER.model];return M?M.draw.check(V).concat(hasOtt(M)?ottErrors(V):[]):[];}
 function ottSVG(V){
-  const K=KobeDraw.H,F=KobeDraw.fmt,G=K.G,w=+V.OTW||80,d=+V.OTD||80,h=+V.OTH||+V.SH||42,lh=Math.min(+V.LH||0,h/3);K.setFS(20);
+  const K=KobeDraw.H,F=KobeDraw.fmt,G=K.G,sh=V.OTSH||"Rectangular",round=sh==="Round",w=+V.OTW||80,d=(sh==="Rectangular"?+V.OTD:w)||80,h=+V.OTH||+V.SH||42,lh=Math.min(+V.LH||0,h/3);K.setFS(20);
   const s=120/Math.max(w,d,h),gap=3*G+40,LM=G+30,TM=G+26,BM=G+40, W=LM+w*s+gap+w*s+2*G+30, H=TM+Math.max(d,h)*s+BM;
   const X1=x=>LM+x*s, Y1=y=>TM+y*s, X2=x=>LM+w*s+gap+x*s, Yb=TM+Math.max(d,h)*s, Y2=z=>Yb-z*s, r=Math.min(6,w/6,d/6)*s;
   const ink='stroke="#1c1a17" stroke-width="1.5" fill="none"';
-  let g=`<rect x="${X1(0)}" y="${Y1(0)}" width="${w*s}" height="${d*s}" rx="${r}" ${ink}/>`;
+  let g=round?`<ellipse cx="${X1(w/2)}" cy="${Y1(d/2)}" rx="${w*s/2}" ry="${d*s/2}" ${ink}/>`:`<rect x="${X1(0)}" y="${Y1(0)}" width="${w*s}" height="${d*s}" rx="${r}" ${ink}/>`;
   g+=`<rect x="${X2(0)}" y="${Y2(h)}" width="${w*s}" height="${(h-lh)*s}" rx="${Math.min(4,h/6)*s}" ${ink}/>`;
   if(lh>0)[0.06,0.94].forEach(f=>{g+=`<rect x="${X2(w*f-2.5)}" y="${Y2(lh)}" width="${5*s}" height="${lh*s}" ${ink}/>`;});
-  g+=K.chainH([X1(0),X1(w)],Y1(0)-G*.8,Y1(0),[F(w)])+K.chainV([Y1(0),Y1(d)],X1(w)+G*.8,X1(w),[F(d)]);
+  g+=K.chainH([X1(0),X1(w)],Y1(0)-G*.8,Y1(0),[(round?"Ø ":"")+F(w)])+(round?"":K.chainV([Y1(0),Y1(d)],X1(w)+G*.8,X1(w),[F(d)]));
   g+=K.chainH([X2(0),X2(w)],Y2(h)-G*.8,Y2(h),[F(w)])+K.chainV([Y2(0),Y2(h)],X2(w)+G*.8,X2(w),[F(h)]);
   const lab=(x,y,t)=>`<text x="${x}" y="${y}" text-anchor="middle" font-size="16" font-weight="700" fill="#6a6258">${t}</text>`;
-  g+=lab(X1(w/2),Yb+G+10,"PLAN")+lab(X2(w/2),Yb+G+10,"FRONT");
+  g+=lab(X1(w/2),Yb+G+10,"PLAN · "+sh.toUpperCase())+lab(X2(w/2),Yb+G+10,"FRONT");
   if(!+V.OTS)g+=`<text x="${W/2}" y="${Yb+G+40}" text-anchor="middle" font-size="17" font-weight="800" fill="#8a1c1c">SIZE NOT IN THE ORDER — CONFIRM WITH SALES</text>`;
   return `<svg viewBox="0 0 ${W} ${H+(+V.OTS?0:34)}" font-family="Helvetica Neue,Helvetica,Arial,sans-serif">${g}</svg>`;
 }
@@ -2614,7 +2614,8 @@ function applyFormSpec(O,spec){
       if(/arm width/.test(L)){const n=num(val);if(n>0)v.A=n;return;}
       if(L==="armrests"){applyArms(v,val);set(label,val);return;}
       if(/add matching ottoman/.test(L)){if(/^yes/i.test(val))v.OTT=1;return;}
-      if(/^ottoman (width|depth|height)/.test(L)){const n=num(val);if(n>0){v[{width:"OTW",depth:"OTD",height:"OTH"}[L.split(" ")[1]]]=n;v.OTS=1;}return;}
+      if(/^ottoman shape/.test(L)){v.OTSH=/round/i.test(val)?"Round":/square/i.test(val)?"Square":"Rectangular";return;}
+      if(/^ottoman (width|depth|height|diameter|size)/.test(L)){const n=num(val);if(n>0){v[{width:"OTW",diameter:"OTW",size:"OTW",depth:"OTD",height:"OTH"}[L.split(" ")[1]]]=n;v.OTS=1;}return;}
       if(/arm height/.test(L)&&"AH" in v){const n=num(val);if(n>0)v.AH=n;return;}
       if(/number of modules/.test(L)){const n=Math.round(num(val));if(n>=2&&n<=6)v.n=n;return;}
     }
@@ -2645,7 +2646,7 @@ function save(){
 
 /* ---------- rendering ---------- */
 function autoSpec(){if(!ORDER.model)return [];const M=MODELS[ORDER.model],r=M.autoSpec(V);
-  if(hasOtt(M)&&+V.OTT)r.push(["Ottoman",+V.OTS?`${F2(+V.OTW)} W × ${F2(+V.OTD)} D × ${F2(+V.OTH||V.SH)} H cm`:"Included — size to confirm"]);return r;}
+  if(hasOtt(M)&&+V.OTT){const sh=V.OTSH||"Rectangular";r.push(["Ottoman",!+V.OTS?"Included — size to confirm":sh==="Round"?`Round · Ø ${F2(+V.OTW)} × ${F2(+V.OTH||V.SH)} H cm`:`${sh} · ${F2(+V.OTW)} W × ${F2(sh==="Square"?+V.OTW:+V.OTD)} D × ${F2(+V.OTH||V.SH)} H cm`]);}return r;}
 const STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing"];
 function renderSheet(){
   const ce=(k,v,cls)=>`<div class="v${cls?' '+cls:''}" contenteditable="true" spellcheck="false" data-k="${k}">${esc(v)}</div>`;
@@ -2770,16 +2771,16 @@ function buildDimFields(){
   const box=document.getElementById('dimFields'),M=MODELS[ORDER.model];if(!M){box.innerHTML="";return;}
   let h=(M.bed||M.stool)?"":`<div class="row"><label>Chaise side<small>as you face the sofa</small></label><div class="seg" id="sideSeg">${M.sides.map(x=>`<button type="button" data-v="${x}">${SIDE_LABEL[x]}</button>`).join("")}</div></div>`;
   if(M.seats)h+=`<div class="row"><label for="f-n">Seats<small>seat cushions across, incl. the chaise seat</small></label><select id="f-n"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>`;
-  fieldsOf(M).forEach(g=>{h+=`<div class="grp"><h3>${g[0]}</h3>`+g[1].map(f=>`<div class="row"><label for="f-${f[0]}">${f[1]}${f[2]?`<small>${f[2]}</small>`:""}</label>`+(f[3]==="yn"?`<select id="f-${f[0]}"><option value="1">Yes</option><option value="0">No</option></select>`:f[3]==="shape"?`<select id="f-${f[0]}"><option value="U">U-shape (both chaises)</option><option value="CL">L-shape — chaise left</option><option value="CR">L-shape — chaise right</option><option value="S">Straight — no chaise</option></select>`:`<div class="num"><input id="f-${f[0]}" type="number" step="0.5"><span>cm</span></div>`)+`</div>`).join("")+`</div>`;});
+  fieldsOf(M).forEach(g=>{h+=`<div class="grp"><h3>${g[0]}</h3>`+g[1].map(f=>`<div class="row"><label for="f-${f[0]}">${f[1]}${f[2]?`<small>${f[2]}</small>`:""}</label>`+(f[3]==="yn"?`<select id="f-${f[0]}"><option value="1">Yes</option><option value="0">No</option></select>`:f[3]==="oshape"?`<select id="f-${f[0]}"><option value="Rectangular">Rectangular</option><option value="Square">Square</option><option value="Round">Round</option></select>`:f[3]==="shape"?`<select id="f-${f[0]}"><option value="U">U-shape (both chaises)</option><option value="CL">L-shape — chaise left</option><option value="CR">L-shape — chaise right</option><option value="S">Straight — no chaise</option></select>`:`<div class="num"><input id="f-${f[0]}" type="number" step="0.5"><span>cm</span></div>`)+`</div>`).join("")+`</div>`;});
   box.innerHTML=h;
-  fieldKeys().forEach(k=>document.getElementById('f-'+k).addEventListener(document.getElementById('f-'+k).tagName==="SELECT"?'change':'input',e=>{if(isLocked())return;if(k==="SHAPE"){V.SHAPE=e.target.value;syncInputs();renderDrawings();save();return;}const v=parseFloat(e.target.value);if(!isFinite(v)||(v<=0&&e.target.tagName!=="SELECT"))return;
+  fieldKeys().forEach(k=>document.getElementById('f-'+k).addEventListener(document.getElementById('f-'+k).tagName==="SELECT"?'change':'input',e=>{if(isLocked())return;if(k==="SHAPE"||k==="OTSH"){V[k]=e.target.value;syncInputs();renderDrawings();save();return;}const v=parseFloat(e.target.value);if(!isFinite(v)||(v<=0&&e.target.tagName!=="SELECT"))return;
     if(k==="SD")V.D=V.B+v;else V[k]=k==="n"?Math.max(3,Math.round(v)):v;
     if(/^OT[WDH]$/.test(k))V.OTS=1;   /* someone entered the ottoman's size */syncInputs();renderDrawings();save();}));
   const n=document.getElementById('f-n');if(n)n.addEventListener('change',e=>{if(isLocked())return;V.n=parseInt(e.target.value,10);renderDrawings();save();});
   document.querySelectorAll('#sideSeg button').forEach(b=>b.addEventListener('click',()=>{if(isLocked())return;V.side=b.dataset.v;syncInputs();renderDrawings();save();}));
 }
 function syncInputs(){
-  fieldKeys().forEach(k=>{const el=document.getElementById('f-'+k);if(!el||document.activeElement===el)return;el.value=k==="SD"?+(V.D-V.B).toFixed(2):k==="SHAPE"?(V.SHAPE||"U"):(el.tagName==="SELECT"?String(V[k]==null?1:+V[k]):V[k]);});
+  fieldKeys().forEach(k=>{const el=document.getElementById('f-'+k);if(!el||document.activeElement===el)return;el.value=k==="SD"?+(V.D-V.B).toFixed(2):k==="SHAPE"?(V.SHAPE||"U"):k==="OTSH"?(V.OTSH||"Rectangular"):(el.tagName==="SELECT"?String(V[k]==null?1:+V[k]):V[k]);});
   const n=document.getElementById('f-n');if(n)n.value=String(V.n);
   document.querySelectorAll('#sideSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===V.side));
   const rl=document.getElementById('f-RL');if(rl)rl.disabled=V.side==="N";
