@@ -2280,7 +2280,7 @@ const MODELS={
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec:bedSpec},
   ash:{bed:true,ver:"dwg1",match:/\bash\b/i,label:"Ash Bed",name:"Ash Leather Bed",defaults:ASH_DEFAULT,draw:AshDraw,photoSide:"N",photo:PHOTO_ASH,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec(V){return bedSpec(V).concat([["Headboard Panels",ASH_P(bedPrep(V)).map(F2).join(" · ")+" cm"]]);}},
-  cherry:{pending:true,bed:true,ver:"dwg1",match:/\b(cherry|cherri)\b/i,label:"Cherry Bed",name:"Cherry Leather Bed",defaults:CHERRY_DEFAULT,draw:CherryDraw,photoSide:"N",photo:PHOTO_CHERRY,
+  cherry:{bed:true,ver:"dwg1",match:/\b(cherry|cherri)\b/i,label:"Cherry Bed",name:"Cherry Leather Bed",defaults:CHERRY_DEFAULT,draw:CherryDraw,photoSide:"N",photo:PHOTO_CHERRY,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec:bedSpec},
   chbed:{bed:true,ver:"dwg1",match:/\bchesterfield\b/i,label:"Chesterfield Bed",name:"Chesterfield Bed Collection",defaults:CHBED_DEFAULT,draw:ChBedDraw,photoSide:"N",photo:PHOTO_CHBED,
     sides:["N"],seats:false,fields:[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","from the floor"]]]],autoSpec:bedSpec},
