@@ -1923,7 +1923,7 @@ const MODELS={
     autoSpec(V){return [["Size",`${V.SH>=72?"Bar":V.SH>=60?"Counter":"Custom"} height · seat ${F2(V.SH)} cm`,1],["Overall Height",`${F2(V.H)} cm`],["Seat",`${F2(V.SW)} × ${F2(V.SDP)} · cushion ${F2(V.SC)} on base ${F2(V.SB)}`],
       ["Back Rest",`padded roll · ${F2(V.RW)} W × ${F2(V.BRH)} H × ${F2(V.BRT)} thick · comes round ${F2(V.WRAP)}`],["Stretchers",`footrest ${F2(V.FH)} · sides & back ${F2(V.SRH)} cm`],
       ["Legs",`Ø${F2(V.LT)} → Ø${F2(V.LB)} · back ${F2(V.BTW)}→${F2(V.BFW)} · front ${F2(V.FTW)}→${F2(V.FFW)}`]];}},
-  kanda:{ver:"dwg1",match:/\b(kanda|kandaa|khanda)\b/i,label:"Kanda",name:"Kanda Corner Sofa",defaults:KANDA_DEFAULT,draw:KandaDraw,photoSide:"U",photo:PHOTO_KANDA,
+  kanda:{minSeats:3,ver:"dwg1",match:/\b(kanda|kandaa|khanda)\b/i,label:"Kanda",name:"Kanda Corner Sofa",defaults:KANDA_DEFAULT,draw:KandaDraw,photoSide:"U",photo:PHOTO_KANDA,
     sides:["U"],seats:true,fields:KANDA_FIELDS,
     autoSpec(V){return [["Size",V.SHAPE==="S"?`${V.n} Seater · ${F2(V.W)} × ${F2(V.D)} cm`:V.SHAPE==="CL"?`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} cm`:V.SHAPE==="CR"?`${V.n} Seater · ${F2(V.W)} × ${F2(V.RR)} cm`:`${V.n} Seater · ${F2(V.W)} × ${F2(V.RL)} × ${F2(V.RR)} cm`,1],
         ["Configuration",shapeText(V)+(V.SHAPE==="U"?` · ${F2(V.RL)} (left) / ${F2(V.RR)} (right)`:"")],
@@ -2094,8 +2094,8 @@ function applyOrderText(O,text){
     /* U-shapes written as width × left chaise × right chaise ("400x240x240") */
     const sz3=t.match(/(\d{3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/i);
     if(sz3&&v.side==="U"&&"RR" in v){v.W=+sz3[1];v.RL=+sz3[2];v.RR=+sz3[3];if("SHAPE" in v)v.SHAPE="U";}
-    /* corner sofas: the bigger number is the overall width, the smaller the chaise ("220 × 290" = 290 wide, 220 chaise) */
-    if(sz&&v.side!=="U"&&+sz[2]>+sz[1]){const w=sz[2];sz[2]=sz[1];sz[1]=w;}
+    /* two numbers: the bigger one is the overall width, the smaller the chaise ("220 × 290" = 290 wide, 220 chaise) */
+    if(sz&&!sz3&&+sz[2]>+sz[1]){const w=sz[2];sz[2]=sz[1];sz[1]=w;}
     if(sz&&!(sz3&&v.side==="U"&&"RR" in v)){v.W=+sz[1];if(+sz[2]>v.D+10)v.RL=+sz[2];}
     const hand=/\b(rhf|right[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?right|right[\s-]*(side\s*)?chaise/i.test(t)?"R":
                /\b(lhf|left[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?left|left[\s-]*(side\s*)?chaise/i.test(t)?"L":null;
@@ -2117,7 +2117,8 @@ function applyOrderText(O,text){
     const mid=t.match(/(\d)\s*(seats?|modules?|pieces?)\s*in\s*the\s*middle/i), mods=t.match(/(\d)\s*(modules|seats)\b(?!\s*in)/i);
     if("n" in v){ if(mid)v.n=Math.min(6,+mid[1]+2); else if(mods&&+mods[1]>=2&&+mods[1]<=6)v.n=+mods[1];
       else if(sz&&MODELS[O.model]){ const d=MODELS[O.model].defaults, arms=(d.A||0)+(d.A2!=null?d.A2:(d.A||0)), std=(d.W-arms)/d.n;
-        if(v.W!==d.W)v.n=Math.max(2,Math.min(6,Math.round((v.W-arms)/std))); } }
+        if(v.W!==d.W)v.n=Math.max(2,Math.min(6,Math.round((v.W-arms)/std))); }
+      if(MODELS[O.model].minSeats)v.n=Math.max(v.n,MODELS[O.model].minSeats); }
   }
   const fab=t.match(/(?:fabric|upholstery)\s*(?:code)?\s*[:\-]\s*([^\n]{2,60})/i);
   if(fab&&!/swatch|shared with/i.test(fab[1])){const r=O.spec.find(x=>x[0]==="Fabric Catalogue Code");if(r&&!r[1])r[1]=fab[1].trim();}
