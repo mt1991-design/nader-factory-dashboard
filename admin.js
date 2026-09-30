@@ -12,14 +12,32 @@ const aed=n=>"AED "+Math.round(n).toLocaleString("en-US");
 const aedK=n=>n>=1e6?"AED "+(n/1e6).toFixed(n>=1e7?0:1)+"M":n>=1e3?"AED "+Math.round(n/1e3)+"k":aed(n);
 const pct=(a,b)=>b?Math.round((a-b)/b*100):null;
 const CAT=t=>{t=String(t||"").toLowerCase();
+  if(/cushion|pillow|throw|fabric|swatch|delivery|installation|service|fee|seat\s*depth|upgrade|product\s*test|\btest\b/.test(t))return"Extras & services";
   if(/bedside|side\s*table|night\s*stand|coffee\s*table|dining\s*table|console|desk|sideboard|\btable\b/.test(t))return"Tables";
   if(/\b(bed|headboard)s?\b/.test(t)&&!/day\s*-?bed|sofa\s*bed/.test(t))return"Beds";
   if(/stool|arm\s*chair|armchair|\bchairs?\b/.test(t))return"Chairs & stools";
   if(/sofa|sectional|corner|seater|couch|chaise|modular|day\s*-?bed|loveseat/.test(t))return"Sofas";
   if(/ottoman|pouf|bench/.test(t))return"Ottomans & benches";
-  if(/cushion|pillow|throw|fabric|swatch|delivery|installation|service|fee/.test(t))return"Extras & services";
+  if(/cushion|pillow|throw|fabric|swatch|delivery|installation|service|fee|seat\s*depth|upgrade|product\s*test|\btest\b/.test(t))return"Extras & services";
   return"Other";};
 const clean=t=>String(t||"").split(/\s+size\b|\s[-–|]\s|[:|(]|\s\d{2,}/i)[0].trim()||String(t||"");
+/* One product, one total: "Namba corner sofa", "Namba Corner Sofa" and "Custom Namba sofa" are the same model.
+   Key = the model words left after dropping capitals, sizes and generic words (corner, sofa, custom, the …),
+   plus the category; keys one letter apart (a typo like "Ladborke") are merged too. */
+const GENERIC=new Set("the a an custom bespoke new corner sofa sofas couch seater seat set of x with and in leather velvet boucle bouclé chenille fabric linen look l u shape shaped modular sectional chaise bed beds headboard king queen super single double chair chairs armchair dining stool stools barstool bar table tables coffee side bench ottoman collection design size standard left right hand facing lhf rhf".split(" "));
+function modelKey(t){const c=CAT(t);const w=clean(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z\s]/g," ").split(/\s+/).filter(x=>x&&!GENERIC.has(x)&&x.length>1);
+  return (w.slice(0,2).join(" ")||clean(t).toLowerCase())+"|"+c;}
+function lev1(a,b){if(a===b)return true;if(Math.abs(a.length-b.length)>1||Math.min(a.length,b.length)<5)return false;let i=0,j=0,d=0;
+  while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++d>1)return false;if(a.length>b.length)i++;else if(b.length>a.length)j++;else{i++;j++;}}return d+(a.length-i)+(b.length-j)<=1;}
+const titleCase=t=>String(t).toLowerCase().replace(/\b([a-z])/g,m=>m.toUpperCase());
+/* group line items → [{name, cat, q, v, names:Set}] */
+function groupProducts(lines){
+  const G={};
+  lines.forEach(([title,q,price])=>{let k=modelKey(title);
+    if(!G[k]){const hit=Object.keys(G).find(x=>x.split("|")[1]===k.split("|")[1]&&lev1(x.split("|")[0],k.split("|")[0]));if(hit)k=hit;}
+    const g=G[k]=G[k]||{q:0,v:0,cat:CAT(title),names:{}};g.q+=q;g.v+=q*price;const n=clean(title);g.names[n]=(g.names[n]||0)+q;});
+  return Object.values(G).map(g=>{const best=Object.entries(g.names).sort((a,b)=>b[1]-a[1])[0][0];return {name:titleCase(best),cat:g.cat,q:g.q,v:g.v,variants:Object.keys(g.names)};});
+}
 const PAL=["#6B1A22","#A98B54","#3F5E73","#5F6B3A","#8A4B2A","#7A5A9A","#2E6A5E","#9A4C62"];
 const isAgent=a=>a!=="Website"&&a!=="Other";
 
@@ -83,25 +101,25 @@ function renderSales(){
     </div>`;
   h+=`<div class="ad-card"><div class="ad-h">Sales per month, by agent <span>last 12 months</span></div>${chart(all.filter(f),agents)}</div>`;
   /* agent table */
-  const byA={}; all.filter(r=>ym(r.d)===MONTH).forEach(r=>{const a=byA[r.a]=byA[r.a]||{a:r.a,rev:0,n:0,it:0,prod:{}};a.rev+=r.t;a.n++;a.it+=items(r);r.it.forEach(x=>{const k=clean(x[0]);a.prod[k]=(a.prod[k]||0)+x[1];});});
+  const byA={}; all.filter(r=>ym(r.d)===MONTH).forEach(r=>{const a=byA[r.a]=byA[r.a]||{a:r.a,rev:0,n:0,it:0,lines:[]};a.rev+=r.t;a.n++;a.it+=items(r);r.it.forEach(x=>a.lines.push(x));});
   const byAP={}; all.filter(r=>ym(r.d)===prevMonth(MONTH)).forEach(r=>{byAP[r.a]=(byAP[r.a]||0)+r.t;});
   const list=Object.values(byA).sort((a,b)=>b.rev-a.rev), tot=sum(list,x=>x.rev)||1;
   h+=`<div class="ad-card"><div class="ad-h">Sales agents · ${ymLabel(MONTH)} <span>click an agent to see everything they sold</span></div>
     <div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Agent</th><th>Orders</th><th>Items</th><th>Sales</th><th>Avg order</th><th>Top product</th><th>Share</th><th>vs last month</th></tr></thead><tbody>
-    ${list.map(x=>{const top=Object.entries(x.prod).sort((a,b)=>b[1]-a[1])[0];const p=pct(x.rev,byAP[x.a]||0);
+    ${list.map(x=>{const g=groupProducts(x.lines).sort((a,b)=>b.q-a.q)[0];const top=g?[g.name,g.q]:null;const p=pct(x.rev,byAP[x.a]||0);
       return `<tr data-agent="${esc(x.a)}"${x.a===AGENT?' class="on"':''}><td><b>${esc(x.a)}</b></td><td>${x.n}</td><td>${x.it}</td><td><b>${aed(x.rev)}</b></td><td>${aed(x.rev/x.n)}</td><td>${top?esc(top[0])+' <span class="ad-m">×'+top[1]+'</span>':""}</td>
         <td><span class="ad-bar"><i style="width:${Math.round(x.rev/tot*100)}%"></i></span> ${Math.round(x.rev/tot*100)}%</td><td>${p==null?'<span class="ad-m">new</span>':'<span class="ad-d '+(p>=0?"up":"down")+'">'+(p>=0?"▲":"▼")+" "+Math.abs(p)+"%</span>"}</td></tr>`;}).join("")||'<tr><td colspan="8" class="ad-m">No sales this month yet.</td></tr>'}
     </tbody></table></div></div>`;
   /* drill-down: what was sold (for the chosen agent, or everyone) */
-  const prod={},cats={},city={};
-  cur.forEach(r=>{r.it.forEach(x=>{const k=clean(x[0]),p=prod[k]=prod[k]||{q:0,v:0,c:CAT(x[0])};p.q+=x[1];p.v+=x[1]*x[2];const c=cats[CAT(x[0])]=cats[CAT(x[0])]||{q:0,v:0};c.q+=x[1];c.v+=x[1]*x[2];});
+  const cats={},city={},lines=[];
+  cur.forEach(r=>{r.it.forEach(x=>{lines.push(x);const c=cats[CAT(x[0])]=cats[CAT(x[0])]||{q:0,v:0};c.q+=x[1];c.v+=x[1]*x[2];});
     const c0=String(r.city||"").trim().replace(/\s+/g," "),ct=c0?c0.charAt(0).toUpperCase()+c0.slice(1).toLowerCase().replace(/\b(\w)/g,m=>m.toUpperCase()):"Unknown";city[ct]=(city[ct]||0)+1;});
-  const plist=Object.entries(prod).sort((a,b)=>b[1].v-a[1].v), clist=Object.entries(cats).sort((a,b)=>b[1].v-a[1].v), cityL=Object.entries(city).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const plist=groupProducts(lines).sort((a,b)=>b.v-a.v), clist=Object.entries(cats).sort((a,b)=>b[1].v-a[1].v), cityL=Object.entries(city).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const cmax=Math.max(1,...clist.map(c=>c[1].v)), citymax=Math.max(1,...cityL.map(c=>c[1]));
   h+=`<div class="ad-grid2">
     <div class="ad-card"><div class="ad-h">What ${AGENT==="all"?"we":esc(AGENT)} sold · ${ymLabel(MONTH)} <span>${plist.length} product${plist.length===1?"":"s"}</span></div>
       <div class="ad-tablewrap ad-scroll"><table class="ad-table"><thead><tr><th>Product</th><th>Category</th><th>Qty</th><th>Value</th></tr></thead><tbody>
-      ${plist.map(([k,p])=>`<tr><td>${esc(k)}</td><td class="ad-m">${p.c}</td><td>${p.q}</td><td>${aed(p.v)}</td></tr>`).join("")||'<tr><td colspan="4" class="ad-m">Nothing sold this month yet.</td></tr>'}</tbody></table></div></div>
+      ${plist.map(p=>`<tr><td>${esc(p.name)}${p.variants.length>1?' <span class="ad-m" title="Added up from: '+esc(p.variants.join(" · "))+'">· '+p.variants.length+' spellings added up</span>':''}</td><td class="ad-m">${p.cat}</td><td>${p.q}</td><td>${aed(p.v)}</td></tr>`).join("")||'<tr><td colspan="4" class="ad-m">Nothing sold this month yet.</td></tr>'}</tbody></table></div></div>
     <div class="ad-stack">
       <div class="ad-card"><div class="ad-h">By category</div>${clist.map(([k,c])=>`<div class="ad-row"><span>${k}</span><span class="ad-bar wide"><i style="width:${Math.round(c.v/cmax*100)}%"></i></span><span class="ad-num">${c.q} · ${aedK(c.v)}</span></div>`).join("")||'<div class="ad-m">—</div>'}</div>
       <div class="ad-card"><div class="ad-h">Where customers are</div>${cityL.map(([k,c])=>`<div class="ad-row"><span>${esc(k)}</span><span class="ad-bar wide gold"><i style="width:${Math.round(c/citymax*100)}%"></i></span><span class="ad-num">${c}</span></div>`).join("")||'<div class="ad-m">—</div>'}</div>
