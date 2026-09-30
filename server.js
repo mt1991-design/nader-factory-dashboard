@@ -329,6 +329,15 @@ function crewFromTags(tags) {
   });
   return out;
 }
+// Delivered (the team confirmed the handover), per line: tag `delivered:<line>@<yyyy-mm-dd>`; `shopfulfilled:<line>` once Shopify has it
+function deliveredFromTags(tags) {
+  const out = {};
+  String(tags || '').split(',').map(t => t.trim()).forEach(t => {
+    let m = t.match(/^delivered:(\d+)@(\d{4}-\d{2}-\d{2})$/); if (m) { (out[m[1]] = out[m[1]] || {}).d = m[2]; return; }
+    m = t.match(/^shopfulfilled:(\d+)$/); if (m) (out[m[1]] = out[m[1]] || {}).f = true;
+  });
+  return out;
+}
 // Delivery booked with the customer, per line: tag `delivery:<line>:<yyyy-mm-ddThh:mm>` (UAE time)
 function deliveryFromTags(tags) {
   const out = {};
@@ -470,6 +479,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length),
       prod_dates: stageDatesFromTags(o.tags),
       delivery: deliveryFromTags(o.tags),
+      delivered: deliveredFromTags(o.tags),
       promise: promiseOf(o),
       prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
@@ -605,6 +615,57 @@ app.post('/api/delivery', requireAuth, async (req, res) => {
     if (CACHE.orders) delete CACHE.orders;
     logEvent(req.session.username, 'delivery', { id, line, when, ip: clientIp(req) });
     res.json({ ok: true, line, when, stage: s });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Delivered: record it on the order, then mark THAT line item fulfilled in Shopify (the only thing we write back).
+// Needs the app's fulfilment permission (write_merchant_managed_fulfillment_orders); without it the delivery is still
+// recorded and the dashboard shows "Shopify not updated yet" so it can be retried once the permission is added.
+async function shopifyGql(query, variables) {
+  const r = await fetch(`https://${STORE}/admin/api/${APIVER}/graphql.json`, { method: 'POST',
+    headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
+  return r.json();
+}
+async function fulfilLine(orderId, line) {
+  const q = `query($id:ID!){ order(id:$id){ lineItems(first:50){ nodes{ id } } fulfillmentOrders(first:20){ nodes{ id status lineItems(first:50){ nodes{ id remainingQuantity lineItem{ id } } } } } } }`;
+  const d = await shopifyGql(q, { id: 'gid://shopify/Order/' + orderId });
+  if (d.errors) throw new Error((d.errors[0] && d.errors[0].message) || 'Shopify error');
+  const o = d.data && d.data.order; if (!o) throw new Error('order not found');
+  const li = (o.lineItems.nodes[line] || {}).id; if (!li) throw new Error('line not found');
+  for (const fo of o.fulfillmentOrders.nodes) {
+    if (!['OPEN', 'IN_PROGRESS'].includes(fo.status)) continue;
+    const fli = fo.lineItems.nodes.find(x => x.lineItem.id === li && x.remainingQuantity > 0);
+    if (!fli) continue;
+    const m = `mutation($f:FulfillmentInput!){ fulfillmentCreate(fulfillment:$f){ fulfillment{ id status } userErrors{ field message } } }`;
+    const r = await shopifyGql(m, { f: { notifyCustomer: false, lineItemsByFulfillmentOrder: [{ fulfillmentOrderId: fo.id, fulfillmentOrderLineItems: [{ id: fli.id, quantity: fli.remainingQuantity }] }] } });
+    if (r.errors) throw new Error((r.errors[0] && r.errors[0].message) || 'Shopify error');
+    const ue = r.data.fulfillmentCreate.userErrors; if (ue && ue.length) throw new Error(ue[0].message);
+    return true;
+  }
+  return true;   // nothing left to fulfil for this line (already fulfilled)
+}
+app.post('/api/delivered', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'factory') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'factory only' });
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0), undo = !!b.undo;
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try {
+    const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    if (!r.ok) throw new Error('Shopify ' + r.status);
+    const cur = ((await r.json()).order || {}).tags || '';
+    let tags = cur.split(',').map(t => t.trim()).filter(t => t && !t.startsWith('delivered:' + line + '@'));
+    const day = uaeNow().slice(0, 10);
+    if (!undo) tags.push('delivered:' + line + '@' + day);
+    let shop = false, shopErr = '';
+    if (!undo && !tags.includes('shopfulfilled:' + line)) {
+      try { await fulfilLine(id, line); shop = true; tags.push('shopfulfilled:' + line); }
+      catch (e) { shopErr = /access|scope|permission|denied/i.test(e.message) ? 'needs-permission' : e.message; }
+    } else if (!undo) shop = true;
+    const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, { method: 'PUT',
+      headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });
+    if (!up.ok) throw new Error('Shopify PUT ' + up.status);
+    if (CACHE.orders) delete CACHE.orders;
+    logEvent(req.session.username, undo ? 'delivered_undo' : 'delivered', { id, line, shopify: shop ? 'fulfilled' : shopErr, ip: clientIp(req) });
+    res.json({ ok: true, line, date: undo ? '' : day, shopify: shop, shopErr });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

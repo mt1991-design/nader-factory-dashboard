@@ -156,6 +156,8 @@
   .delrow{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--panelline);font:600 12px var(--ui);color:var(--ink2)}
   .delrow.booked{color:#2f7a3a}
   .delrow input[type=date],.delrow select{width:auto;font:600 12.5px var(--ui);padding:6px 8px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink)}
+  .delrow .delbtn{flex:0 0 auto;padding:7px 12px;font:700 12px var(--ui);background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:8px;cursor:pointer}
+  .delrow .delivered{color:#2f7a3a;font-weight:700}.delrow .delivered em{font-style:normal;color:#8a6d10;font-weight:600}
   .delrow .delclear{flex:0 0 auto;padding:5px 10px;font:600 11.5px var(--ui);background:transparent;color:var(--ink2);border:1px solid var(--fieldline);border-radius:8px}
   .prow{display:flex;align-items:center}
   .pdot{width:15px;height:15px;border-radius:50%;background:var(--field);border:2px solid var(--panelline);flex:0 0 auto}
@@ -4962,12 +4964,26 @@ function deliveryRow(o,line,editable){
   const w=((o.delivery||{})[line])||"", cur=(o.prod_stages||[])[line]||0;
   if(!w&&cur<4)return "";
   const oid=esc(String(o.id));
-  if(!editable) return '<div class="delrow'+(w?" booked":"")+'">🚚 '+(w?'Delivery booked · <b>'+esc(fmtDelivery(w))+'</b>':'Delivery not booked yet')+'</div>';
+  const dv=((o.delivered||{})[line])||null;
+  const dvHTML=dv&&dv.d?'<span class="delivered">✓ Delivered '+esc(fmtDay(dv.d))+(dv.f?' · marked fulfilled in Shopify':' · <em title="Shopify still needs the fulfilment permission — the dashboard will update Shopify once it is added">Shopify not updated yet</em>')+'</span>':'';
+  if(!editable) return '<div class="delrow'+(w?" booked":"")+'">🚚 '+(w?'Delivery booked · <b>'+esc(fmtDelivery(w))+'</b>':'Delivery not booked yet')+dvHTML+'</div>';
   const date=w.slice(0,10), time=w.slice(11,16);
   return '<div class="delrow edit'+(w?" booked":"")+'" onclick="event.stopPropagation()"><span>🚚 Delivery booked with customer</span>'
     +'<input type="date" id="dd-'+oid+'-'+line+'" value="'+date+'" onchange="saveDelivery(\''+oid+'\','+line+')" aria-label="Delivery date">'
     +'<select id="dt-'+oid+'-'+line+'" onchange="saveDelivery(\''+oid+'\','+line+')" aria-label="Delivery time"><option value="">Time…</option>'+DELIVERY_TIMES.map(t=>'<option'+(t===time?" selected":"")+'>'+t+'</option>').join("")+'</select>'
-    +(w?'<button type="button" class="delclear" onclick="saveDelivery(\''+oid+'\','+line+',true)" title="Clear the delivery booking">Clear</button>':'')+'</div>';
+    +(w&&!dv?'<button type="button" class="delclear" onclick="saveDelivery(\''+oid+'\','+line+',true)" title="Clear the delivery booking">Clear</button>':'')
+    +(w?(dv&&dv.d?dvHTML+(dv.f?'':'<button type="button" class="delclear" onclick="markDelivered(\''+oid+'\','+line+')" title="Try updating Shopify again">Retry Shopify</button>')
+      :'<button type="button" class="delbtn" onclick="markDelivered(\''+oid+'\','+line+')" title="The piece has been handed over — marks this item fulfilled in Shopify">✓ Delivered</button>'):'')+'</div>';
+}
+function markDelivered(id,line){
+  const o=SHOPIFY.find(x=>String(x.id)===String(id)), it=o&&o.items[line];
+  if(!confirm("Mark "+(it?it.product:"this piece")+" as DELIVERED?\n\nThis marks the item as fulfilled in Shopify."))return;
+  fetch("/api/delivered",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line})})
+    .then(r=>r.json()).then(d=>{ if(!d||!d.ok){alert("Couldn't save: "+((d&&d.error)||"error"));return;}
+      if(o){o.delivered=o.delivered||{};o.delivered[line]={d:d.date,f:!!d.shopify};}
+      if(!d.shopify)alert(d.shopErr==="needs-permission"?"Delivered is saved. Shopify wasn't updated yet: the app still needs the fulfilment permission. It will show 'Retry Shopify' until then.":"Delivered is saved, but Shopify said: "+d.shopErr);
+      rerenderProd(); })
+    .catch(()=>alert("Network error."));
 }
 function saveDelivery(id,line,clear){
   const d=$("dd-"+id+"-"+line), t=$("dt-"+id+"-"+line);
