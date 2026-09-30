@@ -5174,7 +5174,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const multi=o.items.length>1;
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
-    const editBtn=(i===0&&o.isDraft&&o.edit_state&&ROLE==="sales")?'<a class="pdflink" href="https://nader.ae/pages/sales-form#edit='+esc(o.edit_state)+'" target="_blank" rel="noopener" onclick="openSalesForm(event,\'edit='+esc(o.edit_state)+'\');event.stopPropagation()" title="Edit this order (sales only)">✎ Edit</a> ':"";
+    const editBtn=(i===0&&o.edit_state&&!(o.state==="shipped")&&canEditOrder(o))?'<a class="pdflink" href="#" onclick="event.preventDefault();event.stopPropagation();editOrder('+oi+')" title="'+(o.isDraft?'Edit this order — the customer re-signs':'Change this paid order — any extra is added to the order and requested from the customer')+'">✎ Edit</a> ':"";
     const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
     const sig=(i===0&&o.isDraft)?(
         o.signature==="signed"
@@ -5210,6 +5210,15 @@ function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!
   const url="/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:specKey(lineId(o,i))}).toString();
   if(!SAVED_SPECS.has(specKey(lineId(o,i))))SAVED_SPECS.set(specKey(lineId(o,i)),{});window.open(url,"_blank");setTimeout(renderSalesDash,50);}
 /* the sales form is staff-only: open it with a signed pass from the server (who is logged in, valid 12h) */
+/* ✎ Edit: only the sales agent named on the order ("Agent: …" in the note) or an admin.
+   Drafts (signed or not) reopen for changes + re-signing; PAID orders open in change mode (extra is added to the same order). */
+function orderAgent(o){ const m=String(o.note||"").match(/Agent:\s*([^\n·]+?)\s*(?:·|\n|$)/); return m?m[1].trim():""; }
+function canEditOrder(o){ if(!USER||ROLE==="factory")return false; if(USER.roles.indexOf("admin")>=0)return true;
+  const a=orderAgent(o).toLowerCase(), me=String(USER.name||USER.username||"").trim().toLowerCase(); return !!a&&!!me&&(a===me||a.split(" ")[0]===me.split(" ")[0]); }
+function editOrder(oi){ const o=SHOPIFY[oi]; if(!o||!o.edit_state)return;
+  let h="edit="+o.edit_state;
+  if(!o.isDraft) h+="&order="+encodeURIComponent(o.id)+"&on="+encodeURIComponent(o.order)+"&paid="+encodeURIComponent(o.total||"");
+  track("edit_order",{order:o.order,paid:!o.isDraft}); openSalesForm(null,h); }
 function openSalesForm(ev,hash){ if(ev)ev.preventDefault(); const w=window.open("about:blank","_blank");
   fetch("/api/formlink",{credentials:"same-origin"}).then(r=>r.json()).then(d=>{const u="https://nader.ae/pages/sales-form"+(d&&d.ok?"?k="+encodeURIComponent(d.k):"")+(hash?"#"+hash:"");if(w)w.location=u;else location.href=u;})
     .catch(()=>{if(w)w.close();alert("Couldn't open the sales form — check your connection.");}); return false; }
