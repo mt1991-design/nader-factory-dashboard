@@ -4731,8 +4731,10 @@ const IS_BED=t=>/\b(bed|headboard)s?\b/i.test(t)&&!/\b(bedside|side\s*table|day\
 function autoDrawable(title){const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")));}
 function isFurnitureLine(title){return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
-function lineDrawn(o,i){const it=o.items[i]||{};if(autoDrawable(it.product))return true;const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="complete");}
+function lineCheck(o,i){const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="check");}   /* saved sheet says "Check dimensions" (e.g. ottoman size missing) */
+function lineDrawn(o,i){const it=o.items[i]||{};if(lineCheck(o,i))return false;if(autoDrawable(it.product))return true;const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="complete");}
 function drawTypeChip(title,o,i){
+  if(o&&lineCheck(o,i))return '<span class="dwchip manual" title="Open the spec sheet — a size is missing (e.g. the ottoman)">⚠ Check dimensions</span>';
   if(o&&lineDrawn(o,i))return '<span class="dwchip auto" title="Drawing done">✓ Drawing complete</span>';
   if(autoDrawable(title))return '<span class="dwchip auto" title="Drawn automatically from the CAD file">✓ Drawing complete</span>';
   if(isFurnitureLine(title))return '<span class="dwchip manual" title="No CAD template yet — draw by hand">✎ Needs manual drawing</span>';
