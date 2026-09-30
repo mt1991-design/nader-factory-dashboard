@@ -2192,7 +2192,7 @@ function bedSpec(V){const b=bedPrep(V),m=`${F2(b.MW-1)} × ${F2(b.ML-1)}`,nm=Obj
 function bedSize(v,t){t=String(t||"");let w,l;
   /* the first "W × L" that looks like a mattress (80–220 × 170–220) — skips things like "250 - 25 X 160" */
   for(const m of t.matchAll(/(\d{2,3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/gi)){let a=+m[1],b=+m[2];if(a>b)[a,b]=[b,a];if(a>=80&&a<=220&&b>=170&&b<=220){w=a;l=b;break;}}
-  else{const k=Object.keys(BED_SIZES).find(k=>new RegExp("\\b"+k.replace(" ","[\\s-]*")+"\\b","i").test(t));if(k)[w,l]=BED_SIZES[k];}
+  if(!w){const k=Object.keys(BED_SIZES).find(k=>new RegExp("\\b"+k.replace(" ","[\\s-]*")+"\\b","i").test(t));if(k)[w,l]=BED_SIZES[k];}
   if(!w)return false; if(w>l)[w,l]=[l,w]; v.MW=w+1;v.ML=l+1; if("n" in v)v.n=v.CHP?Math.max(4,Math.round((bedPrep(v).W-2*(v.CHE||v.FR))/v.CHP)):LU_AUTO_N(bedPrep(v).W); return true;}
 const shapeText=V=>V.SHAPE==="S"?"Straight — no chaise":V.SHAPE==="CL"?"L-shape — chaise left (LHF)":V.SHAPE==="CR"?"L-shape — chaise right (RHF)":"U-shape — chaise both ends";
 /* arm wording for the spec table: say plainly when an arm has been left off */
