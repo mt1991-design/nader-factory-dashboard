@@ -280,6 +280,11 @@ const FETCH = {
     const since = new Date(Date.now() - 26 * 7 * 864e5).toISOString();
     return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,created_at,cancelled_at,tags`, 10);
   },
+  /* Admin sales insights: every order from the last 13 months (paged; ~1,000 orders) */
+  adminSales: async () => {
+    const since = new Date(Date.now() - 400 * 864e5).toISOString();
+    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,financial_status,cancelled_at,fulfillment_status,line_items,note,user_id,source_name,shipping_address`, 12);
+  },
   /* completed drafts already appear as orders — only open / invoice-sent drafts are needed (was: all ~1,500) */
   drafts: async () => {
     const [open, sent] = await Promise.all([
@@ -753,6 +758,42 @@ app.get('/api/file/:fid', requireAuth, async (req, res) => {
     res.send(Buffer.from(await r.arrayBuffer()));
     logEvent(req.session.username, 'file_download', { fid, name, ip: clientIp(req) });
   } catch (e) { res.status(502).send('Download failed'); }
+});
+
+/* ---------- ADMIN: sales per agent / month / product (owners only) ---------- */
+async function docGet(name) { const d = await workerJson('/doc/' + name); return (d && d.ok && d.data) || null; }
+async function docSet(name, data) { return workerJson('/doc/' + name, { method: 'POST', body: JSON.stringify({ data }) }); }
+function agentOf(o, map) {
+  const m = String(o.note || '').match(/Agent:\s*([^\n·]+?)\s*(?:·|\n|$)/);
+  if (m && m[1].trim()) return m[1].trim();
+  if (o.user_id && map[o.user_id]) return map[o.user_id];
+  if (o.user_id) return 'Staff account …' + String(o.user_id).slice(-4);
+  if (o.source_name === 'web') return 'Website';
+  return 'Other';
+}
+app.get('/api/admin/sales', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'admin only' });
+  try {
+    const [raw, map] = await Promise.all([cached('adminSales', FETCH.adminSales, req.query.fresh === '1'), docGet('agents').catch(() => null)]);
+    const agents = map || {}, accounts = {};
+    const rows = raw.map(o => {
+      const fin = String(o.financial_status || '').toLowerCase();
+      const st = (o.cancelled_at || fin === 'refunded' || fin === 'voided') ? 'x' : (o.fulfillment_status === 'fulfilled' ? 's' : 'o');
+      if (o.user_id) { const a = accounts[o.user_id] = accounts[o.user_id] || { n: 0, name: agents[o.user_id] || '' }; a.n++; }
+      return { id: o.id, n: o.name, d: String(o.created_at || '').slice(0, 10), t: +o.total_price || 0, st, fin,
+        a: agentOf(o, agents), u: o.user_id || null, city: (o.shipping_address && (o.shipping_address.city || o.shipping_address.province)) || '',
+        it: (o.line_items || []).map(li => [li.title, li.quantity || 1, +li.price || 0]), p: promiseOf(o), open: st === 'o' };
+    });
+    res.json({ ok: true, rows, accounts, at: Date.now() });
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.post('/api/admin/agents', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'admin only' });
+  const uid = String((req.body || {}).uid || '').replace(/\D/g, ''), name = String((req.body || {}).name || '').replace(/[<>]/g, '').trim().slice(0, 40);
+  if (!uid) return res.status(400).json({ ok: false, error: 'no account' });
+  try { const map = (await docGet('agents')) || {}; if (name) map[uid] = name; else delete map[uid]; await docSet('agents', map);
+    logEvent(req.session.username, 'agent_name', { uid, name, ip: clientIp(req) }); res.json({ ok: true, map }); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 
 app.get('/api/health', (req, res) =>
