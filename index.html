@@ -273,7 +273,6 @@
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
         <label class="sortlabel">Sort by
         <select id="salessort" class="filtersel" onchange="const v=this.value.split(':');setSalesSort(v[0],v[1])" aria-label="Sort orders">
-          <option value="order:asc">Order number · lowest to highest</option><option value="order:desc">Order number · highest to lowest</option>
           <option value="date:asc">Date · oldest to newest</option><option value="date:desc">Date · newest to oldest</option>
           <option value="promise:asc">Days to promise · most overdue first</option><option value="promise:desc">Days to promise · most time left first</option></select></label>
         <div id="salesstatuschips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
@@ -4769,7 +4768,7 @@ function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
 let salesView="orders";
 /* sort for the orders list: click a column header (Order · Days to promise · Ordered), or pick from the Sort menu */
 /* default: by the actual order number, lowest first (…80, 81, 82); each browser remembers the choice */
-let salesSort=(function(){try{const v=(localStorage.getItem("nfs_sort")||"").split(":");if(["order","date","promise"].includes(v[0])&&["asc","desc"].includes(v[1]))return{k:v[0],dir:v[1]};}catch(e){}return{k:"order",dir:"asc"};})();
+let salesSort=(function(){try{const v=(localStorage.getItem("nfs_sort")||"").split(":");if(["order","date","promise"].includes(v[0])&&["asc","desc"].includes(v[1]))return{k:v[0]==="order"?"date":v[0],dir:v[1]};}catch(e){}return{k:"date",dir:"asc"};})();
 function setSalesSort(k,dir){ if(dir)salesSort={k,dir}; else if(salesSort.k===k)salesSort.dir=salesSort.dir==="asc"?"desc":"asc"; else salesSort={k,dir:k==="promise"?"asc":"desc"};
   try{localStorage.setItem("nfs_sort",salesSort.k+":"+salesSort.dir);}catch(e){}
   const sel=$("salessort"); if(sel)sel.value=salesSort.k+":"+salesSort.dir; renderSalesDash(); }  /* "orders" (paid/placed) | "drafts" */
@@ -5154,7 +5153,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   const th=$("saleshead"), tbl=$("salestable");
   const sh=(k,t,tip)=>'<th class="sortable'+(salesSort.k===k?" on":"")+'" onclick="setSalesSort(\''+k+'\')"'+(tip?' title="'+tip+'"':'')+'>'+t+' <span class="sortarr">'+(salesSort.k===k?(salesSort.dir==="asc"?"▲":"▼"):"↕")+'</span></th>';
   if(th) th.innerHTML = salesView==="production" ? '<tr><th>Order</th><th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>'
-    : '<tr>'+sh("order","Order")+'<th>Product</th><th>Customer</th>'+sh("promise","Days to promise","Working days (Mon–Fri) left until the promised delivery — tap to sort")+sh("date","Ordered")+'<th>Status</th><th></th></tr>';
+    : '<tr>'+sh("date","Order")+'<th>Product</th><th>Customer</th>'+sh("promise","Days to promise","Working days (Mon–Fri) left until the promised delivery — tap to sort")+sh("date","Ordered")+'<th>Status</th><th></th></tr>';
   if(tbl) tbl.classList.toggle("prodtable", salesView==="production");
   if(salesView==="production"){ renderProduction(q); return; }
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
@@ -5163,7 +5162,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     /* newest first — for drafts sort by the draft number (D1842 > D1841); orders keep newest-date order */
     .sort((a,b)=>{ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
       const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
-      let c = salesSort.k==="promise" ? left(a)-left(b) : salesSort.k==="order" ? num(a)-num(b) : (a.date||"").localeCompare(b.date||"")||num(a)-num(b);
+      /* "date" follows the order number (they run in date order), so the numbers always read …80, 81, 82 */
+      let c = salesSort.k==="promise" ? left(a)-left(b)||num(a)-num(b) : num(a)-num(b)||(a.date||"").localeCompare(b.date||"");
       if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
       return salesSort.dir==="asc"?c:-c; });
   let html="",shown=0;
