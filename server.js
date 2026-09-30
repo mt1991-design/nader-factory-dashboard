@@ -343,6 +343,24 @@ function stageDatesFromTags(tags) {
   return out;
 }
 const uaeNow = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16);   // UAE = UTC+4, no DST
+// Lead time promised to the customer: read from the order note ("30–40 working days", "31 working days"),
+// otherwise the website's standard 7–21 working days. Working days = Mon–Fri, counted from the order date
+// (recomputed on every request, so the "past the promise window" list updates itself daily).
+function workingDaysSince(iso) {
+  const start = new Date(String(iso).slice(0, 10) + 'T00:00:00+04:00'), now = new Date(Date.now() + 4 * 3600e3);
+  let n = 0; const d = new Date(start.getTime());
+  while (true) { d.setUTCDate(d.getUTCDate() + 1); if (d > now) break; const wd = d.getUTCDay(); if (wd !== 0 && wd !== 6) n++; }
+  return n;
+}
+function promiseOf(o) {
+  const note = String(o.note || '');
+  let m = note.match(/(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:working|business)?\s*days?/i), lo, hi, src = 'note';
+  if (m) { lo = +m[1]; hi = +m[2]; }
+  else if ((m = note.match(/(\d{1,3})\s*(?:working|business)\s*days/i))) { lo = hi = +m[1]; }
+  else { lo = 7; hi = 21; src = 'standard'; }
+  const wd = workingDaysSince(o.created_at || '');
+  return { lo, hi, src, wd, over: wd - hi };
+}
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
 // Stays hidden until there are ≥5 finished lines AND ≥3 weeks since the first timed stage, so it's based on real data.
 function leadTime(raw) {
@@ -447,6 +465,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length),
       prod_dates: stageDatesFromTags(o.tags),
       delivery: deliveryFromTags(o.tags),
+      promise: promiseOf(o),
       prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
       items: mapLineItems(o.line_items)

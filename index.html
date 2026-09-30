@@ -145,6 +145,7 @@
   .teamhint{font:500 11.5px var(--ui);letter-spacing:0;text-transform:none;color:var(--ink2)}
   .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
   .teamstrip .addrow{max-width:420px}
+  .latechip{display:inline-block;margin-top:6px;padding:3px 9px;border-radius:20px;background:rgba(179,38,30,.10);color:#a3322b;font:700 10.5px var(--ui);white-space:nowrap}
   .delrow{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--panelline);font:600 12px var(--ui);color:var(--ink2)}
   .delrow.booked{color:#2f7a3a}
   .delrow input[type=date],.delrow select{width:auto;font:600 12.5px var(--ui);padding:6px 8px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink)}
@@ -4790,6 +4791,10 @@ function drawTypeChip(title,o,i){
   if(isFurnitureLine(title))return '<span class="dwchip manual" title="No CAD template yet — draw by hand">✎ Needs manual drawing</span>';
   return "";
 }
+/* past the lead time promised to the customer (note, else the standard 7–21 working days) — worked out fresh on every load */
+function isLate(o){ return !o.isDraft && o.state==="open" && !!o.promise && o.promise.over>0; }
+function lateChip(o){ if(!isLate(o))return ""; const p=o.promise;
+  return '<br><span class="latechip" title="Promised '+p.lo+(p.hi!==p.lo?'–'+p.hi:'')+' working days ('+(p.src==="note"?"from the order note":"website standard")+'). '+p.wd+' working days since the order.">⚠ '+p.over+' working day'+(p.over===1?'':'s')+' past promise</span>'; }
 function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some((it,i)=>isFurnitureLine(it.product)&&!lineDrawn(o,i)); }
 function buildFilters(){
   const ms=$("salesmonth");
@@ -4802,7 +4807,7 @@ function buildFilters(){
   if(box){
     const defs = salesView==="production" ? []
       : salesView==="drafts" ? [["open","Open"],["invoice_sent","Invoice sent"]]
-      : [["needsdrawing","Needs drawing"],["drawn",drawnLabel()],["open","Open"],["shipped","Shipped"]];
+      : [["needsdrawing","Needs drawing"],["drawn",drawnLabel()],["open","Open"],["shipped","Shipped"],["late","Past promise window"]];
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
@@ -4818,6 +4823,7 @@ function matchOne(o,s){
   if(s==="drawn") return o.state==="open"&&o.items.some((it,i)=>isFurnitureLine(it.product)&&lineDrawn(o,i));
   if(s==="open") return o.state==="open";
   if(s==="shipped") return o.state==="shipped";
+  if(s==="late") return isLate(o);
   if(s==="refunded") return o.state==="refunded";
   return false;
 }
@@ -5138,7 +5144,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
           +'<option value="paid">✓ Mark Paid → Orders</option>'
         +'</select>'
       :"";
-    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+lateChip(o)+draw+sig+payCtrl):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
