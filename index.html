@@ -146,6 +146,9 @@
   .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
   .teamstrip .addrow{max-width:420px}
   .promisetd{white-space:nowrap}
+  th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+  th.sortable:hover,th.sortable.on{color:var(--ox)}
+  .sortarr{font-size:9px;opacity:.7}
   .promise{display:inline-block;min-width:34px;text-align:center;padding:3px 9px;border-radius:20px;font:700 13px var(--mono)}
   .promise.ok{background:rgba(47,122,58,.14);color:#2f7a3a}
   .promise.late{background:rgba(179,38,30,.12);color:#b3261e}
@@ -265,6 +268,10 @@
       </div>
       <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
+        <select id="salessort" class="filtersel" onchange="const v=this.value.split(':');setSalesSort(v[0],v[1])" aria-label="Sort orders">
+          <option value="date:desc">Newest first</option><option value="date:asc">Oldest first</option>
+          <option value="promise:asc">Days to promise: most overdue first</option><option value="promise:desc">Days to promise: most time left first</option>
+          <option value="order:desc">Order number: high to low</option><option value="order:asc">Order number: low to high</option></select>
         <div id="salesstatuschips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         <span id="salescount" class="muted" style="align-self:center;margin-left:auto"></span>
       </div>
@@ -4755,7 +4762,11 @@ function switchTab(t){activeTab=t;document.querySelectorAll(".tab").forEach(b=>b
 /* ---- sales dashboard: incoming Shopify orders awaiting a spec ---- */
 function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Loading orders from Shopify…";}renderSalesDash();loadShopify().then(function(){buildFilters();renderSalesDash();});}
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
-let salesView="orders";  /* "orders" (paid/placed) | "drafts" */
+let salesView="orders";
+/* sort for the orders list: click a column header (Order · Days to promise · Ordered), or pick from the Sort menu */
+let salesSort={k:"date",dir:"desc"};
+function setSalesSort(k,dir){ if(dir)salesSort={k,dir}; else if(salesSort.k===k)salesSort.dir=salesSort.dir==="asc"?"desc":"asc"; else salesSort={k,dir:k==="promise"?"asc":"desc"};
+  const sel=$("salessort"); if(sel)sel.value=salesSort.k+":"+salesSort.dir; renderSalesDash(); }  /* "orders" (paid/placed) | "drafts" */
 function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");const t3=$("tab-production");if(t3)t3.classList.toggle("on",v==="production");salesStatuses.clear();buildFilters();renderSalesDash();}
 function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(function(){buildFilters();renderSalesDash();});}
 /* Shopify-derived status pill (Shipped / Paid / Draft …) */
@@ -5120,14 +5131,21 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
   if($("tab-production"))$("tab-production").textContent="Production status"+(nProd?" ("+nProd+")":"");
   const th=$("saleshead"), tbl=$("salestable");
-  if(th) th.innerHTML = salesView==="production" ? '<tr><th>Order</th><th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>' : '<tr><th>Order</th><th>Product</th><th>Customer</th><th title="Working days (Mon–Fri) left until the promised delivery">Days to promise</th><th>Ordered</th><th>Status</th><th></th></tr>';
+  const sh=(k,t,tip)=>'<th class="sortable'+(salesSort.k===k?" on":"")+'" onclick="setSalesSort(\''+k+'\')"'+(tip?' title="'+tip+'"':'')+'>'+t+' <span class="sortarr">'+(salesSort.k===k?(salesSort.dir==="asc"?"▲":"▼"):"↕")+'</span></th>';
+  if(th) th.innerHTML = salesView==="production" ? '<tr><th>Order</th><th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>'
+    : '<tr>'+sh("order","Order")+'<th>Product</th><th>Customer</th>'+sh("promise","Days to promise","Working days (Mon–Fri) left until the promised delivery — tap to sort")+sh("date","Ordered")+'<th>Status</th><th></th></tr>';
   if(tbl) tbl.classList.toggle("prodtable", salesView==="production");
   if(salesView==="production"){ renderProduction(q); return; }
   const list=SHOPIFY.filter(o=>salesView==="drafts"?o.isDraft:!o.isDraft)
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
     .filter(matchStatus)
     /* newest first — for drafts sort by the draft number (D1842 > D1841); orders keep newest-date order */
-    .sort((a,b)=>{ if(salesView==="drafts"){ const na=parseInt(String(a.order).replace(/\D/g,''))||0, nb=parseInt(String(b.order).replace(/\D/g,''))||0; return nb-na; } return (b.date||"").localeCompare(a.date||""); });
+    .sort((a,b)=>{ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
+      if(salesView==="drafts"&&salesSort.k==="date"&&salesSort.dir==="desc") return num(b)-num(a);
+      const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
+      let c = salesSort.k==="promise" ? left(a)-left(b) : salesSort.k==="order" ? num(a)-num(b) : (a.date||"").localeCompare(b.date||"")||num(a)-num(b);
+      if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
+      return salesSort.dir==="asc"?c:-c; });
   let html="",shown=0;
   const onlyDrawn=salesView==="orders"&&salesStatuses.size===1&&salesStatuses.has("drawn");
   list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;if(onlyDrawn&&!lineDrawn(o,i))return;shown++;

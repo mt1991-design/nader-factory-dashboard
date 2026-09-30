@@ -62,10 +62,12 @@ function setupBars(){
   const sbar=document.querySelector("#screen-sales .topbar");
   if(sbar){const a=sbar.querySelector('a[onclick*="openSalesForm"]'),d=sbar.querySelector('button[onclick="newDrawing()"]');
     if(a){a.removeAttribute("style");a.className="wr-new";a.innerHTML="＋ New order";a.title="New order (N)";}
-    if(d){d.removeAttribute("style");d.className="wr-new wr-newd";d.innerHTML="✎ New drawing";d.title="New drawing without a sales form (D)";}}
+    if(d){d.removeAttribute("style");d.className="wr-new wr-newd";d.innerHTML="✎ New drawing";d.title="New drawing without a sales form (D) — admin only";d.id="wrNewDrawing";}}
   const cream=window.LOGO_CREAM; if(cream)document.querySelectorAll('.wr-bar img[data-cream]').forEach(im=>im.src=cream);
 }
-function paintAvatar(){ if(!USER)return; paintGreet(); ["screen-sales","screen-factory","screen-admin"].forEach(id=>{const a=$("wrAv-"+id);if(a){a.textContent=initials(USER.name||USER.username);a.title="Signed in as "+(USER.name||USER.username);}}); }
+function paintAvatar(){ if(!USER)return; paintGreet();
+  /* New drawing is for admins only — sales agents go through the order form so everything is logged in drafts */
+  const nd=$("wrNewDrawing"); if(nd)nd.hidden=USER.roles.indexOf("admin")<0; ["screen-sales","screen-factory","screen-admin"].forEach(id=>{const a=$("wrAv-"+id);if(a){a.textContent=initials(USER.name||USER.username);a.title="Signed in as "+(USER.name||USER.username);}}); }
 
 /* ================= greeting: Good morning / afternoon / evening, <first name> ================= */
 function greetHTML(sub){
@@ -339,7 +341,7 @@ let palEl,palScrim,palItems=[],palSel=0;
 function commands(){
   const c=[], has=r=>USER&&USER.roles.indexOf(r)>=0;
   if(has("sales"))c.push({t:"New order",s:"Opens the sales form",k:"N",run:()=>openSalesForm(null,"")});
-  if(has("sales"))c.push({t:"New drawing",s:"Spec sheet without a sales form",k:"D",run:()=>newDrawing()});
+  if(has("admin"))c.push({t:"New drawing",s:"Spec sheet without a sales form (admin)",k:"D",run:()=>newDrawing()});
   ["sales","factory","admin"].forEach((r,i)=>{if(has(r)&&ROLE!==r)c.push({t:"Go to "+ROLE_LABEL[r],k:String(i+1),run:()=>switchView(r)});});
   if(has("sales"))c.push({t:"Production status",s:"Every piece and its stage",run:()=>{if(ROLE!=="sales")switchView("sales");setSalesView("production");}});
   if(ROLE!=="admin")c.push({t:(document.body.classList.contains("wr-workshop")?"Turn off":"Turn on")+" tablet mode",s:"Bigger buttons and text",k:"T",run:()=>setWorkshop(!document.body.classList.contains("wr-workshop"))});
@@ -390,7 +392,7 @@ document.addEventListener("keydown",e=>{
   else if(k==="1"||k==="2"||k==="3"){const r=["sales","factory","admin"][+k-1];if(has(r))switchView(r);}
   else if((k==="t"||k==="T")&&curScreen()!=="screen-admin")setWorkshop(!document.body.classList.contains("wr-workshop"));
   else if((k==="n"||k==="N")&&has("sales"))openSalesForm(null,"");
-  else if((k==="d"||k==="D")&&has("sales"))newDrawing();
+  else if((k==="d"||k==="D")&&has("admin"))newDrawing();
 });
 
 /* ================= boot ================= */
