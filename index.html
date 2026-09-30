@@ -4730,7 +4730,7 @@ const AUTO_BED=[/\b(douglas|duglas|douglass|dougles)\b/i,/\b(luna|lunna)\b/i,/\b
 const IS_BED=t=>/\b(bed|headboard)s?\b/i.test(t)&&!/\b(bedside|side\s*table|day\s*-?bed|sofa\s*bed|bed\s*side)\b/i.test(t);
 const dropSameAs=t=>String(t||"").replace(/\b(same|similar|like)\s+(as\s+)?(the\s+)?[a-z]+(\s+(sofa|bed|chair))?/gi," ");   /* "same as the Alara…" is a reference, not the product */
 /* tables / chairs / stools: the name AND the right kind of piece ("Chios Dining Table" ≠ a Chios chair) */
-const AUTO_PIECE=[[/\b(chios|khios)\b/i,/\btable\b/i],[/\b(cheltenham|cheltenhan|cheltnam|cheltnham)\b/i,/\btable\b/i],[/\bbaku\b/i,/\bchairs?\b/i],[/\bsaga\b/i,/stool/i]];
+const AUTO_PIECE=[[/\b(chios|khios)\b/i,/\btable\b/i],[/\b(cheltenham|cheltenhan|cheltnam|cheltnham)\b/i,/\btable\b/i],[/\bbaku\b/i,/\bchairs?\b/i],[/\bsaga\b/i,/stool/i],[/\b(trevor|trever)\b/i,/\btable\b/i],[/\baura\b/i,/\bsofa\b/i],[/\bchesterfield\b/i,/^(?!.*\b(custom|bespoke)\b).*\b(sofa|seater)\b/i]];
 function autoDrawable(title){title=dropSameAs(title);const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")))||AUTO_PIECE.some(([r,k])=>r.test(t)&&k.test(String(title||"")));}
 function isFurnitureLine(title){return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
