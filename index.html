@@ -4726,7 +4726,7 @@ const AUTO_DRAW=[/\bkober?\b/i,/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b
 const NOT_SOFA=/\b(arm\s*chair|armchair|chair|bed|headboard|table|stool|barstool|bench|ottoman|pouf|cushion|pillow)s?\b/i;
 function drawBase(t){return String(t||"").split(/\s+size\b|\s[-–|]\s|[:|(]|\s\d{2,}/i)[0];}
 /* bed templates: only for BED lines (never bedside tables / daybeds / sofa beds) */
-const AUTO_BED=[/\b(douglas|duglas|douglass|dougles)\b/i,/\b(luna|lunna)\b/i];
+const AUTO_BED=[/\b(douglas|duglas|douglass|dougles)\b/i,/\b(luna|lunna)\b/i,/\bash\b/i,/\b(cosmos|kosmos)\b/i,/\b(mazzini|mazini|mazzinni)\b/i,/\b(xanthe|xanth|zanthe)\b/i];
 const IS_BED=t=>/\b(bed|headboard)s?\b/i.test(t)&&!/\b(bedside|side\s*table|day\s*-?bed|sofa\s*bed|bed\s*side)\b/i.test(t);
 const dropSameAs=t=>String(t||"").replace(/\b(same|similar|like)\s+(as\s+)?(the\s+)?[a-z]+(\s+(sofa|bed|chair))?/gi," ");   /* "same as the Alara…" is a reference, not the product */
 function autoDrawable(title){title=dropSameAs(title);const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")));}
