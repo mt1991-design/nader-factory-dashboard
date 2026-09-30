@@ -275,6 +275,11 @@ const FETCH = {
     ]);
     return dedupe(open.concat(shipped)).sort(byNewest);
   },
+  /* KPI history: every order from the last 26 weeks (id/date/tags only) — weekly sparkline + lead time */
+  stats: async () => {
+    const since = new Date(Date.now() - 26 * 7 * 864e5).toISOString();
+    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,created_at,cancelled_at,tags`, 10);
+  },
   /* completed drafts already appear as orders — only open / invoice-sent drafts are needed (was: all ~1,500) */
   drafts: async () => {
     const [open, sent] = await Promise.all([
@@ -317,6 +322,40 @@ function crewFromTags(tags) {
     if (m) { (out[m[1]] = out[m[1]] || {})[m[2]] = { n: m[3], d: m[4] }; }
   });
   return out;
+}
+// When each line reached each stage: tags `pd:<line>:<stage>@<yyyy-mm-ddThh:mm>` (UAE time). Feeds lead time, days-in-stage and Today.
+function stageDatesFromTags(tags) {
+  const out = {};
+  String(tags || '').split(',').map(t => t.trim()).forEach(t => {
+    const m = t.match(/^pd:(\d+):(\d)@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/);
+    if (m) { (out[m[1]] = out[m[1]] || {})[m[2]] = m[3]; }
+  });
+  return out;
+}
+const uaeNow = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16);   // UAE = UTC+4, no DST
+// Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
+// Stays hidden until there are ≥5 finished lines AND ≥3 weeks since the first timed stage, so it's based on real data.
+function leadTime(raw) {
+  let first = null; const days = [];
+  raw.forEach(o => {
+    const pd = stageDatesFromTags(o.tags);
+    Object.keys(pd).forEach(line => {
+      Object.values(pd[line]).forEach(d => { if (!first || d < first) first = d; });
+      const packed = pd[line]['4'];
+      if (packed && o.created_at) days.push((Date.parse(packed + ':00+04:00') - Date.parse(o.created_at)) / 864e5);
+    });
+  });
+  const weeks = first ? (Date.now() - Date.parse(first + ':00+04:00')) / (7 * 864e5) : 0;
+  const ready = days.length >= 5 && weeks >= 3;
+  return { ready, n: days.length, since: first ? first.slice(0, 10) : '', weeks: Math.floor(weeks),
+    avg: ready ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : null };
+}
+// Orders placed per week for the last 12 weeks (oldest first, current week last) — the KPI sparkline.
+function weeklyOrders(raw) {
+  const wk = new Array(12).fill(0), now = Date.now();
+  raw.forEach(o => { if (o.cancelled_at || !o.created_at) return;
+    const w = Math.floor((now - Date.parse(o.created_at)) / (7 * 864e5)); if (w >= 0 && w < 12) wk[11 - w]++; });
+  return wk;
 }
 // Per-line-item production stage, stored on the order as tags `prodstage:<lineIndex>:<stage>`.
 // (legacy `prodstage:<stage>` = whole-order, applied to every line for backward-compat)
@@ -396,12 +435,14 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
       crew: crewFromTags(o.tags),
       prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length),
+      prod_dates: stageDatesFromTags(o.tags),
       prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
       items: mapLineItems(o.line_items)
     }));
     const out = factoryOnly(req) ? orders.map(stripPrice) : orders;
-    res.json({ ok: true, orders: out });
+    let stats = raw; try { stats = await cached('stats', FETCH.stats, false); } catch (e) {}
+    res.json({ ok: true, orders: out, lead: leadTime(stats), weekly: weeklyOrders(stats) });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
   }
@@ -455,10 +496,16 @@ app.post('/api/production', requireAuth, async (req, res) => {
       { headers: { 'X-Shopify-Access-Token': TOKEN } });
     if (!r.ok) throw new Error('Shopify ' + r.status);
     const cur = ((await r.json()).order || {}).tags || '';
-    // keep other tags; drop this line's old stage + any legacy whole-order stage
-    const tags = cur.split(',').map(t => t.trim()).filter(t =>
-      t && !new RegExp('^prodstage:' + line + ':').test(t) && !/^prodstage:\d+$/.test(t));
+    // keep other tags; drop this line's old stage + any legacy whole-order stage.
+    // Stage dates for this line: keep those below the new stage (and the new stage's own date if already set),
+    // drop any above it (the line was moved back), then date the new stage if it has no date yet.
+    const pdStage = t => { const m = t.match(/^pd:(\d+):(\d)@/); return m && +m[1] === line ? +m[2] : null; };
+    const tags = cur.split(',').map(t => t.trim()).filter(t => {
+      if (!t || new RegExp('^prodstage:' + line + ':').test(t) || /^prodstage:\d+$/.test(t)) return false;
+      const ps = pdStage(t); return ps == null || ps <= s;
+    });
     tags.push('prodstage:' + line + ':' + s);
+    if (s > 0 && !tags.some(t => pdStage(t) === s)) tags.push('pd:' + line + ':' + s + '@' + uaeNow());
     const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
       method: 'PUT',
       headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
