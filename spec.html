@@ -1671,7 +1671,7 @@ const CherryDraw=WarpDraw.make({
   yb:[0,13,119.5,214,226], yt:V=>[0,V.HB,V.HB+(V.L-V.HB)/2,V.HB+V.ML,V.L], topDepth:V=>V.L,
   hb:[0,3,28,63,98], ht:V=>[0,V.LH,V.BH,V.BH+(V.H-V.BH)/2,V.H], frontHeight:V=>V.H,
   callouts:true,
-  dimsTop(V,c){return bedTopDims(V,c,.2,.45,false).replace(`>${KobeDraw.fmt(V.HB)}</text>`,`>${KobeDraw.fmt(V.HB)}cm curve</text>`);},
+  dimsTop:(V,c)=>bedTopDims(V,c,.2,.45,false),
   dimsFront(V,c){
     const {X,Y,G,K,F,callout,hChain}=c, xL=X(0), xR=X(V.W), q=V.W/4, r=(V.H-V.BH)/2;
     let o=hChain([q,2*q,3*q],[F(q),F(q)],Y(V.H)-G,Y(V.H));
@@ -2281,9 +2281,9 @@ const MODELS={
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec(V){return bedSpec(V).concat([["Headboard Panels",ASH_P(bedPrep(V)).map(F2).join(" · ")+" cm"]]);}},
   cherry:{pending:true,bed:true,ver:"dwg1",match:/\b(cherry|cherri)\b/i,label:"Cherry Bed",name:"Cherry Leather Bed",defaults:CHERRY_DEFAULT,draw:CherryDraw,photoSide:"N",photo:PHOTO_CHERRY,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec:bedSpec},
-  chbed:{pending:true,bed:true,ver:"dwg1",match:/\bchesterfield\b/i,label:"Chesterfield Bed",name:"Chesterfield Bed Collection",defaults:CHBED_DEFAULT,draw:ChBedDraw,photoSide:"N",photo:PHOTO_CHBED,
+  chbed:{bed:true,ver:"dwg1",match:/\bchesterfield\b/i,label:"Chesterfield Bed",name:"Chesterfield Bed Collection",defaults:CHBED_DEFAULT,draw:ChBedDraw,photoSide:"N",photo:PHOTO_CHBED,
     sides:["N"],seats:false,fields:[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","from the floor"]]]],autoSpec:bedSpec},
-  carducci:{pending:true,bed:true,ver:"dwg1",match:/\b(carducci|carduci|carducchi)\b/i,label:"Carducci Bed",name:"Carducci Suede Bed",defaults:CARDUCCI_DEFAULT,draw:CarducciDraw,photoSide:"N",photo:PHOTO_CARDUCCI,
+  carducci:{bed:true,ver:"dwg1",match:/\b(carducci|carduci|carducchi)\b/i,label:"Carducci Bed",name:"Carducci Suede Bed",defaults:CARDUCCI_DEFAULT,draw:CarducciDraw,photoSide:"N",photo:PHOTO_CARDUCCI,
     sides:["N"],seats:false,fields:[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","from the floor, incl. feet"],["LH","Feet height"],["n","Headboard channels","between the 15 cm side panels"]]]],
     autoSpec(V){const w=CD_CH(bedPrep(V));return bedSpec(V).concat([["Headboard Channels",w.every(x=>x===w[0])?`${w.length} × ${F2(w[0])} cm`:`${w.length} — ends ${F2(w[0])} · middles ${F2(w[1])} cm`]]);}},
   mazzini:{bed:true,ver:"dwg1",match:/\b(mazzini|mazini|mazzinni)\b/i,label:"Mazzini Bed",name:"Mazzini Suede Bed",defaults:MAZZINI_DEFAULT,draw:MazziniDraw,photoSide:"N",photo:PHOTO_MAZZINI,
