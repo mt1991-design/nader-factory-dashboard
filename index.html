@@ -216,7 +216,7 @@
     <img id="saleslogo" alt="Nader" class="worklogo">
     <div class="topttl">Sales · New orders</div>
     <div class="topspacer"></div>
-    <a class="small" href="https://nader.ae/pages/sales-form" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
+    <a class="small" href="https://nader.ae/pages/sales-form" onclick="return openSalesForm(event,'')" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
     <button type="button" class="small" onclick="newDrawing()" title="Create a spec sheet / drawing without a sales form" style="display:inline-flex;align-items:center;gap:6px;background:#fff;color:#1c1a17;border:1px solid #cfc6b4;border-radius:9px;padding:8px 14px;font-weight:600;cursor:pointer">✎ New drawing</button>
     <span class="roleswitch" id="roleSwitch-sales"></span>
     <button class="ghost small" onclick="logout()">Log out</button>
@@ -5001,7 +5001,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const multi=o.items.length>1;
     const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
-    const editBtn=(i===0&&o.isDraft&&o.edit_state&&ROLE==="sales")?'<a class="pdflink" href="https://nader.ae/pages/sales-form#edit='+esc(o.edit_state)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Edit this order (sales only)">✎ Edit</a> ':"";
+    const editBtn=(i===0&&o.isDraft&&o.edit_state&&ROLE==="sales")?'<a class="pdflink" href="https://nader.ae/pages/sales-form#edit='+esc(o.edit_state)+'" target="_blank" rel="noopener" onclick="openSalesForm(event,\'edit='+esc(o.edit_state)+'\');event.stopPropagation()" title="Edit this order (sales only)">✎ Edit</a> ':"";
     const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
     const sig=(i===0&&o.isDraft)?(
         o.signature==="signed"
@@ -5036,6 +5036,10 @@ function orderInfoHTML(o){
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;
   const url="/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:specKey(lineId(o,i))}).toString();
   if(!SAVED_SPECS.has(specKey(lineId(o,i))))SAVED_SPECS.set(specKey(lineId(o,i)),{});window.open(url,"_blank");setTimeout(renderSalesDash,50);}
+/* the sales form is staff-only: open it with a signed pass from the server (who is logged in, valid 12h) */
+function openSalesForm(ev,hash){ if(ev)ev.preventDefault(); const w=window.open("about:blank","_blank");
+  fetch("/api/formlink",{credentials:"same-origin"}).then(r=>r.json()).then(d=>{const u="https://nader.ae/pages/sales-form"+(d&&d.ok?"?k="+encodeURIComponent(d.k):"")+(hash?"#"+hash:"");if(w)w.location=u;else location.href=u;})
+    .catch(()=>{if(w)w.close();alert("Couldn't open the sales form — check your connection.");}); return false; }
 function specKey(id){return String(id||"").replace(/[^A-Za-z0-9-]/g,"");}
 function newDrawing(){window.open("/spec.html?p="+encodeURIComponent("Kobe Corner Sofa"),"_blank");}
 function openOldSpecWorkspace(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;const it=o.items[i],id=lineId(o,i),ex=DB.getOrder(id);

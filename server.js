@@ -496,6 +496,17 @@ app.post('/api/crew', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// Staff pass for the sales form (nader.ae/pages/sales-form is staff-only): signed with FORM_SECRET, valid 12h.
+// The form asks the worker to verify it; it carries who logged in so the form can lock the Sales Agent.
+app.get('/api/formlink', requireAuth, (req, res) => {
+  if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'sales only' });
+  if (!FORM_SECRET) return res.status(500).json({ ok: false, error: 'not configured' });
+  const payload = Buffer.from(JSON.stringify({ u: req.session.username, n: req.session.name, a: hasRole(req, 'admin'), e: Date.now() + 12 * 3600e3 })).toString('base64url');
+  const sig = crypto.createHmac('sha256', FORM_SECRET).update(payload).digest('hex');
+  logEvent(req.session.username, 'sales_form_open', { ip: clientIp(req) });
+  res.json({ ok: true, k: payload + '.' + sig });
+});
+
 // Mark a cash / bank-transfer draft as PAID → completes the draft into a real (paid) order,
 // which moves it out of Drafts and into Orders. (Card orders convert via the checkout link.)
 app.post('/api/mark_paid', requireAuth, async (req, res) => {
