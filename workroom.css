@@ -54,6 +54,14 @@
 .wr-pill-ready{background:var(--w-ok-soft)!important;color:var(--w-ok)!important}
 .wrs .specbtn{border-radius:8px}
 
+/* ---- greeting ---- */
+.wr-greet{max-width:1400px;margin:0 auto;padding:22px 22px 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px}
+.wr-greet h2{margin:0;font:500 clamp(24px,3vw,30px)/1.1 var(--w-display);letter-spacing:-.005em;color:var(--w-ink);text-wrap:balance}
+.wr-greet p{margin:0;color:var(--w-muted);font-size:13px}
+.wr-greet+.wr-kpiwrap{padding-top:14px}
+#screen-factory .wr-greet+.dashgrid,#screen-admin .wr-greet+.dashgrid{padding-top:14px}
+@media (max-width:520px){.wr-greet{padding:16px 16px 0}}
+
 /* ---- KPI strip ---- */
 .wr-kpiwrap{max-width:1400px;margin:0 auto;padding:22px 22px 0}
 .wr-kpis{display:grid;grid-template-columns:1.05fr 1.15fr 1.5fr .95fr;gap:12px}

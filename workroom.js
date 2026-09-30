@@ -65,7 +65,26 @@ function setupBars(){
     if(d){d.removeAttribute("style");d.className="wr-new wr-newd";d.innerHTML="✎ New drawing";d.title="New drawing without a sales form (D)";}}
   const cream=window.LOGO_CREAM; if(cream)document.querySelectorAll('.wr-bar img[data-cream]').forEach(im=>im.src=cream);
 }
-function paintAvatar(){ if(!USER)return; ["screen-sales","screen-factory","screen-admin"].forEach(id=>{const a=$("wrAv-"+id);if(a){a.textContent=initials(USER.name||USER.username);a.title="Signed in as "+(USER.name||USER.username);}}); }
+function paintAvatar(){ if(!USER)return; paintGreet(); ["screen-sales","screen-factory","screen-admin"].forEach(id=>{const a=$("wrAv-"+id);if(a){a.textContent=initials(USER.name||USER.username);a.title="Signed in as "+(USER.name||USER.username);}}); }
+
+/* ================= greeting: Good morning / afternoon / evening, <first name> ================= */
+function greetHTML(sub){
+  const h=new Date(Date.now()+4*3600e3).getUTCHours();   /* UAE time */
+  const part=h<12?"Good morning":h<17?"Good afternoon":"Good evening";
+  const first=String((USER&&(USER.name||USER.username))||"").trim().split(/\s+/)[0];
+  const day=new Date(Date.now()+4*3600e3).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"});
+  return `<h2>${esc(part)}${first?", "+esc(first):""}</h2><p>${esc(day)}${sub?" · "+esc(sub):""}</p>`;
+}
+function paintGreet(){
+  if(!USER)return;
+  const open=SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").length, t=drawingTally(), left=t.all-t.done;
+  const lines=SHOPIFY.length?openLines(true).length:0;
+  const subs={"screen-sales":SHOPIFY.length?`${open} open order${open===1?"":"s"}, ${left} still to draw`:"",
+    "screen-factory":SHOPIFY.length?`${lines} piece${lines===1?"":"s"} on the floor`:"","screen-admin":"Team activity"};
+  Object.keys(subs).forEach(id=>{const sc=$(id);if(!sc)return;let g=sc.querySelector(".wr-greet");
+    if(!g){g=document.createElement("div");g.className="wr-greet";sc.querySelector(".topbar").after(g);}
+    g.innerHTML=greetHTML(subs[id]);});
+}
 
 /* ================= workshop mode ================= */
 function setWorkshop(on,silent,noSave){
@@ -254,7 +273,7 @@ renderSalesDash=function(){
   if(board){const q=($("salessearch").value||"").toLowerCase();const lines=boardFilter(openLines(false),q).filter(L=>salesMonth==="all"||(L.o.date||"").slice(0,7)===salesMonth);
     renderBoard($("wrBoardS"),lines,ROLE==="factory");const c=$("salescount");if(c)c.textContent=lines.length+" piece"+(lines.length===1?"":"s")+" in production";}
   else decorateRows();
-  renderKpis();
+  renderKpis(); paintGreet();
 };
 
 /* ================= Factory screen hooks ================= */
@@ -275,6 +294,7 @@ renderFactoryProd=function(){
   document.querySelector("#screen-factory .dashmain .otablewrap").hidden=board; $("wrBoardF").hidden=!board;
   if(board){const q=($("ordersearch").value||"").toLowerCase();const lines=boardFilter(openLines(true),q);renderBoard($("wrBoardF"),lines,true);
     const de=$("dashempty");if(de)de.style.display=lines.length?"none":"block";}
+  paintGreet();
   if(SPRING){const el=document.querySelector(`.crew[data-ck="${SPRING}"]`);if(el)el.classList.add("wr-spring");SPRING="";}
 };
 
