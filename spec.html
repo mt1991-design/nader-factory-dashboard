@@ -1124,7 +1124,9 @@ function bedTopDims(V,c,mattX,mattY,halves){
   const {X,Y,G,K,F,hChain}=c, xL=X(0), xR=X(V.W), mid=V.HB+(V.L-V.HB)/2;
   let o=(halves==='inner'?hChain([V.FR,V.W/2,V.W-V.FR],null,Y(0)-G,Y(0)):halves?hChain([0,V.W/2,V.W],null,Y(0)-G,Y(0)):"")+hChain([0,V.W],null,Y(0)-(halves?2:1)*G,Y(0));
   o+=K.chainV([Y(0),Y(V.L)],xL-G,xL,[F(V.L)]);
-  o+=K.chainV([Y(0),Y(V.HB),Y(mid),Y(V.L)],xR+G,xR,[F(V.HB),F(mid-V.HB),F(V.L-mid)]);
+  /* the headboard is thin: its number goes right beside the headboard band, not off the end of the chain */
+  o+=K.chainV([Y(0),Y(V.HB),Y(mid),Y(V.L)],xR+G,xR,["",F(mid-V.HB),F(V.L-mid)]);
+  o+=`<text x="${(xR+G+10).toFixed(1)}" y="${((Y(0)+Y(V.HB))/2).toFixed(1)}" text-anchor="start" dominant-baseline="central" font-size="20" font-weight="800" fill="#1c1a17" paint-order="stroke" stroke="#fff" stroke-width="5">${F(V.HB)}</text>`;
   o+=K.chainV([Y(V.HB),Y(V.L)],xR+2*G,xR,[F(V.L-V.HB)]);
   o+=innerH(K,X(V.FR),X(V.W-V.FR),Y(V.HB+V.ML*.28),F(V.MW));                       // mattress space
   o+=K.innerV([Y(V.HB),Y(V.HB+V.ML)],X(V.FR+V.MW*mattX),[F(V.ML)]);
@@ -2270,10 +2272,10 @@ const MODELS={
         ["Seat Widths",AL_SEATS(V).map(F2).join(" · ")+" cm"],["Arm Width",armText(V,`${F2(V.A)} cm`)]];}},
   xanthe:{bed:true,ver:"dwg1",match:/\b(xanthe|xanth|zanthe)\b/i,label:"Xanthe Bed",name:"Xanthe Velvet Bed",defaults:XANTHE_DEFAULT,draw:XantheDraw,photoSide:"N",photo:PHOTO_XANTHE,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec:bedSpec},
-  signoria:{pending:true,bed:true,ver:"dwg1",match:/\b(signoria|signora|signioria)\b/i,label:"Signoria Bed",name:"Signoria Suede Bed",defaults:SIGNORIA_DEFAULT,draw:SignoriaDraw,photoSide:"N",photo:PHOTO_SIGNORIA,
+  signoria:{bed:true,ver:"dwg1",match:/\b(signoria|signora|signioria)\b/i,label:"Signoria Bed",name:"Signoria Suede Bed",defaults:SIGNORIA_DEFAULT,draw:SignoriaDraw,photoSide:"N",photo:PHOTO_SIGNORIA,
     sides:["N"],seats:false,fields:[["Top view",BED_TOP],["Front elevation",[["H","Headboard height","from the floor"],["BH","Frame height","plinth base, from the floor"],["n","Headboard channels","between the side panels"]]]],
     autoSpec(V){const w=SG_CH(bedPrep(V));return bedSpec(V).concat([["Headboard Channels",w.every(x=>x===w[0])?`${w.length} × ${F2(w[0])} cm`:`${w.length} — ends ${F2(w[0])} · middles ${F2(w[1])} cm`]]);}},
-  mapel:{pending:true,bed:true,ver:"dwg1",match:/\b(maple|mapel)\b/i,label:"Maple Bed",name:"Maple Leather Bed",defaults:MAPEL_DEFAULT,draw:MapelDraw,photoSide:"N",photo:PHOTO_MAPEL,
+  mapel:{bed:true,ver:"dwg1",match:/\b(maple|mapel)\b/i,label:"Maple Bed",name:"Maple Leather Bed",defaults:MAPEL_DEFAULT,draw:MapelDraw,photoSide:"N",photo:PHOTO_MAPEL,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec:bedSpec},
   ash:{bed:true,ver:"dwg1",match:/\bash\b/i,label:"Ash Bed",name:"Ash Leather Bed",defaults:ASH_DEFAULT,draw:AshDraw,photoSide:"N",photo:PHOTO_ASH,
     sides:["N"],seats:false,fields:DOUG_FIELDS,autoSpec(V){return bedSpec(V).concat([["Headboard Panels",ASH_P(bedPrep(V)).map(F2).join(" · ")+" cm"]]);}},
