@@ -4722,7 +4722,7 @@ function monthLabel(ym){const p=String(ym).split("-");return p.length>=2?(MONTHS
 function isShipped(o){return o.state==="shipped";}
 /* Needs drawing = an open order whose drawing hasn't been started yet (production still at Drawing). */
 /* products with a traced DWG template draw automatically on the spec sheet (keep in sync with MODELS in spec.html) */
-const AUTO_DRAW=[/\bkober?\b/i,/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,/\b(thistle|thistel|thristle|thrstle|thisle)\b/i,/\b(ueno|ueeno)\b/i,/\b(yokohama|yokohoma|yakohama|yokohma|yokahama)\b/i,/\b(namba|nambas|nanba)\b/i,/\b(asakusa|asakosa|asakousa|asaksa)\b/i,/\b(fukuoka|fukoka|fukoku|fukuoko|fukouka)\b/i,/\b(mapleton|mapelton|maplton|mapletton|mappleton)\b/i,/\b(rivoli|rivolli|rivoly)\b/i,/\b(kanda|kandaa|khanda)\b/i,/\b(plush\s*lily|lily\s*u)\b/i];
+const AUTO_DRAW=[/\bkober?\b/i,/\b(ladbroke|ladboke|ladborke|ladbrok|ladbroek)\b/i,/\b(thistle|thistel|thristle|thrstle|thisle)\b/i,/\b(ueno|ueeno)\b/i,/\b(yokohama|yokohoma|yakohama|yokohma|yokahama)\b/i,/\b(namba|nambas|nanba)\b/i,/\b(asakusa|asakosa|asakousa|asaksa)\b/i,/\b(fukuoka|fukoka|fukoku|fukuoko|fukouka)\b/i,/\b(mapleton|mapelton|maplton|mapletton|mappleton)\b/i,/\b(rivoli|rivolli|rivoly)\b/i,/\b(kanda|kandaa|khanda)\b/i,/\b(plush\s*lily|lily\s*u)\b/i,/\b(alara|allara|alarah)\b/i];
 const NOT_SOFA=/\b(arm\s*chair|armchair|chair|bed|headboard|table|stool|barstool|bench|ottoman|pouf|cushion|pillow)s?\b/i;
 function drawBase(t){return String(t||"").split(/\s+size\b|\s[-–|]\s|[:|(]|\s\d{2,}/i)[0];}
 /* bed templates: only for BED lines (never bedside tables / daybeds / sofa beds) */
