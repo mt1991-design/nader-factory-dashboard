@@ -2100,7 +2100,12 @@ const SakaiDraw=PieceDraw.make({
   dimsPlan(V,c){const {X,Y,G,K,F}=c,W=V.W,D=V.D,xL=X(0),xR=X(W);
     let o=c.hChain([0,2,W-2,W],[F(2),F(W-4),F(2)],Y(D)+G,Y(D))+c.hChain([0,W],null,Y(D)+2*G,Y(D));
     o+=K.chainV([Y(0),Y(D)],xL-G,xL,[F(D)]);
-    o+=K.chainV([Y(0),Y(2),Y(6),Y(D)],xR+G,xR,[F(2),F(4),F(D-6)]);return o;},
+    /* as the drawing: the 2 (back frame) and 4 (back cushion) written beside their lines with leaders */
+    const xc=xR+G;o+=K.chainV([Y(0),Y(2),Y(6),Y(D)],xc,xR,["","",F(D-6)]);
+    const DC="#9a7b45",lbl=(x,y,t)=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="start" dominant-baseline="central" font-size="20" font-weight="800" fill="#1c1a17">${t}</text>`;
+    o+=`<line x1="${xc}" y1="${Y(1)}" x2="${xc+14}" y2="${Y(0)-16}" stroke="${DC}" stroke-width=".9"/>`+lbl(xc+17,Y(0)-18,F(2));
+    o+=`<line x1="${xc}" y1="${Y(4)}" x2="${xc+14}" y2="${Y(6)+16}" stroke="${DC}" stroke-width=".9"/>`+lbl(xc+17,Y(6)+18,F(4));
+    return o;},
   dimsFront(V,c){const {XF,Y,G,K,F,W}=c,xL=XF(0),xR=XF(W);
     let o=K.chainV([Y(0),Y(V.SB),Y(V.SH)],xL-G,xL,[F(V.SB),F(V.SH-V.SB)]);
     o+=K.chainV([Y(V.H-15),Y(V.H)],xR+G,xR,[F(15)])+K.chainV([Y(0),Y(V.FH)],xR+G,xR,[F(V.FH)]);
@@ -2475,6 +2480,9 @@ function applyOrderText(O,text){
     /* two numbers: the bigger one is the overall width, the smaller the chaise ("220 × 290" = 290 wide, 220 chaise) */
     if(sz&&!sz3&&+sz[2]>+sz[1]){const w=sz[2];sz[2]=sz[1];sz[1]=w;}
     if(sz&&!(sz3&&v.side==="U"&&"RR" in v)){v.W=+sz[1];if(+sz[2]>v.D+10)v.RL=+sz[2];}
+    /* a single width: "size: 330cm", "width 260", "… Sofa - 260" */
+    if(!sz&&!sz3){const one=t.match(/(?:size|width)\s*:?\s*(\d{3})\s*(?:cm)?\b(?!\s*[x×])/i)||t.match(/[-–]\s*(\d{3})\s*(?:cm)?\s*(?=$|[-–|,\n])/im);
+      if(one&&+one[1]>=120&&+one[1]<=600&&"W" in v)v.W=+one[1];}
     const hand=/\b(rhf|right[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?right|right[\s-]*(side\s*)?chaise/i.test(t)?"R":
                /\b(lhf|left[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?left|left[\s-]*(side\s*)?chaise/i.test(t)?"L":null;
     if(v.side==="U"){ if("SHAPE" in v&&hand&&!/\bu[\s-]*shape/i.test(t)){v.SHAPE=hand==="R"?"CR":"CL"; if(hand==="R"&&"RR" in v&&sz&&+sz[2]>v.D+10)v.RR=+sz[2];} }
