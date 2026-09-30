@@ -824,12 +824,16 @@ app.get('/api/file/:fid', requireAuth, async (req, res) => {
 /* ---------- ADMIN: sales per agent / month / product (owners only) ---------- */
 async function docGet(name) { const d = await workerJson('/doc/' + name); return (d && d.ok && d.data) || null; }
 async function docSet(name, data) { return workerJson('/doc/' + name, { method: 'POST', body: JSON.stringify({ data }) }); }
+// Sales agent of an order: the sales form writes "Agent: Name" in the note; older orders only know which Shopify staff
+// account created them (named once by the owners). Names are tidied (capitals) so the same person adds up across both.
+const tidyName = n => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/\b([a-z])/g, c => c.toUpperCase());
 function agentOf(o, map) {
   const m = String(o.note || '').match(/Agent:\s*([^\n·]+?)\s*(?:·|\n|$)/);
-  if (m && m[1].trim()) return m[1].trim();
-  if (o.user_id && map[o.user_id]) return map[o.user_id];
+  if (m && m[1].trim() && !/^other$/i.test(m[1].trim())) return tidyName(m[1]);
+  if (o.user_id && map[o.user_id]) return tidyName(map[o.user_id]);
   if (o.user_id) return 'Staff account …' + String(o.user_id).slice(-4);
-  if (o.source_name === 'web') return 'Website';
+  if (o.source_name === 'web') return 'Online order';
+  if (m) return 'Other (sales form)';
   return 'Other';
 }
 app.get('/api/admin/sales', requireAuth, async (req, res) => {

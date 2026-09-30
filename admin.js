@@ -39,7 +39,7 @@ function groupProducts(lines){
   return Object.values(G).map(g=>{const best=Object.entries(g.names).sort((a,b)=>b[1]-a[1])[0][0];return {name:titleCase(best),cat:g.cat,q:g.q,v:g.v,variants:Object.keys(g.names)};});
 }
 const PAL=["#6B1A22","#A98B54","#3F5E73","#5F6B3A","#8A4B2A","#7A5A9A","#2E6A5E","#9A4C62"];
-const isAgent=a=>a!=="Website"&&a!=="Other";
+const isAgent=a=>a!=="Online order"&&a!=="Website"&&!/^Other/.test(a);
 
 let DATA=null,LOADING=false,TAB="sales",MONTH="",AGENT="all",LBP="month";
 
@@ -131,8 +131,11 @@ function renderSales(){
     ${lateL.map(r=>`<tr><td><b>${esc(r.n)}</b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}</td><td>${r.p.lo}–${r.p.hi} days</td><td><span class="promise late">−${r.p.over}</span></td></tr>`).join("")||'<tr><td colspan="6" class="ad-m">Nothing overdue. 🎉</td></tr>'}</tbody></table></div></div>`;
   /* name the Shopify staff accounts */
   const acc=Object.entries(DATA.accounts||{}).sort((a,b)=>b[1].n-a[1].n);
-  if(acc.length) h+=`<div class="ad-card"><div class="ad-h">Who is each Shopify staff account? <span>older orders only know which account created them. Name each one once and their orders count for that agent.</span></div>
-    <div class="ad-accts">${acc.map(([uid,a])=>`<label class="ad-acct"><span>Account …${uid.slice(-4)} <em>${a.n} orders</em></span><input type="text" data-uid="${uid}" value="${esc(a.name||"")}" placeholder="Agent name"></label>`).join("")}</div></div>`;
+  const ex=uid=>rows().filter(r=>String(r.u)===uid).sort((a,b)=>b.d.localeCompare(a.d)).slice(0,2);
+  if(acc.length) h+=`<div class="ad-card"><div class="ad-h">Who is each Shopify staff account? <span>Older orders only know which Shopify account created them. Tap "Who is this?" (opens their page in Shopify, the name is at the top) or open one of their orders, then type the name once. Use the same spelling as the sales form so their orders add up.</span></div>
+    <div class="ad-accts">${acc.map(([uid,a])=>`<label class="ad-acct"><span>Account …${uid.slice(-4)} <em>${a.n} orders</em></span>
+      <span class="ad-m"><a href="https://admin.shopify.com/store/91fb05/settings/account/${uid}" target="_blank" rel="noopener">Who is this? ↗</a> · e.g. ${ex(uid).map(r=>`<a href="https://admin.shopify.com/store/91fb05/orders/${r.id}" target="_blank" rel="noopener">${esc(r.n)}</a>`).join(", ")}</span>
+      <input type="text" data-uid="${uid}" value="${esc(a.name||"")}" placeholder="Agent name"></label>`).join("")}</div></div>`;
   $("adSales").innerHTML=h;
   $("adMonth").onchange=e=>{MONTH=e.target.value;renderSales();};
   $("adAgent").onchange=e=>{AGENT=e.target.value;renderSales();};
