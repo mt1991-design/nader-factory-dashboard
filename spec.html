@@ -1851,7 +1851,7 @@ function applyOrderText(O,text){
     const lg=t.match(/\bleg[^:\n]{0,12}[:\-]\s*(\d{1,2})\s*cm/i);if(lg&&+lg[1]<30)v.LH=+lg[1];
     applyArms(v,t);
     /* "+ ottoman", "With Ottoman: 80x100cm", "1 extra ottoman" … (not "no ottoman") */
-    if(/ottoman/i.test(t)&&!/\bno\s+ottoman|without\s+(an?\s+)?ottoman/i.test(t)&&MODELS[O.model]&&hasOtt(MODELS[O.model])){v.OTT=1;
+    if(/ottoman/i.test(t)&&!/\bno\s+ottoman|without\s+(an?\s+)?ottoman|ottoman[^\n]{0,6}:\s*no\b/i.test(t)&&MODELS[O.model]&&hasOtt(MODELS[O.model])){v.OTT=1;
       const os=t.match(/ottoman[^\n\d]{0,25}(\d{2,3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})(?:\s*(?:cm)?\s*[x×]\s*(\d{2,3}))?/i);
       if(os){v.OTW=+os[1];v.OTD=+os[2];if(os[3])v.OTH=+os[3];v.OTS=1;}}
     if(/\bstraight\b|no\s*chaise|without\s*(the\s*)?chaise|standard\s*sofa/i.test(t)){if("SHAPE" in v)v.SHAPE="S";else if(O.model&&MODELS[O.model].sides.includes("N"))v.side="N";}
