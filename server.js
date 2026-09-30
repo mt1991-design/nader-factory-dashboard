@@ -309,6 +309,15 @@ function extractPdf(note) {
 // Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing). Shared + persistent.
 const PROD_STAGE_COUNT = 5;
 const clampStage = n => Math.max(0, Math.min(PROD_STAGE_COUNT - 1, parseInt(n, 10) || 0));
+// Who did each production stage of each line: tags `crew:<line>:<stage>:<Name>@<yyyy-mm-dd>` (stage 1 Carpentry … 4 Packing)
+function crewFromTags(tags) {
+  const out = {};
+  String(tags || '').split(',').map(t => t.trim()).forEach(t => {
+    const m = t.match(/^crew:(\d+):(\d):(.+?)@(\d{4}-\d{2}-\d{2})$/);
+    if (m) { (out[m[1]] = out[m[1]] || {})[m[2]] = { n: m[3], d: m[4] }; }
+  });
+  return out;
+}
 // Per-line-item production stage, stored on the order as tags `prodstage:<lineIndex>:<stage>`.
 // (legacy `prodstage:<stage>` = whole-order, applied to every line for backward-compat)
 function prodStagesFromTags(tags, nLines) {
@@ -385,6 +394,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       shipping_address: mapAddress(o.shipping_address),
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
+      crew: crewFromTags(o.tags),
       prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length),
       prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
@@ -461,6 +471,29 @@ app.post('/api/production', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+// Factory drags a team member onto a production stage of a line (or clears it: name empty)
+app.post('/api/crew', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'factory')) return res.status(403).json({ ok: false, error: 'factory only' });
+  const b = req.body || {}, id = b.id, line = Math.max(0, parseInt(b.line, 10) || 0), stage = parseInt(b.stage, 10);
+  const name = String(b.name || '').replace(/[,@:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 24);
+  if (!id || !(stage >= 1 && stage <= 4)) return res.status(400).json({ ok: false, error: 'bad request' });
+  try {
+    const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    if (!r.ok) throw new Error('Shopify ' + r.status);
+    const cur = ((await r.json()).order || {}).tags || '';
+    const tags = cur.split(',').map(t => t.trim()).filter(t => t && !t.startsWith('crew:' + line + ':' + stage + ':'));
+    const day = new Date().toISOString().slice(0, 10);
+    if (name) tags.push('crew:' + line + ':' + stage + ':' + name + '@' + day);
+    const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
+      method: 'PUT', headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });
+    if (!up.ok) throw new Error('Shopify PUT ' + up.status);
+    if (CACHE.orders) delete CACHE.orders;
+    logEvent(req.session.username, 'crew', { id, line, stage, name, ip: clientIp(req) });
+    res.json({ ok: true, line, stage, name, date: day });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // Mark a cash / bank-transfer draft as PAID → completes the draft into a real (paid) order,

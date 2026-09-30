@@ -131,6 +131,21 @@
   .plabel:first-child{text-align:left}
   .plabel:last-child{text-align:right}
   .plabel.on{color:#256b30}
+  /* who did each stage — drop a team member's name on a stage */
+  .crewrow{display:flex;margin-top:6px}
+  .crewcell{flex:1;display:flex;justify-content:center}
+  .crewcell:first-child{justify-content:flex-start}
+  .crewcell:last-child{justify-content:flex-end}
+  .crew{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:11px;background:var(--ox);color:#fff;font:700 10.5px var(--ui);letter-spacing:.02em;white-space:nowrap;max-width:92px;overflow:hidden;text-overflow:ellipsis;cursor:default;transition:transform .15s,box-shadow .15s}
+  .crew .x{opacity:.0;font-size:12px;cursor:pointer;margin-left:2px}
+  .crew.edit:hover .x{opacity:.85}
+  .crew.empty{background:transparent;color:var(--ink2);border:1.5px dashed var(--panelline);padding:0 9px;font-weight:600}
+  .crew.empty.edit{cursor:pointer}
+  .crew.over{transform:scale(1.12);box-shadow:0 0 0 3px rgba(47,122,58,.35);border-color:#2f7a3a;color:#256b30}
+  .workerrow.pick{outline:2px solid #2f7a3a;background:rgba(47,122,58,.08)}
+  .workerrow[draggable=true] span{cursor:grab}
+  .lbgrid4{grid-template-columns:repeat(4,1fr)!important}
+  @media(max-width:900px){.lbgrid4{grid-template-columns:1fr 1fr!important}}
   .speccomplete{font:600 10.5px var(--mono);padding:2px 7px;border-radius:20px}
   .speccomplete.yes{background:rgba(47,122,58,.16);color:#2f7a3a}
   .speccomplete.no{background:rgba(180,140,20,.18);color:#8a6d10}
@@ -257,12 +272,14 @@
       <div class="addrow"><input type="text" id="newworker" placeholder="Add a name" onkeydown="if(event.key=='Enter')addWorker()"><button class="ghost small" onclick="addWorker()">Add</button></div>
     </div>
     <div class="card lbcard">
-      <div class="cardhdr"><span>Leaderboard · sofas completed</span>
+      <div class="cardhdr"><span>Leaderboard · pieces finished per stage</span>
         <div class="lbtabs"><button class="lbtab" data-d="7" onclick="setLbDays(7)">7 days</button><button class="lbtab on" data-d="30" onclick="setLbDays(30)">30 days</button><button class="lbtab" data-d="90" onclick="setLbDays(90)">90 days</button></div>
       </div>
-      <div class="lbgrid">
+      <div class="lbgrid lbgrid4">
         <div><div class="lbhd">Carpenters</div><div id="lb-carpenter"></div></div>
+        <div><div class="lbhd">Foamers</div><div id="lb-foamer"></div></div>
         <div><div class="lbhd">Fabricators</div><div id="lb-fabricator"></div></div>
+        <div><div class="lbhd">Packers</div><div id="lb-packer"></div></div>
       </div>
     </div>
   </div>
@@ -4851,6 +4868,28 @@ function setProdStageServer(id,line,idx){
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } if(ROLE==="factory"){ renderFactoryProd(); } else { renderSalesDash(); } } else { alert("Couldn't update — factory login required."); } })
     .catch(function(){ alert("Network error updating production."); });
 }
+/* ---- crew: who did Carpentry / Foaming / Fabrication / Packing on each line (drag a name from the Factory team) ---- */
+const CREW_ROLES={1:"Carpenter",2:"Foamer",3:"Fabricator",4:"Packer"};
+let CREW_PICK="";   /* touch: tap a name, then tap a stage */
+function crewRow(o,line,editable){
+  const c=((o.crew||{})[line])||{};
+  let cells='<div class="crewcell"></div>';                                  /* Drawing: done by sales / automatically */
+  for(let st=1;st<=4;st++){const a=c[st],oid=esc(String(o.id));
+    const drop=editable?(' ondragover="crewOver(event,this)" ondragleave="this.classList.remove(\'over\')" ondrop="crewDrop(event,\''+oid+'\','+line+','+st+',this)" onclick="event.stopPropagation();crewTap(\''+oid+'\','+line+','+st+')"'):'';
+    cells+='<div class="crewcell">'+(a
+      ?'<span class="crew'+(editable?' edit':'')+'" title="'+PROD_STAGES[st]+' — '+esc(a.n)+' · '+esc(a.d)+'"'+drop+'>'+esc(a.n)+(editable?'<span class="x" title="Remove" onclick="event.stopPropagation();setCrew(\''+oid+'\','+line+','+st+',\'\')">×</span>':'')+'</span>'
+      :(editable?'<span class="crew empty edit" title="Drop a name for '+PROD_STAGES[st]+'"'+drop+'>+</span>':''))+'</div>';}
+  return '<div class="crewrow">'+cells+'</div>';
+}
+function crewOver(ev,el){ev.preventDefault();el.classList.add('over');}
+function crewDrop(ev,id,line,st,el){ev.preventDefault();ev.stopPropagation();el.classList.remove('over');const n=ev.dataTransfer.getData('text/plain');if(n)setCrew(id,line,st,n);}
+function crewTap(id,line,st){if(CREW_PICK){const n=CREW_PICK;CREW_PICK="";renderWorkers();setCrew(id,line,st,n);}}
+function setCrew(id,line,st,name){
+  const o=SHOPIFY.find(x=>String(x.id)===String(id));
+  if(o){o.crew=o.crew||{};const c=o.crew[line]=o.crew[line]||{};if(name)c[st]={n:name,d:new Date().toISOString().slice(0,10)};else delete c[st];renderFactoryProd();}   /* show it straight away */
+  fetch("/api/crew",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,stage:st,name})})
+    .then(r=>r.json()).then(d=>{if(!d||!d.ok)alert("Couldn't save — factory login required.");}).catch(()=>alert("Network error saving the name."));
+}
 function prodBar(o,line,cur,editable){
   const n=PROD_STAGES.length;
   let row="";
@@ -4861,7 +4900,7 @@ function prodBar(o,line,cur,editable){
     if(i<n-1) row+='<div class="pconn'+(i<cur?" done":"")+'"></div>';
   }
   const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur?" on":"")+'">'+nm+'</span>').join("");
-  return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div></div>';
+  return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div>'+crewRow(o,line,editable)+'</div>';
 }
 function renderProduction(q){
   const tb=$("salesrows"); if(!tb) return;
@@ -5060,7 +5099,11 @@ let lbDays=30;
 function completedOn(o){return (o.qc&&(o.qc.date||o.qc.updatedAt))||o.lockedAt||"";}
 function leaderboard(role,days){const cutoff=Date.now()-days*864e5,c={};DB.orders().forEach(o=>{if(!o.qc)return;const n=((o.qc[role]||"")+"").trim();if(!n)return;const t=Date.parse(completedOn(o));if(isNaN(t)||t<cutoff)return;c[n]=(c[n]||0)+1;});return Object.keys(c).map(k=>[k,c[k]]).sort((a,b)=>b[1]-a[1]);}
 function setLbDays(d){lbDays=d;document.querySelectorAll(".lbtab").forEach(b=>b.classList.toggle("on",+b.dataset.d===d));renderLeaderboard();}
-function renderLeaderboard(){["carpenter","fabricator"].forEach(role=>{const box=$("lb-"+role);if(!box)return;const rows=leaderboard(role,lbDays);if(!rows.length){box.innerHTML='<div class="hint" style="margin:0">No completions logged in this period.</div>';return;}box.innerHTML=rows.map((r,i)=>`<div class="lbrow${i===0?" top":""}"><span class="lbrank">${i+1}</span><span class="lbname"></span><span class="lbcount">${r[1]}<span>sofa${r[1]===1?"":"s"}</span></span></div>`).join("");[].forEach.call(box.querySelectorAll(".lbname"),(el,i)=>el.textContent=rows[i][0]);});}
+/* pieces each person finished per stage: their name is on the stage AND the line has moved past it (dated by when they were given it) */
+function crewBoard(st,days){const cutoff=Date.now()-days*864e5,c={};(typeof SHOPIFY!=="undefined"?SHOPIFY:[]).forEach(o=>{const cr=o.crew||{},ps=o.prod_stages||[];
+  Object.keys(cr).forEach(line=>{const a=cr[line][st];if(!a)return;const done=(ps[line]||0)>st||o.state==="shipped";if(!done)return;const t=Date.parse(a.d);if(isNaN(t)||t<cutoff)return;c[a.n]=(c[a.n]||0)+1;});});
+  return Object.keys(c).map(k=>[k,c[k]]).sort((a,b)=>b[1]-a[1]);}
+function renderLeaderboard(){[[1,"carpenter"],[2,"foamer"],[3,"fabricator"],[4,"packer"]].forEach(([st,role])=>{const box=$("lb-"+role);if(!box)return;const rows=crewBoard(st,lbDays);if(!rows.length){box.innerHTML='<div class="hint" style="margin:0">Nothing finished in this period yet.</div>';return;}box.innerHTML=rows.map((r,i)=>`<div class="lbrow${i===0?" top":""}"><span class="lbrank">${i+1}</span><span class="lbname"></span><span class="lbcount">${r[1]}<span>piece${r[1]===1?"":"s"}</span></span></div>`).join("");[].forEach.call(box.querySelectorAll(".lbname"),(el,i)=>el.textContent=rows[i][0]);});}
 function openOrder(id){const o=DB.getOrder(id);if(!o)return;curOrderId=id;mode="factory";
   $("rolechip").textContent="Factory";$("salesbtns").hidden=true;$("factorybtns").hidden=false;
   $("worktitle").textContent="Order "+id;$("backbtn").textContent="‹ Dashboard";$("backbtn").onclick=exitWork;
@@ -5073,7 +5116,13 @@ function openOrder(id){const o=DB.getOrder(id);if(!o)return;curOrderId=id;mode="
   applyQCMode();loadQC(o.qc);switchTab("photo");reset3D();}
 
 /* ---- factory team roster ---- */
-function renderWorkers(){const box=$("workerlist");if(!box)return;const w=DB.workers();box.innerHTML="";if(!w.length){box.innerHTML='<div class="hint" style="margin:0">No names added yet.</div>';return;}w.forEach((n,i)=>{const r=document.createElement("div");r.className="workerrow";r.innerHTML=`<span></span><button title="Remove" onclick="delWorker(${i})">×</button>`;r.firstChild.textContent=n;box.appendChild(r);});}
+function renderWorkers(){const box=$("workerlist");if(!box)return;const w=DB.workers();box.innerHTML="";if(!w.length){box.innerHTML='<div class="hint" style="margin:0">No names added yet.</div>';return;}
+  w.forEach((n,i)=>{const r=document.createElement("div");r.className="workerrow"+(CREW_PICK===n?" pick":"");r.draggable=true;r.title="Drag onto Carpentry / Foaming / Fabrication / Packing — or tap, then tap a stage";
+    r.innerHTML=`<span></span><button title="Remove" onclick="delWorker(${i})">×</button>`;r.firstChild.textContent=n;
+    r.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",n);e.dataTransfer.effectAllowed="copy";});
+    r.firstChild.addEventListener("click",()=>{CREW_PICK=CREW_PICK===n?"":n;renderWorkers();});
+    box.appendChild(r);});
+  const tip=document.createElement("div");tip.className="hint";tip.style.margin="4px 0 0";tip.textContent=CREW_PICK?("Now tap a stage to give it to "+CREW_PICK+"."):"Drag a name onto a stage (or tap a name, then a stage).";box.appendChild(tip);}
 function addWorker(){const inp=$("newworker"),n=(inp.value||"").trim();if(!n)return;const w=DB.workers();if(!w.includes(n))w.push(n);DB.saveWorkers(w);inp.value="";renderWorkers();}
 function delWorker(i){const w=DB.workers();w.splice(i,1);DB.saveWorkers(w);renderWorkers();}
 
