@@ -146,6 +146,7 @@
   .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
   .teamstrip .addrow{max-width:420px}
   .promisetd{white-space:nowrap}
+  .sortlabel{display:inline-flex;align-items:center;gap:8px;font:600 12px var(--ui);color:var(--ink2)}
   th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
   th.sortable:hover,th.sortable.on{color:var(--ox)}
   .sortarr{font-size:9px;opacity:.7}
@@ -270,10 +271,11 @@
       </div>
       <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
+        <label class="sortlabel">Sort by
         <select id="salessort" class="filtersel" onchange="const v=this.value.split(':');setSalesSort(v[0],v[1])" aria-label="Sort orders">
-          <option value="date:desc">Newest first</option><option value="date:asc">Oldest first</option>
-          <option value="promise:asc">Days to promise: most overdue first</option><option value="promise:desc">Days to promise: most time left first</option>
-          <option value="order:desc">Order number: high to low</option><option value="order:asc">Order number: low to high</option></select>
+          <option value="order:asc">Order number · lowest to highest</option><option value="order:desc">Order number · highest to lowest</option>
+          <option value="date:asc">Date · oldest to newest</option><option value="date:desc">Date · newest to oldest</option>
+          <option value="promise:asc">Days to promise · most overdue first</option><option value="promise:desc">Days to promise · most time left first</option></select></label>
         <div id="salesstatuschips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         <span id="salescount" class="muted" style="align-self:center;margin-left:auto"></span>
       </div>
@@ -4766,8 +4768,10 @@ function enterSalesDash(){showScreen("screen-sales");const note=$("salesloading"
 function lineId(o,i){return o.items.length>1?o.order+"-"+(i+1):o.order;}
 let salesView="orders";
 /* sort for the orders list: click a column header (Order · Days to promise · Ordered), or pick from the Sort menu */
-let salesSort={k:"date",dir:"desc"};
+/* default: by the actual order number, lowest first (…80, 81, 82); each browser remembers the choice */
+let salesSort=(function(){try{const v=(localStorage.getItem("nfs_sort")||"").split(":");if(["order","date","promise"].includes(v[0])&&["asc","desc"].includes(v[1]))return{k:v[0],dir:v[1]};}catch(e){}return{k:"order",dir:"asc"};})();
 function setSalesSort(k,dir){ if(dir)salesSort={k,dir}; else if(salesSort.k===k)salesSort.dir=salesSort.dir==="asc"?"desc":"asc"; else salesSort={k,dir:k==="promise"?"asc":"desc"};
+  try{localStorage.setItem("nfs_sort",salesSort.k+":"+salesSort.dir);}catch(e){}
   const sel=$("salessort"); if(sel)sel.value=salesSort.k+":"+salesSort.dir; renderSalesDash(); }  /* "orders" (paid/placed) | "drafts" */
 function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");const t3=$("tab-production");if(t3)t3.classList.toggle("on",v==="production");salesStatuses.clear();buildFilters();renderSalesDash();}
 function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(function(){buildFilters();renderSalesDash();});}
@@ -4818,6 +4822,7 @@ function promiseCell(o){
 }
 function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some((it,i)=>isFurnitureLine(it.product)&&!lineDrawn(o,i)); }
 function buildFilters(){
+  const ss=$("salessort"); if(ss) ss.value=salesSort.k+":"+salesSort.dir;
   const ms=$("salesmonth");
   if(ms){
     const months=[...new Set(SHOPIFY.filter(o=>o.date).map(o=>o.date.slice(0,7)))].sort().reverse();
@@ -5157,7 +5162,6 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     .filter(matchStatus)
     /* newest first — for drafts sort by the draft number (D1842 > D1841); orders keep newest-date order */
     .sort((a,b)=>{ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
-      if(salesView==="drafts"&&salesSort.k==="date"&&salesSort.dir==="desc") return num(b)-num(a);
       const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
       let c = salesSort.k==="promise" ? left(a)-left(b) : salesSort.k==="order" ? num(a)-num(b) : (a.date||"").localeCompare(b.date||"")||num(a)-num(b);
       if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
