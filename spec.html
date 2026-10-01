@@ -238,7 +238,7 @@ const KobeDraw=(function(){
   function innerV(ys,x,vals){
     let o=`<line x1="${x}" y1="${ys[0].toFixed(1)}" x2="${x}" y2="${ys[ys.length-1].toFixed(1)}" stroke="${DIM}" stroke-width=".9"/>`;
     ys.forEach(y=>{o+=tick(x,y);});
-    for(let i=0;i<ys.length-1;i++){const h=Math.abs(ys[i+1]-ys[i]);if(h<FS*1.3)continue;o+=lab(x-FS*0.72,(ys[i]+ys[i+1])/2,vals[i],1);}
+    for(let i=0;i<ys.length-1;i++){const h=Math.abs(ys[i+1]-ys[i]);if(h<FS*1.3){if(h>=4)o+=lab(x+FS*1.1,(ys[i]+ys[i+1])/2,vals[i],0);continue;}o+=lab(x-FS*0.72,(ys[i]+ys[i+1])/2,vals[i],1);}   /* too short to write along: write it level, beside the line */
     return o;
   }
 
