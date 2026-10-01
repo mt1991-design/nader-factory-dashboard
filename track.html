@@ -1328,6 +1328,7 @@ body{background:transparent}
     }
     look(slow);
     $('tracker').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    try { if (parent !== window) parent.postMessage({ naderTrackTop: $('tracker').getBoundingClientRect().top + window.scrollY }, '*'); } catch (e) {}
     sizeUp();
   }
 
@@ -1399,7 +1400,8 @@ body{background:transparent}
   /* the page opens on the lookup form; nothing is shown until a customer enters their order number + phone */
   const m = null;
   if (m || PREVIEW) { const s = m ? Math.min(N - 1, Math.max(0, +m[1] - 1)) : 0;   /* the preview always opens on Drawing */ state.stage = -1; clearTimers(); renderText(s); state.stage = s; paintRing(s, 'instant'); showScene(s, false); if (window.syncPv) syncPv(); }
-  function sizeUp(){ try { parent.postMessage({ naderTrack: document.documentElement.scrollHeight }, '*'); } catch (e) {} }
+  /* the content's real height (scrollHeight never shrinks below the frame), so nader.ae can size its frame to fit */
+  function sizeUp(){ try { const w = document.querySelector('.wrap'); parent.postMessage({ naderTrack: w.getBoundingClientRect().bottom + window.scrollY }, '*'); } catch (e) {} }
   window.sizeUp = sizeUp;
   new ResizeObserver(sizeUp).observe(document.body); window.addEventListener('load', sizeUp);
 })();
