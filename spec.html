@@ -456,7 +456,10 @@ const WarpDraw=(function(){
       let at=r.x0;
       for(let i=0;i<nm;i++){
         const src=nm===1?nc-1:(i===0?0:(i===nm-1?nc-1:Math.min(1,nc-1))), cx0=P.xs[src], cw=P.xs[src+1]-P.xs[src], w=ws[i], a0=at;
-        d+=pathsY(P.cells[src].filter(keep),x=>X(a0+(x-cx0)/cw*w),fy,fy2,sx);at+=w;
+        /* a long line on a seat's edge that runs down past the seats (the chaise's inner edge) belongs only to the seat
+           next to the chaise — extra copies of that seat must not repeat it (stray lines, #29292707) */
+        const bandHi=(M.cells[view]&&M.cells[view].band)?M.cells[view].band[1]:1e9, lone=src!==nc-1&&i!==nm-2;
+        d+=pathsY(P.cells[src].filter(pl=>keep(pl)&&!(view==="top"&&lone&&Math.max(...pl.map(p=>p[1]))>bandHi+1)),x=>X(a0+(x-cx0)/cw*w),fy,fy2,sx);at+=w;
       }
       return draw(d);
     }
@@ -1483,7 +1486,12 @@ const LilyDraw=WarpDraw.make({
     let o=hChain(stops,null,Y(0)-G,Y(0));
     o+=hChain([0,V.W],null,Y(0)-2*G,Y(0));
     const xC=X(0), xP=X(V.W), ot=+V.OT, dP=ot?V.D+V.OD:V.D;
-    if(V.side!=="N"){o+=K.chainV([Y(0),Y(V.B),Y(V.RL)],xC+out*G,xC,[F(V.B),F(V.RL-V.B)]);o+=K.chainV([Y(0),Y(V.RL)],xC+out*2*G,xC,[F(V.RL)]);}
+    if(V.side!=="N"){o+=K.chainV([Y(0),Y(V.B),Y(V.D),Y(V.RL)],xC+out*G,xC,[F(V.B),F(V.D-V.B),F(V.RL-V.D)]);o+=K.chainV([Y(0),Y(V.RL)],xC+out*2*G,xC,[F(V.RL)]);
+      /* full-backrest chaise: back cushion + each side cushion down the chaise, and the chaise split cushion | seat (team drawing #29292731) */
+      if(+V.FB){const ys=V.B+V.BC,ye=V.RL-.5,k=Math.max(1,Math.round((ye-ys)/72)),h=(ye-ys)/k,st=[Y(V.B),Y(ys)],lb=[F(V.BC)];
+        for(let i=1;i<=k;i++){st.push(Y(ys+i*h));lb.push(F(Math.round(h)));}
+        o+=K.innerV(st,X(a+V.BC+6),lb);
+        const cw=w[0];o+=innerH(K,X(a),X(a+V.BC),Y((V.D+V.RL)/2),F(V.BC))+innerH(K,X(a+V.BC),X(a+cw),Y((V.D+V.RL)/2),F(Math.round((cw-V.BC)*100)/100));}}
     else{o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xC+out*G,xC,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xC+out*2*G,xC,[F(V.D)]);}
     o+=K.chainV(ot?[Y(0),Y(V.B),Y(V.D),Y(dP)]:[Y(0),Y(V.B),Y(V.D)],xP-out*G,xP,ot?[F(V.B),F(V.D-V.B),F(V.OD)]:[F(V.B),F(V.D-V.B)]);
     o+=K.chainV([Y(0),Y(dP)],xP-out*2*G,xP,[F(dP)]);
@@ -1954,10 +1962,16 @@ const BretagneDraw=WarpDraw.make({
   skip:(view,pl,V)=>{const xs=pl.map(p=>p[0]),ys=pl.map(p=>p[1]),mn=Math.min(...xs),mx=Math.max(...xs),my=Math.min(...ys);
     if(view==="front")return (+V.OA===0&&mx<=25.8&&my>=34)||(+V.CA===0&&mn>=247.5&&my>=34);
     return (+V.OA===0&&armSkip(pl,0,24))||(+V.CA===0&&armSkip(pl,246,270,104));},
-  callouts:true,
+  callouts:true, topRows:3,
   dimsTop(V,c){const {X,Y,G,K,F,hChain,out}=c,w=BR_SEATS(V),o0=BR_AO(V),ch=BR_AC(V);
     const stops=o0>0?[0,o0]:[0];let at=o0;w.forEach(x=>{at+=x;stops.push(at);});if(ch>0)stops.push(V.W);
-    let o=hChain(stops,null,Y(0)-G,Y(0))+hChain([0,V.W],null,Y(0)-2*G,Y(0));
+    let o=hChain(stops,null,Y(0)-G,Y(0));
+    /* the blocks the factory builds (seats per block from the chaise side, e.g. "1,2,2" → 104 | 161 | 185) */
+    const blk=String(V.BLK||"").split(/[,\s]+/).map(Number).filter(x=>x>0);
+    if(blk.length>1&&blk.reduce((p,q)=>p+q,0)===w.length){const bs=[V.W];let x=V.W-ch,si=w.length-1;
+      blk.forEach((k,bi)=>{for(let j=0;j<k;j++)x-=w[si--];bs.push(bi===blk.length-1?0:x);});
+      o+=hChain(bs,null,Y(0)-2*G,Y(0))+hChain([0,V.W],null,Y(0)-3*G,Y(0));}
+    else o+=hChain([0,V.W],null,Y(0)-2*G,Y(0));
     const xC=X(V.W),xP=X(0);
     if(V.side!=="N"){o+=K.chainV([Y(0),Y(V.D),Y(V.RL)],xC-out*G,xC,[F(V.D),F(V.RL-V.D)]);o+=K.chainV([Y(0),Y(V.RL)],xC-out*2*G,xC,[F(V.RL)]);}
     o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xP+out*G,xP,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xP+out*2*G,xP,[F(V.D)]);return o;},
@@ -2354,7 +2368,7 @@ const MODELS={
   aura:{ver:"dwg1",match:/\b(aura)\b/i,label:"Aura (curved)",name:"Aura Tug Velvet Sofa",defaults:AURA_DEFAULT,draw:AuraDraw,photoSide:"N",photo:PHOTO_AURA,
     sides:["N"],seats:false,fields:[["Top view",[["W","Overall width","two curved halves"],["D","Depth at the middle","back to seat front"],["B","Back depth"],["T","Overall depth","to the front of the curled ends"]]],["Front elevation",[["H","Overall height"],["SH","Seat height"],["LH","Feet height"]]]],
     autoSpec(V){return [["Size",`${F2(V.W)} × ${F2(V.T)} cm`,1],["Configuration","Curved · two halves"],["Seat Depth",`${F2(V.D-V.B)} cm at the middle`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`]];}},
-  bretagne:{ver:"dwg1",match:/\b(bretagne|bretange|bretagn|brittany)\b/i,label:"Bretagne",name:"Bretagne Leather Corner Sofa",defaults:BRETAGNE_DEFAULT,draw:BretagneDraw,photoSide:"R",photo:PHOTO_BRETAGNE,
+  bretagne:{ver:"dwg1",match:/\b(bretagne|bretange|bretagn|brittany)\b/i,label:"Bretagne",name:"Bretagne Leather Corner Sofa",defaults:BRETAGNE_DEFAULT,draw:BretagneDraw,photoSide:"L",   /* the photo shows the chaise on the LEFT (LHF) */photo:PHOTO_BRETAGNE,
     sides:["L","R","N"],seats:true,fields:[["Top view",[["W","Overall width","seats share it equally"],["RL","Chaise length","back to chaise front"],["SD","Seat depth","back to seat front"],["D","Overall depth"],["B","Back depth"],["A","Arm width","both arms"],["CA","Arm on the chaise side","","yn"],["OA","Arm on the other side","","yn"]]],["Front elevation",[["H","Overall height","back & arms"],["SH","Seat height"],["LH","Leg height","metal legs + frame"]]]],
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.side==="N"?V.D:V.RL)} cm`,1],["Configuration",V.side==="N"?"Straight — no chaise":V.side==="L"?"Chaise Left (LHF)":"Chaise Right (RHF)"],["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`],["Seat Widths",BR_SEATS(V).map(F2).join(" · ")+" cm"],["Arm Width",armText(V,`${F2(V.A)} cm`)]];}},
   cloud:{ver:"dwg1",match:/\b(cloud)\b/i,label:"Cloud",name:"Cloud Sofa",defaults:CLOUD_DEFAULT,draw:CloudDraw,photoSide:"U",photo:PHOTO_CLOUD,
