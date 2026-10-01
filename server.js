@@ -84,7 +84,7 @@ app.get(['/', '/index.html'], servePage('index.html'));
 app.get(['/spec', '/spec.html'], servePage('spec.html'));
 /* customer order tracker — public page, embedded only in nader.ae/pages/track-order (unlisted: no links to it anywhere) */
 app.get(['/track', '/track.html'], (req, res, next) => {
-  res.setHeader('Content-Security-Policy', "frame-ancestors https://nader.ae https://www.nader.ae https://91fb05.myshopify.com https://admin.shopify.com");
+  res.setHeader('Content-Security-Policy', "frame-ancestors https://nader.ae https://www.nader.ae https://91fb05.myshopify.com https://*.myshopify.com https://*.shopifypreview.com https://admin.shopify.com");
   res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next();
 }, servePage('track.html'));
 app.get('/meshes.json', (req, res, next) => { res.setHeader('Cache-Control', 'public, max-age=86400'); next(); });   // spec sheets can carry a replaced reference photo
