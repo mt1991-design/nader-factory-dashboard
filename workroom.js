@@ -151,6 +151,7 @@ function decorateRows(){
   tb.querySelectorAll("tr[data-oi]").forEach(tr=>{const o=SHOPIFY[+tr.dataset.oi];if(!o)return;
     tr.classList.add("wr-row"); tr.style.setProperty("--stripe",stripeFor(o));
     if(seen.has(o))return; seen.add(o);
+    if((o.tnotes||[]).length){ const c=tr.querySelector("td.ono"); if(c&&!c.querySelector(".wr-nchip")) c.insertAdjacentHTML("beforeend",'<span class="wr-nchip" title="'+esc((o.tnotes[o.tnotes.length-1]||{}).text||"")+'">📝 '+o.tnotes.length+'</span>'); }
     const p=tr.querySelector(".pill.sent"); if(!p||o.isDraft||o.state!=="open"||salesView==="production")return;
     const st=Math.max(...(o.prod_stages&&o.prod_stages.length?o.prod_stages:[0]));
     if(o.items.some((it,i)=>lineCheck(o,i))){p.textContent="Check dimensions";p.classList.add("wr-pill-wait");}
@@ -307,19 +308,43 @@ renderLeaderboard=function(){
   });
 };
 
+/* ================= team notes on each order (customer calls…) — shared, editable by everyone ================= */
+function fmtNT(t){ if(!t)return""; const d=new Date(String(t)+":00+04:00"); return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",timeZone:"Asia/Dubai"})+" "+String(t).slice(11,16); }
+function notesHTML(o){ const L=o.tnotes||[];
+  return `<div class="odsec wr-notes" id="wrNotes"><h4>Team notes${L.length?` <span class="wr-ncount">${L.length}</span>`:""}</h4>
+    <div class="wr-nlist">${L.map(n=>`<div class="wr-note" data-nid="${esc(n.id)}"><div class="wr-nh"><b>${esc(n.by)}</b><span>${fmtNT(n.t)}${n.e?" · edited by "+esc(n.eb)+" "+fmtNT(n.e):""}</span><span class="wr-na"><button type="button" data-act="edit">Edit</button><button type="button" data-act="del">Delete</button></span></div><div class="wr-nt">${esc(n.text)}</div></div>`).join("")||'<div class="wr-empty" style="padding:0 0 8px">No notes yet — add one when a customer calls.</div>'}</div>
+    <textarea id="wrNoteIn" rows="3" placeholder="e.g. Customer called — asked to move delivery to Saturday morning"></textarea>
+    <button type="button" class="wr-nsave" data-act="add">Save note</button></div>`; }
+let NOTE_ORDER=null;
+function saveNote(body){ return fetch("/api/notes",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify(body)}).then(r=>r.json()); }
+function refreshNotes(){ const o=NOTE_ORDER, box=$("wrNotes"); if(!o||!box)return; box.outerHTML=notesHTML(o); if(!$("screen-sales").hidden)renderSalesDash(); }
+document.addEventListener("click",e=>{
+  const b=e.target.closest("#wrNotes [data-act]"); if(!b||!NOTE_ORDER)return;
+  const o=NOTE_ORDER, act=b.dataset.act, note=b.closest(".wr-note"), nid=note&&note.dataset.nid;
+  const done=d=>{ if(d&&d.ok){o.tnotes=d.notes;refreshNotes();} else { b.disabled=false; alert("Couldn't save the note — please try again."); } };
+  if(act==="add"){ const t=($("wrNoteIn").value||"").trim(); if(!t){$("wrNoteIn").focus();return;} b.disabled=true; b.textContent="Saving…"; saveNote({id:o.id,text:t}).then(done).catch(()=>done(null)); }
+  else if(act==="del"){ if(!confirm("Delete this note?"))return; b.disabled=true; saveNote({id:o.id,nid,del:true}).then(done).catch(()=>done(null)); }
+  else if(act==="edit"){ const tx=note.querySelector(".wr-nt"); const cur=(o.tnotes.find(x=>x.id===nid)||{}).text||"";
+    tx.innerHTML='<textarea rows="3" class="wr-nedit"></textarea><div class="wr-nbtns"><button type="button" data-act="save">Save</button><button type="button" data-act="cancel">Cancel</button></div>'; tx.querySelector("textarea").value=cur; tx.querySelector("textarea").focus(); }
+  else if(act==="cancel"){ refreshNotes(); }
+  else if(act==="save"){ const t=(note.querySelector(".wr-nedit").value||"").trim(); if(!t)return; b.disabled=true; saveNote({id:o.id,nid,text:t}).then(done).catch(()=>done(null)); }
+});
+
 /* ================= order drawer: header + stage history ================= */
 const _openDetail=openOrderDetail;
 openOrderDetail=function(o){
   _openDetail(o); hideP();
+  NOTE_ORDER=o; if($("od-body"))$("od-body").insertAdjacentHTML("afterbegin",notesHTML(o));
   const t=$("od-title"); if(t){const first=(o.items||[])[0];t.insertAdjacentHTML("beforeend",`<span class="wr-sub">${esc(o.customer||"")}${first?" · "+esc(drawBase(first.product)||first.product)+(o.items.length>1?" + "+(o.items.length-1)+" more":""):""}</span>`);}
   if(o.isDraft||!$("od-body"))return;
+  const notesEl=$("wrNotes");
   const lines=o.items.map((it,i)=>i).filter(i=>isFurnitureLine(o.items[i].product));
   if(!lines.length)return;
   const html=lines.map(i=>{const L=lineInfo(o,i),shipped=o.state==="shipped";
     const steps=STG.map((s,k)=>{const done=shipped||k<L.cur,cur=!shipped&&k===L.cur;const who=crewList(o,i,k).map(a=>a.n).join(", ");const when=k===0?(lineDrawn(o,i)?"Drawing complete":"Awaiting drawing"):k===5?((o.delivery||{})[i]?fmtDelivery(o.delivery[i]):""):(L.pd[k]?"Started "+L.pd[k].slice(8,10)+"/"+L.pd[k].slice(5,7)+" "+L.pd[k].slice(11,16):"");
       return `<div class="s${done?" d":cur?" c":""}"><span class="b">${done?"✓":k+1}</span><div><div class="n">${s}${cur?' <span class="wr-age'+(L.days>=LATE[k]?" late":"")+'">'+L.days+"d</span>":""}</div><div class="m">${esc([who,when].filter(Boolean).join(" · "))||(done||cur?"":"Not started")}</div></div><span></span></div>`;}).join("");
     return (lines.length>1?`<div class="wr-line">${esc(o.items[i].product)}</div>`:"")+`<div class="wr-vt">${steps}</div>`;}).join("");
-  $("od-body").insertAdjacentHTML("afterbegin",`<div class="odsec"><h4>Production</h4>${html}</div>`);
+  if(notesEl) notesEl.insertAdjacentHTML("afterend",`<div class="odsec"><h4>Production</h4>${html}</div>`); else $("od-body").insertAdjacentHTML("afterbegin",`<div class="odsec"><h4>Production</h4>${html}</div>`);
 };
 
 /* ================= toast / confetti ================= */

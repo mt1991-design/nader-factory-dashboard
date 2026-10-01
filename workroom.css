@@ -387,3 +387,18 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .ad-award em{font-style:normal;font-size:12.5px;color:var(--w-ink2)}
 .wrs .promise{display:inline-block;min-width:34px;text-align:center;padding:3px 9px;border-radius:20px;font:700 13px var(--w-mono)}
 .wrs .promise.late{background:rgba(179,38,30,.12);color:#b3261e}
+
+/* team notes */
+.wr-notes h4{display:flex;align-items:center;gap:8px}
+.wr-ncount{font:700 10px var(--w-mono);background:var(--w-brand);color:var(--w-on);border-radius:999px;padding:1px 7px;letter-spacing:0}
+.wr-nlist{display:grid;gap:8px;margin-bottom:10px}
+.wr-note{border:1px solid var(--w-line);border-radius:10px;padding:9px 11px;background:var(--w-surface2)}
+.wr-nh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:11.5px;color:var(--w-muted)}
+.wr-nh b{color:var(--w-ink);font-size:12.5px}
+.wr-na{margin-left:auto;display:flex;gap:6px}
+.wr-na button,.wr-nbtns button{flex:0 0 auto;border:0;background:none;padding:0;font:600 11.5px var(--w-ui);color:var(--w-brand);cursor:pointer}
+.wr-nt{margin-top:4px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;color:var(--w-ink)}
+.wr-notes textarea{width:100%;font:15px var(--w-ui);padding:9px 11px;border:1px solid var(--w-line2);border-radius:10px;background:var(--w-surface);resize:vertical}
+.wr-nsave{margin-top:8px;flex:none;width:auto;padding:9px 16px;border-radius:9px;border:0;background:var(--w-brand);color:var(--w-on);font:600 13px var(--w-ui);cursor:pointer}
+.wr-nbtns{display:flex;gap:12px;margin-top:6px}
+.wr-nchip{display:block;margin-top:4px;font:600 11px var(--w-ui);color:var(--w-gold-ink)}

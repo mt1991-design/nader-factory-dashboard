@@ -493,6 +493,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     let stats = raw; try { stats = await cached('stats', FETCH.stats, false); } catch (e) {}
     let fab = {}; try { fab = await fabricIndex(false); } catch (e) {}
     out.forEach(o => { const f = {}; (o.items || []).forEach((it, i) => { const r = fab[o.id + ':' + i]; if (r) f[i] = r; }); o.fabric = f; });
+    let nts = {}; try { nts = await notesDoc(false); } catch (e) {}
+    out.forEach(o => { o.tnotes = nts[o.id] || []; });
     res.json({ ok: true, orders: out, lead: leadTime(stats), weekly: weeklyOrders(stats) });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
@@ -529,6 +531,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       items: mapLineItems(d.line_items)
     }));
     const out = factoryOnly(req) ? drafts.map(stripPrice) : drafts;
+    { let nts = {}; try { nts = await notesDoc(false); } catch (e) {} out.forEach(o => { o.tnotes = nts[o.id] || []; }); }
     res.json({ ok: true, drafts: out });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });
@@ -823,6 +826,39 @@ app.get('/api/file/:fid', requireAuth, async (req, res) => {
     res.send(Buffer.from(await r.arrayBuffer()));
     logEvent(req.session.username, 'file_download', { fid, name, ip: clientIp(req) });
   } catch (e) { res.status(502).send('Download failed'); }
+});
+
+/* ---------- TEAM NOTES per order (customer calls etc.) — shared, editable by everyone, kept in Cloudflare KV ---------- */
+let NOTES = null, NOTES_AT = 0;
+async function notesDoc(fresh) {
+  if (!fresh && NOTES && Date.now() - NOTES_AT < 15000) return NOTES;
+  const d = await workerJson('/doc/notes'); if (d && d.ok) { NOTES = d.data || {}; NOTES_AT = Date.now(); }
+  return NOTES || {};
+}
+let notesQ = Promise.resolve();
+app.post('/api/notes', requireAuth, async (req, res) => {
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), text = String(b.text || '').trim().slice(0, 2000);
+  if (!id) return res.status(400).json({ ok: false, error: 'no order' });
+  const run = notesQ.then(async () => {
+    const all = JSON.parse(JSON.stringify(await notesDoc(true)));
+    const list = all[id] = all[id] || [];
+    const who = req.session.name || req.session.username, now = uaeNow();
+    if (b.nid) {
+      const n = list.find(x => x.id === b.nid); if (!n) throw new Error('note not found');
+      if (b.del) all[id] = list.filter(x => x.id !== b.nid);
+      else { n.text = text; n.e = now; n.eb = who; }
+    } else {
+      if (!text) throw new Error('empty note');
+      list.push({ id: crypto.randomBytes(6).toString('hex'), t: now, by: who, text });
+    }
+    if (!all[id].length) delete all[id];
+    const out = await docSet('notes', all); if (!out || !out.ok) throw new Error('save failed');
+    NOTES = all; NOTES_AT = Date.now();
+    logEvent(req.session.username, b.del ? 'note_delete' : b.nid ? 'note_edit' : 'note_add', { id, ip: clientIp(req) });
+    return all[id] || [];
+  });
+  notesQ = run.catch(() => {});
+  try { res.json({ ok: true, notes: await run }); } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 
 /* ---------- ADMIN: sales per agent / month / product (owners only) ---------- */
