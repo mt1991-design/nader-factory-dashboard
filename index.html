@@ -1,6 +1,9 @@
-<title>Nader — Factory Spec Sheet Generator</title>
+<title>Nader Workroom</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#5E161D">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="/workroom.css">
@@ -146,6 +149,9 @@
   .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
   .teamstrip .addrow{max-width:420px}
   .promisetd{white-space:nowrap}
+  .factcount{font:600 11px var(--ui);letter-spacing:0;text-transform:none;color:var(--ink2)}
+  .factfilters{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 12px}
+  .factstage{display:flex;flex-wrap:wrap;gap:6px}
   .sortlabel{display:inline-flex;align-items:center;gap:8px;font:600 12px var(--ui);color:var(--ink2)}
   th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
   th.sortable:hover,th.sortable.on{color:var(--ox)}
@@ -312,7 +318,12 @@
       <div class="addrow"><input type="text" id="newworker" placeholder="Add a name" onkeydown="if(event.key=='Enter')addWorker()"><button class="ghost small" onclick="addWorker()">Add</button></div>
     </div>
     <div class="card dashmain">
-      <div class="cardhdr"><span>Open orders · production</span><input type="text" id="ordersearch" placeholder="Search order # / product / customer" oninput="renderFactoryProd()"></div>
+      <div class="cardhdr"><span>Open orders · production <span id="factcount" class="factcount"></span></span><input type="text" id="ordersearch" placeholder="Search order # / product / customer" oninput="renderFactoryProd()"></div>
+      <div class="factfilters">
+        <label class="sortlabel">Sort by <select id="factsort" class="filtersel" onchange="factSort=this.value;try{localStorage.setItem('nfs_fsort',factSort)}catch(e){};renderFactoryProd()">
+          <option value="asc">Date · oldest to newest</option><option value="desc">Date · newest to oldest</option></select></label>
+        <div id="factstage" class="factstage"></div>
+      </div>
       <div class="otablewrap"><table class="otable prodtable"><thead><tr><th>Order</th><th>Product</th><th>Fabric</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
       <div id="dashempty" class="dashempty">No open orders in production yet.</div>
       <div id="factoryhidden" class="muted" style="font-size:12px;padding:8px 12px"></div>
@@ -5254,8 +5265,10 @@ function enterFactory(){mode="factory";showScreen("screen-factory");renderWorker
 function renderFactoryProd(){
   const tb=$("orderrows"); if(!tb) return;
   const q=($("ordersearch").value||"").toLowerCase();
+  const onum=o=>parseInt(String(o.order).replace(/\D/g,""))||0;
   const list=SHOPIFY.filter(o=>!o.isDraft && o.state==="open")
-    .sort((a,b)=>(b.date||"").localeCompare(a.date||"")||String(b.order).localeCompare(String(a.order)));   // fixed order: rows never move when a stage changes
+    .sort((a,b)=>factSort==="desc"?onum(b)-onum(a):onum(a)-onum(b));   // by order number = date; rows never move when a stage changes
+  paintFactStage();
   let html="",shown=0;
   let hidden=0;
   list.forEach(function(o){ const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[]; let firstShown=true;
@@ -5264,6 +5277,7 @@ function renderFactoryProd(){
       const cur=stages[i]||0;
       /* the factory only sees lines whose drawing is complete — nothing else, even if its stage was moved on */
       if(!lineDrawn(o,i)){ if(isFurnitureLine(it.product)) hidden++; return; }
+      if(factStages.size && !factStages.has(lineStageKey(o,i))) return;
       shown++;
       const first=firstShown, multi=o.items.length>1; firstShown=false;
       const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
@@ -5275,10 +5289,23 @@ function renderFactoryProd(){
     });
   });
   tb.innerHTML=shown?html:"";
+  const fc=$("factcount"); if(fc) fc.textContent="· "+shown+" piece"+(shown===1?"":"s")+" showing";
   const de=$("dashempty"); if(de){ de.style.display=shown?"none":"block"; de.textContent="No orders with a completed drawing yet."; }
   const hn=$("factoryhidden"); if(hn) hn.textContent=hidden?(hidden+" order line"+(hidden===1?" is":"s are")+" awaiting a drawing and not shown here yet."):"";
   renderLeaderboard();
 }
+/* factory list: sort + production-status filter (several stages can be picked; none = all) */
+let factSort=(function(){try{return localStorage.getItem("nfs_fsort")||"asc";}catch(e){return "asc";}})();
+const factStages=new Set();
+function lineStageKey(o,i){ const d=((o.delivered||{})[i]); if(d&&d.d) return "delivered"; return String((o.prod_stages||[])[i]||0); }
+function paintFactStage(){
+  const box=$("factstage"); if(!box) return; const ss=$("factsort"); if(ss) ss.value=factSort;
+  const counts={}; SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").forEach(o=>o.items.forEach((it,i)=>{ if(!lineDrawn(o,i))return; const k=lineStageKey(o,i); counts[k]=(counts[k]||0)+1; }));
+  const defs=PROD_STAGES.map((n,i)=>[String(i),n]).concat([["delivered","Delivered"]]);
+  box.innerHTML='<button type="button" class="fchip'+(factStages.size?"":" on")+'" onclick="factStages.clear();renderFactoryProd()">All</button>'
+    +defs.map(d=>'<button type="button" class="fchip'+(factStages.has(d[0])?" on":"")+'" onclick="toggleFactStage(\''+d[0]+'\')">'+esc(d[1])+' <span class="wr-c">'+(counts[d[0]]||0)+'</span></button>').join("");
+}
+function toggleFactStage(k){ if(factStages.has(k))factStages.delete(k); else factStages.add(k); renderFactoryProd(); }
 function exitWork(){if(mode==="factory"){curOrderId=null;renderDash();renderWorkers();showScreen("screen-factory");}else{logout();}}
 
 /* ---- factory dashboard ---- */
