@@ -1301,7 +1301,7 @@ body{background:transparent}
     if (busy) return; busy = true;
     const btn = document.querySelector('#trackForm .btn'); btn.disabled = true; $('formNote').textContent = 'Looking up your order…';
     let r = null;
-    try { const res = await fetch('/api/track', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ order: num, phone }) }); r = await res.json(); }
+    try { const res = await fetch('/api/order-status', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ order: num, phone }) }); r = await res.json(); }
     catch (e) { r = { ok: false, error: 'unavailable' }; }
     busy = false; btn.disabled = false; $('formNote').textContent = '';
     if (!r || !r.ok) {

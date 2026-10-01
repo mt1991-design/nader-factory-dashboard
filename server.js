@@ -483,11 +483,11 @@ function trackStep(stage, since, drawn, fabricIn, delivered) {
       return workingDaysSince(drawn) < SPLIT ? { step: 1, since: drawn } : { step: 2, since: addWorkDays(drawn, SPLIT) };
   }
 }
-app.options('/api/track', (req, res) => {
+app.options('/api/order-status', (req, res) => {
   const o = req.headers.origin; if (TRACK_ORIGINS.includes(o)) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Vary', 'Origin'); }
   res.setHeader('Access-Control-Allow-Methods', 'POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.status(204).end();
 });
-app.post('/api/track', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => {
+app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => {
   const origin = req.headers.origin; if (TRACK_ORIGINS.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
   res.setHeader('Cache-Control', 'no-store');
   const ip = clientIp(req), now = Date.now(), hits = (TRACK_HITS.get(ip) || []).filter(t => now - t < 15 * 60e3);
