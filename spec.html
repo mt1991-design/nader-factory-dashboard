@@ -180,7 +180,7 @@ function intSplit(span,weights){
 function seatSplit(span,weights,stdSpan,stdN){
   if(Math.abs(span-stdSpan)<1e-6&&weights.length===stdN){const sum=weights.reduce((x,y)=>x+y,0);return weights.map(w=>span*w/sum);}
   /* equal seats that come out to a clean half-cm (394/4 = 98.5, 350/4 = 87.5) stay equal — as Mariam draws them */
-  if(weights.every(w=>w===weights[0])&&Math.abs(span*2/weights.length-Math.round(span*2/weights.length))<1e-6)return weights.map(()=>span/weights.length);
+  if(weights.every(w=>w===weights[0]))return weights.map(()=>span/weights.length);   /* equal seats stay exactly equal (80.4 × 5, 96.66 × 3) — as the team draws them */
   return intSplit(span,weights);
 }
 const KobeDraw=(function(){
@@ -1434,7 +1434,7 @@ const KandaDraw=WarpDraw.make({
 /* ---------------- PLUSH LILY U (from "Plush Lily U Sofa.dwg") — chaise LEFT 150, separate OTTOMAN (52) in front of the right seat ----------------
    Top: 18 | 71.33 × 3 | 18 = 250; back 18, bolster back cushions 20 (4 across 3 seats — one more than the seats), seat 60 → depth 98.
    Front: plinth 5, base 20, seat cushion 20 → seat 45, back 23 → 68 (the DWG front is drawn 306 wide: scaled to the plan). */
-const LILY_DEFAULT={W:250,n:3,RL:150,D:98,B:18,BC:20,A:18,CA:1,OA:1,OT:1,OD:52,H:68,SH:45,BH:20,LH:5,side:"L"};
+const LILY_DEFAULT={W:250,n:3,RL:150,D:98,B:18,BC:20,A:18,CA:1,OA:1,OT:1,OD:52,FB:0,H:68,SH:45,BH:20,LH:5,side:"L"};
 const LI_AC=V=>+V.CA===0?0:V.A, LI_AO=V=>+V.OA===0?0:V.A;
 const LI_SEATS=V=>seatSplit(V.W-LI_AC(V)-LI_AO(V),Array(Math.max(1,V.n|0)).fill(1),214,3);
 const LilyDraw=WarpDraw.make({
@@ -1467,6 +1467,10 @@ const LilyDraw=WarpDraw.make({
     for(let i=0;i<nb;i++){const x0=a+i*bw,x1=x0+bw,xm=(x0+x1)/2;
       d+=`M${P(x0,y0+r+bow)}Q${P(x0,y0+bow)} ${P(x0+r,y0+bow)}Q${P(xm,y0-bow)} ${P(x1-r,y0+bow)}Q${P(x1,y0+bow)} ${P(x1,y0+r+bow)}L${P(x1,y1-r-bow)}Q${P(x1,y1-bow)} ${P(x1-r,y1-bow)}Q${P(xm,y1+bow)} ${P(x0+r,y1-bow)}Q${P(x0,y1-bow)} ${P(x0,y1-r-bow)}Z`;}
     if(+V.CA===0)d+=`M${P(0,2)}L${P(0,V.B)}`; if(+V.OA===0)d+=`M${P(V.W,2)}L${P(V.W,V.B)}`;
+    /* "full backrest" chaise: bolsters run down the chaise's inner side too (team drawing #29292731) */
+    if(+V.FB){const cx0=a,cx1=a+V.BC,ys=y1,ye=V.RL-.5,k=Math.max(1,Math.round((ye-ys)/72)),h=(ye-ys)/k;
+      for(let i=0;i<k;i++){const t0=ys+i*h,t1=t0+h,tm=(t0+t1)/2;
+        d+=`M${P(cx0+r+bow,t0)}Q${P(cx0+bow,t0)} ${P(cx0+bow,t0+r)}Q${P(cx0-bow,tm)} ${P(cx0+bow,t1-r)}Q${P(cx0+bow,t1)} ${P(cx0+r+bow,t1)}L${P(cx1-r-bow,t1)}Q${P(cx1-bow,t1)} ${P(cx1-bow,t1-r)}Q${P(cx1+bow,tm)} ${P(cx1-bow,t0+r)}Q${P(cx1-bow,t0)} ${P(cx1-r-bow,t0)}Z`;}}
     return d;},
   /* arm left off: close the back at that end */
   extraFront(V,c){const {X,Y}=c,P=(x,h)=>X(x).toFixed(1)+","+Y(h).toFixed(1);let d="";
@@ -2202,7 +2206,7 @@ const SAGA_FIELDS=[["Seat",[["SW","Seat width","store size"],["SDP","Seat depth"
   ["Legs",[["LT","Thickness at top",EST],["LB","Thickness at floor",EST],["BTW","Back legs at the roll","outside to outside · "+EST],["BFW","Back legs at the floor","outside to outside"],["FTW","Front legs under the seat","outside to outside"],["FFW","Front legs at the floor","outside to outside"],["KF","Front legs lean forward"],["KB","Back legs lean back"]]]];
 const KANDA_FIELDS=[["Top view",[["SHAPE","Shape","as you face it","shape"],["W","Overall width","end seats 80 · middle takes the rest"],["RL","Left chaise length","as you face it"],["RR","Right chaise length","as you face it"],["SD","Seat depth","back frame to seat front"],["D","Overall depth","back + seat depth"],["B","Back depth"],["A","Arm width","both arms"],["CA","Arm on the left","as you face it","yn"],["OA","Arm on the right","as you face it","yn"]]],
   ["Front elevation",[["H","Back cushion height","overall"],["AH","Arm height"],["SH","Seat height"],["LH","Feet height"]]]];
-const LILY_FIELDS=[["Top view",[["W","Overall width","seats share it equally"],["RL","Chaise length","back to chaise front"],["SD","Seat depth","back frame to seat front"],["D","Overall depth","back + seat depth"],["B","Back depth"],["BC","Bolster back cushion depth","one more bolster than seats"],["A","Arm width","both arms"],["CA","Arm on the chaise side","","yn"],["OA","Arm on the other side","","yn"],["OT","Ottoman","in front of the last seat","yn"],["OD","Ottoman depth"]]],
+const LILY_FIELDS=[["Top view",[["W","Overall width","seats share it equally"],["RL","Chaise length","back to chaise front"],["SD","Seat depth","back frame to seat front"],["D","Overall depth","back + seat depth"],["B","Back depth"],["BC","Bolster back cushion depth","one more bolster than seats"],["A","Arm width","both arms"],["CA","Arm on the chaise side","","yn"],["OA","Arm on the other side","","yn"],["OT","Ottoman","in front of the last seat","yn"],["OD","Ottoman depth"],["FB","Full backrest on the chaise","bolsters down the chaise side too","yn"]]],
   ["Front elevation",[["H","Overall height","top of the back"],["SH","Seat height"],["BH","Base height"],["LH","Plinth height"]]]];
 const ALARA_FIELDS=[["Top view",[["SHAPE","Shape","as you face it","shape"],["W","Overall width","seats share it equally"],["RL","Left chaise length","rounded corner · as you face it"],["RR","Right chaise length","the longer chaise gets the round end"],["SD","Seat depth","back frame to seat front"],["D","Overall depth","back + seat depth"],["B","Back depth"],["BC","Back cushion depth","inside the seat depth"],["A","Arm width","both arms"],["CA","Arm on the left","round bolster · as you face it","yn"],["OA","Arm on the right","as you face it","yn"]]],
   ["Front elevation",[["H","Overall height"],["SH","Seat height"],["LH","Feet height"]]]];
@@ -2534,6 +2538,7 @@ function applyOrderText(O,text){
     if(/ottoman/i.test(t)&&!/\bno\s+ottoman|without\s+(an?\s+)?ottoman|ottoman[^\n]{0,6}:\s*no\b/i.test(t)&&MODELS[O.model]&&hasOtt(MODELS[O.model])){v.OTT=1;
       const os=t.match(/ottoman[^\n\d]{0,25}(\d{2,3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})(?:\s*(?:cm)?\s*[x×]\s*(\d{2,3}))?/i);
       if(os){v.OTW=+os[1];v.OTD=+os[2];if(os[3])v.OTH=+os[3];v.OTS=1;}}
+    if(O.model==="lily"&&/\bful+\s*back\s*-?\s*rest/i.test(t))v.FB=1;   /* "Chaise … with full backrest" */
     if(/\bstraight\b|no\s*chaise|without\s*(the\s*)?chaise|standard\s*sofa/i.test(t)){if("SHAPE" in v)v.SHAPE="S";else if(O.model&&MODELS[O.model].sides.includes("N"))v.side="N";}
     /* older Shopify orders: "2 seats in the middle" = 2 middle seats + the two end seats; "4 seater"/"4 modules" as said */
     const mid=t.match(/(\d)\s*(seats?|modules?|pieces?)\s*in\s*the\s*middle/i), mods=t.match(/(\d)\s*(modules|seats)\b(?!\s*in)/i);
