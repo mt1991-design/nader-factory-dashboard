@@ -41,7 +41,7 @@ function groupProducts(lines){
 const PAL=["#6B1A22","#A98B54","#3F5E73","#5F6B3A","#8A4B2A","#7A5A9A","#2E6A5E","#9A4C62"];
 const isAgent=a=>a!=="Online order"&&a!=="Website"&&!/^Other/.test(a);
 
-let DATA=null,LOADING=false,TAB="sales",MONTH="",AGENT="all",LBP="month";
+let DATA=null,LOADING=false,TAB="sales",MONTH="",AGENT="all",LBP="month",PER_A="",PER_S="";
 
 function rows(){return (DATA&&DATA.rows||[]).filter(r=>r.st!=="x");}
 function sum(list,f){return list.reduce((a,r)=>a+f(r),0);}
@@ -76,9 +76,20 @@ function render(){ if(!DATA)return; if(TAB==="sales")renderSales(); if(TAB==="lb
 
 /* ---------- SALES INSIGHTS ---------- */
 function months(){const s=new Set(rows().map(r=>ym(r.d)));return [...s].sort().reverse();}
+/* periods: a month "2026-09", a whole year "Y:2026" or the last three months "L3" */
+function perRange(p){ const now=new Date(Date.now()+4*3600e3).toISOString().slice(0,10);
+  if(/^Y:/.test(p)){const y=p.slice(2);return [y+"-01-01",y+"-12-31"];}
+  if(p==="L3"){const d=new Date(now+"T00:00:00Z");d.setUTCMonth(d.getUTCMonth()-2);return [d.toISOString().slice(0,7)+"-01",now];}
+  return [p+"-01",p+"-31"]; }
+function perLabel(p){ return /^Y:/.test(p)?"All of "+p.slice(2):p==="L3"?"Last 3 months":ymLabel(p); }
+function perPrev(p){ if(/^Y:/.test(p)||p==="L3")return null; return prevMonth(p); }
+function inPer(r,p){ const [a,b]=perRange(p); return r.d>=a&&r.d<=b; }
+function perOptions(sel){ const ms=months(), years=[...new Set(ms.map(m=>m.slice(0,4)))].sort().reverse();
+  return '<optgroup label="Longer">'+years.map(y=>`<option value="Y:${y}"${sel==="Y:"+y?" selected":""}>All of ${y}</option>`).join("")+`<option value="L3"${sel==="L3"?" selected":""}>Last 3 months</option></optgroup>`
+    +years.map(y=>`<optgroup label="${y}">`+ms.filter(m=>m.slice(0,4)===y).map(k=>`<option value="${k}"${k===sel?" selected":""}>${ymLabel(k)}</option>`).join("")+'</optgroup>').join(""); }
 function prevMonth(k){const y=+k.slice(0,4),m=+k.slice(5,7);return m===1?(y-1)+"-12":y+"-"+String(m-1).padStart(2,"0");}
 function renderSales(){
-  const all=rows(), ms=months(); if(!ms.includes(MONTH))MONTH=ms[0]||MONTH;
+  const all=rows(), ms=months(); if(!ms.includes(MONTH))MONTH=ms[0]||MONTH; if(!PER_A)PER_A=MONTH; if(!PER_S)PER_S=MONTH;
   const agents=[...new Set(all.map(r=>r.a))].sort((a,b)=>sum(all.filter(r=>r.a===b),r=>r.t)-sum(all.filter(r=>r.a===a),r=>r.t));
   const f=r=>AGENT==="all"||r.a===AGENT;
   const cur=all.filter(r=>ym(r.d)===MONTH&&f(r)), prev=all.filter(r=>ym(r.d)===prevMonth(MONTH)&&f(r));
@@ -101,23 +112,24 @@ function renderSales(){
     </div>`;
   h+=`<div class="ad-card"><div class="ad-h">Sales per month, by agent <span>last 12 months</span></div>${chart(all.filter(f),agents)}</div>`;
   /* agent table */
-  const byA={}; all.filter(r=>ym(r.d)===MONTH).forEach(r=>{const a=byA[r.a]=byA[r.a]||{a:r.a,rev:0,n:0,it:0,lines:[]};a.rev+=r.t;a.n++;a.it+=items(r);r.it.forEach(x=>a.lines.push(x));});
-  const byAP={}; all.filter(r=>ym(r.d)===prevMonth(MONTH)).forEach(r=>{byAP[r.a]=(byAP[r.a]||0)+r.t;});
+  const byA={}; all.filter(r=>inPer(r,PER_A)).forEach(r=>{const a=byA[r.a]=byA[r.a]||{a:r.a,rev:0,n:0,it:0,lines:[]};a.rev+=r.t;a.n++;a.it+=items(r);r.it.forEach(x=>a.lines.push(x));});
+  const byAP={}, pp=perPrev(PER_A); if(pp) all.filter(r=>ym(r.d)===pp).forEach(r=>{byAP[r.a]=(byAP[r.a]||0)+r.t;});
   const list=Object.values(byA).sort((a,b)=>b.rev-a.rev), tot=sum(list,x=>x.rev)||1;
-  h+=`<div class="ad-card"><div class="ad-h">Sales agents · ${ymLabel(MONTH)} <span>click an agent to see everything they sold</span></div>
+  h+=`<div class="ad-card"><div class="ad-h">Sales agents · ${perLabel(PER_A)} <span>click an agent to see everything they sold</span><select class="ad-per" id="adPerA" aria-label="Period for the agents table">${perOptions(PER_A)}</select></div>
     <div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Agent</th><th>Orders</th><th>Items</th><th>Sales</th><th>Avg order</th><th>Top product</th><th>Share</th><th>vs last month</th></tr></thead><tbody>
     ${list.map(x=>{const g=groupProducts(x.lines).sort((a,b)=>b.q-a.q)[0];const top=g?[g.name,g.q]:null;const p=pct(x.rev,byAP[x.a]||0);
       return `<tr data-agent="${esc(x.a)}"${x.a===AGENT?' class="on"':''}><td><b>${esc(x.a)}</b></td><td>${x.n}</td><td>${x.it}</td><td><b>${aed(x.rev)}</b></td><td>${aed(x.rev/x.n)}</td><td>${top?esc(top[0])+' <span class="ad-m">×'+top[1]+'</span>':""}</td>
         <td><span class="ad-bar"><i style="width:${Math.round(x.rev/tot*100)}%"></i></span> ${Math.round(x.rev/tot*100)}%</td><td>${p==null?'<span class="ad-m">new</span>':'<span class="ad-d '+(p>=0?"up":"down")+'">'+(p>=0?"▲":"▼")+" "+Math.abs(p)+"%</span>"}</td></tr>`;}).join("")||'<tr><td colspan="8" class="ad-m">No sales this month yet.</td></tr>'}
     </tbody></table></div></div>`;
   /* drill-down: what was sold (for the chosen agent, or everyone) */
+  const curS=all.filter(r=>inPer(r,PER_S)&&f(r));
   const cats={},city={},lines=[];
-  cur.forEach(r=>{r.it.forEach(x=>{lines.push(x);const c=cats[CAT(x[0])]=cats[CAT(x[0])]||{q:0,v:0};c.q+=x[1];c.v+=x[1]*x[2];});
+  curS.forEach(r=>{r.it.forEach(x=>{lines.push(x);const c=cats[CAT(x[0])]=cats[CAT(x[0])]||{q:0,v:0};c.q+=x[1];c.v+=x[1]*x[2];});
     const c0=String(r.city||"").trim().replace(/\s+/g," "),ct=c0?c0.charAt(0).toUpperCase()+c0.slice(1).toLowerCase().replace(/\b(\w)/g,m=>m.toUpperCase()):"Unknown";city[ct]=(city[ct]||0)+1;});
   const plist=groupProducts(lines).sort((a,b)=>b.v-a.v), clist=Object.entries(cats).sort((a,b)=>b[1].v-a[1].v), cityL=Object.entries(city).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const cmax=Math.max(1,...clist.map(c=>c[1].v)), citymax=Math.max(1,...cityL.map(c=>c[1]));
   h+=`<div class="ad-grid2">
-    <div class="ad-card"><div class="ad-h">What ${AGENT==="all"?"we":esc(AGENT)} sold · ${ymLabel(MONTH)} <span>${plist.length} product${plist.length===1?"":"s"}</span></div>
+    <div class="ad-card"><div class="ad-h">What ${AGENT==="all"?"we":esc(AGENT)} sold · ${perLabel(PER_S)} <span>${plist.length} product${plist.length===1?"":"s"}</span><select class="ad-per" id="adPerS" aria-label="Period for what we sold">${perOptions(PER_S)}</select></div>
       <div class="ad-tablewrap ad-scroll"><table class="ad-table"><thead><tr><th>Product</th><th>Category</th><th>Qty</th><th>Value</th></tr></thead><tbody>
       ${plist.map(p=>`<tr><td>${esc(p.name)}${p.variants.length>1?' <span class="ad-m" title="Added up from: '+esc(p.variants.join(" · "))+'">· '+p.variants.length+' spellings added up</span>':''}</td><td class="ad-m">${p.cat}</td><td>${p.q}</td><td>${aed(p.v)}</td></tr>`).join("")||'<tr><td colspan="4" class="ad-m">Nothing sold this month yet.</td></tr>'}</tbody></table></div></div>
     <div class="ad-stack">
@@ -137,7 +149,9 @@ function renderSales(){
       <span class="ad-m"><a href="https://admin.shopify.com/store/91fb05/settings/account/${uid}" target="_blank" rel="noopener">Who is this? ↗</a> · e.g. ${ex(uid).map(r=>`<a href="https://admin.shopify.com/store/91fb05/orders/${r.id}" target="_blank" rel="noopener">${esc(r.n)}</a>`).join(", ")}</span>
       <input type="text" data-uid="${uid}" value="${esc(a.name||"")}" placeholder="Agent name"></label>`).join("")}</div></div>`;
   $("adSales").innerHTML=h;
-  $("adMonth").onchange=e=>{MONTH=e.target.value;renderSales();};
+  $("adMonth").onchange=e=>{MONTH=PER_A=PER_S=e.target.value;renderSales();};
+  $("adPerA").onchange=e=>{PER_A=e.target.value;renderSales();};
+  $("adPerS").onchange=e=>{PER_S=e.target.value;renderSales();};
   $("adAgent").onchange=e=>{AGENT=e.target.value;renderSales();};
   $("adRefresh").onclick=()=>{DATA=null;load(true);};
   $("adSales").querySelectorAll("tr[data-agent]").forEach(tr=>tr.onclick=()=>{AGENT=AGENT===tr.dataset.agent?"all":tr.dataset.agent;renderSales();});

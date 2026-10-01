@@ -402,3 +402,5 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .wr-nsave{margin-top:8px;flex:none;width:auto;padding:9px 16px;border-radius:9px;border:0;background:var(--w-brand);color:var(--w-on);font:600 13px var(--w-ui);cursor:pointer}
 .wr-nbtns{display:flex;gap:12px;margin-top:6px}
 .wr-nchip{display:block;margin-top:4px;font:600 11px var(--w-ui);color:var(--w-gold-ink)}
+
+.ad-per{margin-left:auto;width:auto;min-height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--w-line2);background:var(--w-surface);font:600 12px var(--w-ui);color:var(--w-ink);letter-spacing:0;text-transform:none}
