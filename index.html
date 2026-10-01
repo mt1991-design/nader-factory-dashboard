@@ -5107,11 +5107,20 @@ function prodBar(o,line,cur,editable){
     +'<span class="plabel'+(isDel?" on":"")+'" data-s="Done"><span class="plf">Delivered</span></span>';
   return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div>'+crewRow(o,line,editable)+'</div>';
 }
+/* one sort for Orders AND Production status (the Sort menu + clickable headers) */
+function fmtOrderDate(d){if(!d)return"";const x=new Date(d+"T12:00:00");return isNaN(x)?d:x.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
+function salesCmp(a,b){ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
+  const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
+  /* "date" follows the order number (they run in date order), so the numbers always read …80, 81, 82 */
+  let c = salesSort.k==="promise" ? left(a)-left(b)||num(a)-num(b) : num(a)-num(b)||(a.date||"").localeCompare(b.date||"");
+  if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
+  return salesSort.dir==="asc"?c:-c; }
 function renderProduction(q){
   const tb=$("salesrows"); if(!tb) return;
   const editable=(typeof ROLE!=="undefined" && ROLE==="factory");
   const list=SHOPIFY.filter(o=>!o.isDraft && o.state==="open")
-    .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth);
+    .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
+    .sort(salesCmp);
   let html="",shown=0;
   list.forEach(function(o){
     const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[];
@@ -5123,7 +5132,9 @@ function renderProduction(q){
       const spec=(cur>=1||lineDrawn(o,i))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
       const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
       // every line item gets its OWN progress bar
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,editable)+'</td><td colspan="3">'+prodBar(o,i,cur,editable)+'</td></tr>';
+      /* the order date + days to promise under the number, so the sort is visible */
+      const when=first?'<div class="muted" style="font-size:11px;margin-top:3px;white-space:nowrap">'+fmtOrderDate(o.date)+'</div><div class="promisetd" style="margin-top:4px">'+promiseCell(o)+'</div>':"";
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+when+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,editable)+'</td><td colspan="3">'+prodBar(o,i,cur,editable)+'</td></tr>';
     });
   });
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No open orders in production.</td></tr>';
@@ -5197,7 +5208,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   if($("tab-production"))$("tab-production").textContent="Production status"+(nProd?" ("+nProd+")":"");
   const th=$("saleshead"), tbl=$("salestable");
   const sh=(k,t,tip)=>'<th class="sortable'+(salesSort.k===k?" on":"")+'" onclick="setSalesSort(\''+k+'\')"'+(tip?' title="'+tip+'"':'')+'>'+t+' <span class="sortarr">'+(salesSort.k===k?(salesSort.dir==="asc"?"▲":"▼"):"↕")+'</span></th>';
-  if(th) th.innerHTML = salesView==="production" ? '<tr><th>Order</th><th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>'
+  if(th) th.innerHTML = salesView==="production" ? '<tr>'+sh(salesSort.k==="promise"?"promise":"date","Order")+'<th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>'
     : '<tr>'+sh("date","Order")+'<th>Product</th><th>Customer</th>'+sh("promise","Days to promise","Working days (Mon–Fri) left until the promised delivery — tap to sort")+sh("date","Ordered")+'<th>Status</th><th></th></tr>';
   if(tbl) tbl.classList.toggle("prodtable", salesView==="production");
   if(salesView==="production"){ renderProduction(q); return; }
@@ -5205,12 +5216,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     .filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth)
     .filter(matchStatus)
     /* newest first — for drafts sort by the draft number (D1842 > D1841); orders keep newest-date order */
-    .sort((a,b)=>{ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
-      const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
-      /* "date" follows the order number (they run in date order), so the numbers always read …80, 81, 82 */
-      let c = salesSort.k==="promise" ? left(a)-left(b)||num(a)-num(b) : num(a)-num(b)||(a.date||"").localeCompare(b.date||"");
-      if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
-      return salesSort.dir==="asc"?c:-c; });
+    .sort(salesCmp);
   let html="",shown=0;
   const onlyDrawn=salesView==="orders"&&salesStatuses.size===1&&salesStatuses.has("drawn");
   list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;if(onlyDrawn&&!lineDrawn(o,i))return;shown++;
