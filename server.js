@@ -287,7 +287,7 @@ const FETCH = {
   /* Admin sales insights: every order from the last 13 months (paged; ~1,000 orders) */
   adminSales: async () => {
     const since = new Date(Date.now() - 400 * 864e5).toISOString();
-    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,financial_status,cancelled_at,fulfillment_status,line_items,note,user_id,source_name,shipping_address`, 12);
+    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,current_total_price,financial_status,cancelled_at,cancel_reason,fulfillment_status,line_items,note,user_id,source_name,shipping_address`, 12);
   },
   /* completed drafts already appear as orders — only open / invoice-sent drafts are needed (was: all ~1,500) */
   drafts: async () => {
@@ -885,7 +885,8 @@ app.get('/api/admin/sales', requireAuth, async (req, res) => {
       const fin = String(o.financial_status || '').toLowerCase();
       const st = (o.cancelled_at || fin === 'refunded' || fin === 'voided') ? 'x' : (o.fulfillment_status === 'fulfilled' ? 's' : 'o');
       if (o.user_id) { const a = accounts[o.user_id] = accounts[o.user_id] || { n: 0, name: agents[o.user_id] || '' }; a.n++; }
-      return { id: o.id, n: o.name, d: String(o.created_at || '').slice(0, 10), t: +o.total_price || 0, st, fin,
+      const refunded = Math.max(0, Math.round(((+o.total_price || 0) - (o.current_total_price != null ? +o.current_total_price : +o.total_price || 0)) * 100) / 100);
+      return { id: o.id, n: o.name, d: String(o.created_at || '').slice(0, 10), t: +o.total_price || 0, st, fin, rf: refunded, cx: o.cancelled_at ? String(o.cancelled_at).slice(0, 10) : '', why: o.cancel_reason || '',
         a: agentOf(o, agents), u: o.user_id || null, city: (o.shipping_address && (o.shipping_address.city || o.shipping_address.province)) || '',
         it: (o.line_items || []).map(li => [li.title, li.quantity || 1, +li.price || 0]), p: promiseOf(o), open: st === 'o' };
     });

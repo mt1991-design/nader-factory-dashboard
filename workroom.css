@@ -338,7 +338,7 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .ad-toolbar select{width:auto;min-height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--w-line2);background:var(--w-surface);font:600 13px var(--w-ui);color:var(--w-ink)}
 .ad-btn{flex:0 0 auto;min-height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--w-brand);background:transparent;color:var(--w-brand);font:600 12.5px var(--w-ui);cursor:pointer}
 .ad-note{font-size:12px;color:var(--w-muted);margin-left:auto}
-.ad-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.ad-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 @media (max-width:1200px){.ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:560px){.ad-kpis{grid-template-columns:1fr 1fr}}
 .ad-kpi{background:var(--w-surface);border:1px solid var(--w-line);border-radius:14px;box-shadow:var(--w-shadow);padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -404,3 +404,5 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .wr-nchip{display:block;margin-top:4px;font:600 11px var(--w-ui);color:var(--w-gold-ink)}
 
 .ad-per{margin-left:auto;width:auto;min-height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--w-line2);background:var(--w-surface);font:600 12px var(--w-ui);color:var(--w-ink);letter-spacing:0;text-transform:none}
+
+.ad-kpi .v.ad-exact{font:600 22px/1.15 var(--w-ui);letter-spacing:-.01em;white-space:normal}

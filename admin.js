@@ -96,6 +96,10 @@ function renderSales(){
   const rev=sum(cur,r=>r.t), revP=sum(prev,r=>r.t), n=cur.length, nP=prev.length, it=sum(cur,items), itP=sum(prev,items);
   const aov=n?rev/n:0, aovP=nP?revP/nP:0;
   const open=all.filter(r=>r.open&&f(r)), late=open.filter(r=>r.p&&r.p.over>0);
+  /* refunds & cancellations in the month (cancelled / refunded / voided orders + partial refunds on kept orders) */
+  const allR=(DATA.rows||[]).filter(f);
+  const refRows=allR.filter(r=>ym(r.d)===MONTH&&(r.st==="x"||(r.rf||0)>0.5));
+  const refAmt=sum(refRows,r=>r.st==="x"?(r.rf>0.5?r.rf:r.t):r.rf), refN=refRows.length;
   const delta=(a,b)=>{const p=pct(a,b);return p==null?'<span class="ad-d">—</span>':'<span class="ad-d '+(p>=0?"up":"down")+'">'+(p>=0?"▲":"▼")+" "+Math.abs(p)+'% vs '+MON[+prevMonth(MONTH).slice(5,7)-1]+'</span>';};
   let h=`<div class="ad-toolbar">
       <label>Month <select id="adMonth">${ms.map(k=>`<option value="${k}"${k===MONTH?" selected":""}>${ymLabel(k)}</option>`).join("")}</select></label>
@@ -103,11 +107,12 @@ function renderSales(){
       <button type="button" class="ad-btn" id="adRefresh">↻ Refresh</button>
       <span class="ad-note">Totals include VAT · cancelled and refunded orders left out</span></div>
     <div class="ad-kpis">
-      <div class="ad-kpi"><div class="l">Sales · ${ymLabel(MONTH)}</div><div class="v">${aedK(rev)}</div>${delta(rev,revP)}</div>
+      <div class="ad-kpi"><div class="l">Sales · ${ymLabel(MONTH)}</div><div class="v ad-exact">${aed(rev)}</div>${delta(rev,revP)}</div>
       <div class="ad-kpi"><div class="l">Orders</div><div class="v">${n}</div>${delta(n,nP)}</div>
       <div class="ad-kpi"><div class="l">Items sold</div><div class="v">${it}</div>${delta(it,itP)}</div>
-      <div class="ad-kpi"><div class="l">Average order</div><div class="v">${aedK(aov)}</div>${delta(aov,aovP)}</div>
-      <div class="ad-kpi"><div class="l">Open orders (not shipped)</div><div class="v">${open.length}</div><span class="ad-d">${aedK(sum(open,r=>r.t))} in the workshop</span></div>
+      <div class="ad-kpi"><div class="l">Average order</div><div class="v ad-exact">${aed(aov)}</div>${delta(aov,aovP)}</div>
+      <div class="ad-kpi"><div class="l">Open orders (not shipped)</div><div class="v">${open.length}</div><span class="ad-d">${aed(sum(open,r=>r.t))} in the workshop</span></div>
+      <div class="ad-kpi warn"><div class="l">Refunds &amp; cancellations</div><div class="v ad-exact">${aed(refAmt)}</div><span class="ad-d">${refN} order${refN===1?"":"s"} · ${ymLabel(MONTH)}</span></div>
       <div class="ad-kpi warn"><div class="l">Past the promised date</div><div class="v">${late.length}</div><span class="ad-d">${open.length?Math.round(late.length/open.length*100):0}% of open orders</span></div>
     </div>`;
   h+=`<div class="ad-card"><div class="ad-h">Sales per month, by agent <span>last 12 months</span></div>${chart(all.filter(f),agents)}</div>`;
@@ -136,6 +141,11 @@ function renderSales(){
       <div class="ad-card"><div class="ad-h">By category</div>${clist.map(([k,c])=>`<div class="ad-row"><span>${k}</span><span class="ad-bar wide"><i style="width:${Math.round(c.v/cmax*100)}%"></i></span><span class="ad-num">${c.q} · ${aedK(c.v)}</span></div>`).join("")||'<div class="ad-m">—</div>'}</div>
       <div class="ad-card"><div class="ad-h">Where customers are</div>${cityL.map(([k,c])=>`<div class="ad-row"><span>${esc(k)}</span><span class="ad-bar wide gold"><i style="width:${Math.round(c/citymax*100)}%"></i></span><span class="ad-num">${c}</span></div>`).join("")||'<div class="ad-m">—</div>'}</div>
     </div></div>`;
+  /* refunds & cancellations list */
+  h+=`<div class="ad-card"><div class="ad-h">Refunds &amp; cancellations · ${ymLabel(MONTH)} <span>${aed(refAmt)} across ${refN} order${refN===1?"":"s"}</span></div>
+    <div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Order total</th><th>Refunded</th><th>What happened</th></tr></thead><tbody>
+    ${refRows.sort((a,b)=>b.d.localeCompare(a.d)).map(r=>{const amt=r.st==="x"?(r.rf>0.5?r.rf:r.t):r.rf;const what=r.cx?("Cancelled "+r.cx+(r.why?" · "+r.why:"")):r.fin==="refunded"?"Fully refunded":r.fin==="voided"?"Voided":"Partly refunded";
+      return `<tr><td><b>${esc(r.n)}</b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}</td><td>${aed(r.t)}</td><td><b>${aed(amt)}</b></td><td class="ad-m">${esc(what)}</td></tr>`;}).join("")||'<tr><td colspan="7" class="ad-m">No refunds or cancellations this month.</td></tr>'}</tbody></table></div></div>`;
   /* overdue list */
   const lateL=late.slice().sort((a,b)=>b.p.over-a.p.over).slice(0,10);
   h+=`<div class="ad-card"><div class="ad-h">Most overdue open orders <span>working days past what the customer was promised</span></div>
