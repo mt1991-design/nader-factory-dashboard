@@ -25,7 +25,11 @@ const SECRET  = process.env.SESSION_SECRET || 'change-me';
 
 /* ---------- users (passwords stored as node-scrypt hashes; plaintext lives only with Mariam) ---------- */
 const USERS = {
-  admin: { name: "Admin", roles: ["sales", "factory", "admin"], salt: "52009a8101b9e4013040a20e6e08f105", hash: "4b55e70893e982a4e49d0a980dc80cd079fe1967c65d29e2565527fcbe8269fa" },
+  mariam: { name: "Mariam", roles: ["sales", "factory", "admin"], salt: "87f829eef290e427ae24edb201eaf7c4", hash: "d9f49c61091ce7d825f5d274cce2f8e35c0eb925193ad4f1a01b2c459e96307c" },
+  ali: { name: "Ali", roles: ["sales", "factory", "admin"], salt: "b481290fdbc8b57cbbc427f0d5d26a55", hash: "c9d043d74fcf14363db74df522ee5c45f4698b0506d11a390f160f81893bb159" },
+  kamal: { name: "Kamal", roles: ["sales", "factory", "admin"], salt: "400818f25488fbfea0b8f7eb049f8133", hash: "46f100313d63d43eccf11a9dd5a42da4ccf011a4feacac4bf2cea69b855b6756" },
+  /* generic "admin" login switched off 1 Oct 2026 (replaced by personal admin logins) */
+  // admin: { name: "Admin", roles: ["sales", "factory", "admin"], salt: "52009a8101b9e4013040a20e6e08f105", hash: "4b55e70893e982a4e49d0a980dc80cd079fe1967c65d29e2565527fcbe8269fa" },
   mohammed: { name: "Mohammed", roles: ["sales"], salt: "dde948d96b635c2926863aa5516879bf", hash: "4361273ee51ee4e4f5dde4e61e77b1a0af3a2f2d9dd154bf27ffb3e83644bb4a" },
   abdul: { name: "Abdul", roles: ["sales", "factory"], salt: "12ec47476e4396b29e5c7f78b2dbc8fd", hash: "3feffd85233dcfff44cf07516386e145442ede8d8e8987eb9bf1fbe649a19d72" },
   zahak: { name: "Zahak", roles: ["sales"], salt: "66f2715a7c0fe3bc6c78890b3df37dba", hash: "8c06bec3f7dcfb41a87a395e7c32385e728ba2a88f7f49a12ede9196c88c5675" },
