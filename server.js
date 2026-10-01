@@ -449,7 +449,20 @@ const TRACK_ORIGINS = ['https://nader.ae', 'https://www.nader.ae', 'https://91fb
 const TRACK_HITS = new Map();
 const TRACK_COLORS = ['#b09a80', '#cdbfa8', '#9c8f80', '#8a7766', '#b0875a', '#6f5646', '#c3a099', '#8f9a7e', '#6c7682'];   // sand, oat, mushroom, taupe, camel, mocha, dusty rose, sage, slate
 const last9 = p => String(p || '').replace(/\D/g, '').slice(-9);
-const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment|^\s*(extra\s+)?fabric\b|swatch|sample|^\s*shipping|^\s*custom\s*(fee|charge)|\bshould\b|\bready\b|\bweeks?\b|\bplease\b|\bnote\b|\bwill\b|\bby\s+the\b/i;   // notes typed in as line items
+/* which order lines are real pieces (old orders were typed straight into Shopify, so notes, fabrics, seat-depth upgrades,
+   payments and cushion bundles often sit in their own lines). Checked against all 199 open orders, 1 Oct. */
+const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment|^\s*(extra\s+)?fabric\b|^\s*shipping|^\s*custom\s*(fee|charge)|visit\s*fee/i;
+const NOTE_START = /^\s*(seat\s*(depth|filling|dimension|width|height)|back\s*(rest|cushion)s?|backrest|sofa\s*(filling|seats|softness|size|to\s*be)|filling|fabric|upholstery|uplostry|upholstry|mattress\s*size|all\s+back|small\s+cushions|make\s+the|corner\s*piece|chaise\s+needs|arm\s*rests?|armrest|base\s*height|left\s+seat|middle\s+seat|right\s+seat|colou?r|size|real\s+leather|linen|leather\s+for|totop|tabletop:)/i;
+const EARLY_NOTE = /^\s*(\S+\s+){0,3}(should|will|ready|please|needs?|must|make\s+sure|swatch\w*|samples?)\b/i;
+const CUSHIONS_ONLY = /^\s*(total\s+)?\d+\s*(x\s*)?(saqure|square|round|small|big|extra)?\s*cushions?\b/i;
+const FURN_WORD = /sofa|couch|sectional|chaise|corner|\bbeds?\b|headboard|daybed|chair|stool|table|bench|ottoman|pouf|puff|console|sideboard|cabinet|desk|bedside|nightstand|mirror|recliner|lounger|modular|seater|wardrobe|dresser|tv\s*unit|shelf/i;
+function isPiece(li) {
+  const t = String(li.title || '');
+  if (NOT_A_PIECE.test(t) || NOTE_START.test(t) || CUSHIONS_ONLY.test(t)) return false;
+  if (FURN_WORD.test(t) && parseFloat(li.price || 0) > 0) return true;   // priced furniture always counts
+  if (EARLY_NOTE.test(t)) return false;
+  return FURN_WORD.test(t) || !!li.product_id;
+}
 function trackType(t) {
   t = String(t || '').toLowerCase();
   if (/sofa\s*bed|day\s*-?bed/.test(t)) return 'sofa';
@@ -511,7 +524,7 @@ app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async
     let specs = {}; try { ((await workerJson('/spec')).items || []).forEach(x => { specs[x.id] = x; }); } catch (e) {}
     const items = [];
     lis.forEach((li, i) => {
-      if (NOT_A_PIECE.test(li.title || '')) return;
+      if (!isPiece(li)) return;
       const st = stages[i] || 0, since = ((pd[i] || {})[st] || '').slice(0, 10) || created;
       const sp = specs[num + (lis.length > 1 ? '-' + (i + 1) : '')], drawn = sp && sp.status === 'complete' ? new Date(sp.at + 4 * 3600e3).toISOString().slice(0, 10) : '';
       const f = fab[o.id + ':' + i] || {}, delivered = (dlv[i] && dlv[i].d) || (shipped ? ((o.fulfillments || []).map(x => x.created_at).filter(Boolean).sort().pop() || '').slice(0, 10) : '');
@@ -520,6 +533,9 @@ app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async
       items.push({ name: trackName(li.title) + ((li.quantity || 1) > 1 ? ' ×' + li.quantity : ''), type: trackType(li.title), color: TRACK_COLORS[h % TRACK_COLORS.length],
         step: s.step, since: s.since || '', booked: booked[i] || '' });
     });
+    if (!items.length && lis.length) {   /* nothing reads like a piece (e.g. a seat-depth change order): show the order as a whole */
+      const st = stages[0] || 0, since = ((pd[0] || {})[st] || '').slice(0, 10) || created, s0 = trackStep(st, since, '', '', (dlv[0] && dlv[0].d) || '');
+      items.push({ name: 'Your order', type: 'sofa', color: TRACK_COLORS[0], step: s0.step, since: s0.since || '', booked: booked[0] || '' }); }
     if (!items.length) return notFound();
     const pr = promiseOf(o), slow = Math.min.apply(null, items.map(x => x.step));
     logEvent('public', 'track_ok', { order: num, ip });
