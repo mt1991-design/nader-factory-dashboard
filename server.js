@@ -82,6 +82,11 @@ function servePage(file) {
 }
 app.get(['/', '/index.html'], servePage('index.html'));
 app.get(['/spec', '/spec.html'], servePage('spec.html'));
+/* customer order tracker — public page, embedded only in nader.ae/pages/track-order (unlisted: no links to it anywhere) */
+app.get(['/track', '/track.html'], (req, res, next) => {
+  res.setHeader('Content-Security-Policy', "frame-ancestors https://nader.ae https://www.nader.ae https://91fb05.myshopify.com https://admin.shopify.com");
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next();
+}, servePage('track.html'));
 app.get('/meshes.json', (req, res, next) => { res.setHeader('Cache-Control', 'public, max-age=86400'); next(); });   // spec sheets can carry a replaced reference photo
 app.use(cookies);
 
@@ -435,6 +440,93 @@ function mapAddress(a) {
     country: a.country || '', phone: a.phone || ''
   };
 }
+
+/* ---------- PUBLIC order tracker for nader.ae/pages/track-order ----------
+   The customer must give BOTH the order number AND the phone number on the order (last 9 digits must match);
+   a wrong pair gets the same "not found" answer as a missing order. Only production progress is returned —
+   never names, addresses, prices or notes. Attempts are limited per IP. */
+const TRACK_ORIGINS = ['https://nader.ae', 'https://www.nader.ae', 'https://91fb05.myshopify.com'];
+const TRACK_HITS = new Map();
+const TRACK_COLORS = ['#b09a80', '#cdbfa8', '#9c8f80', '#8a7766', '#b0875a', '#6f5646', '#c3a099', '#8f9a7e', '#6c7682'];   // sand, oat, mushroom, taupe, camel, mocha, dusty rose, sage, slate
+const last9 = p => String(p || '').replace(/\D/g, '').slice(-9);
+const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment/i;
+function trackType(t) {
+  t = String(t || '').toLowerCase();
+  if (/sofa\s*bed|day\s*-?bed/.test(t)) return 'sofa';
+  if (/\b(bed|headboard)s?\b/.test(t)) return 'bed';
+  if (/\b(bar|counter)\s*stool|\bstools?\b/.test(t)) return 'stool';
+  if (/\btables?\b/.test(t)) return 'table';
+  if (/arm\s*chair|accent\s*chair|lounge\s*chair|recliner/.test(t)) return 'armchair';
+  if (/\bchairs?\b/.test(t)) return 'chair';
+  return 'sofa';
+}
+const trackName = t => String(t || '').split(/\s+[-–|]\s+|\s*\|\s*|\s+size\b|:|\s\d{2,3}\s*[x×]/i)[0].trim().slice(0, 48) || 'Your piece';
+function addWorkDays(iso, n) {
+  const d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); let k = 0;
+  while (k < n) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) k++; }
+  return d.toISOString().slice(0, 10);
+}
+/* dashboard → customer step (same rules as the tracker): time only moves a piece on WITHIN the dashboard stage it's in */
+function trackStep(stage, since, drawn, fabricIn, delivered) {
+  const SPLIT = 4, d = since ? workingDaysSince(since) : 0, half = since ? addWorkDays(since, SPLIT) : '';
+  if (delivered) return { step: 13, since: delivered };
+  switch (stage) {
+    case 6: return { step: 12, since };
+    case 5: return { step: 11, since };
+    case 4: return d < 1 ? { step: 9, since } : { step: 10, since: addWorkDays(since, 1) };
+    case 3: return d < SPLIT ? { step: 7, since } : { step: 8, since: half };
+    case 2: return d < SPLIT ? { step: 5, since } : { step: 6, since: half };
+    case 1: return { step: 4, since };
+    default:
+      if (!drawn) return { step: 0, since };
+      if (fabricIn) return { step: 3, since: fabricIn };
+      return workingDaysSince(drawn) < SPLIT ? { step: 1, since: drawn } : { step: 2, since: addWorkDays(drawn, SPLIT) };
+  }
+}
+app.options('/api/track', (req, res) => {
+  const o = req.headers.origin; if (TRACK_ORIGINS.includes(o)) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Vary', 'Origin'); }
+  res.setHeader('Access-Control-Allow-Methods', 'POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.status(204).end();
+});
+app.post('/api/track', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => {
+  const origin = req.headers.origin; if (TRACK_ORIGINS.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
+  res.setHeader('Cache-Control', 'no-store');
+  const ip = clientIp(req), now = Date.now(), hits = (TRACK_HITS.get(ip) || []).filter(t => now - t < 15 * 60e3);
+  if (hits.length >= 12) return res.status(429).json({ ok: false, error: 'busy' });
+  hits.push(now); TRACK_HITS.set(ip, hits);
+  if (TRACK_HITS.size > 5000) TRACK_HITS.clear();
+  let b = {}; try { b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {}); } catch (e) {}
+  const num = String(b.order || '').replace(/\D/g, ''), ph = last9(b.phone);
+  const notFound = () => res.json({ ok: false, error: 'notfound' });
+  if (!num || num.length < 4 || ph.length < 8) return notFound();
+  try {
+    let o = (await cached('orders', FETCH.orders, false)).find(x => String(x.name || '').replace(/\D/g, '') === num);
+    if (!o) { const r = await shopify(`orders.json?status=any&name=${encodeURIComponent('#' + num)}&fields=${ORDER_FIELDS}`, 1); o = r.find(x => String(x.name || '').replace(/\D/g, '') === num); }
+    if (!o || o.cancelled_at) return notFound();
+    const fin = (o.financial_status || '').toLowerCase(); if (fin === 'refunded' || fin === 'voided') return notFound();
+    const phones = [o.phone, o.customer && o.customer.phone, o.shipping_address && o.shipping_address.phone, o.billing_address && o.billing_address.phone].map(last9).filter(x => x.length >= 8);
+    if (!phones.includes(ph)) { logEvent('public', 'track_miss', { order: num, ip }); return notFound(); }
+    const tags = o.tags || '', lis = o.line_items || [], stages = prodStagesFromTags(tags, lis.length), pd = stageDatesFromTags(tags),
+      dlv = deliveredFromTags(tags), booked = deliveryFromTags(tags), created = (o.created_at || '').slice(0, 10), shipped = o.fulfillment_status === 'fulfilled';
+    let fab = {}; try { fab = await fabricIndex(false); } catch (e) {}
+    let specs = {}; try { ((await workerJson('/spec')).items || []).forEach(x => { specs[x.id] = x; }); } catch (e) {}
+    const items = [];
+    lis.forEach((li, i) => {
+      if (NOT_A_PIECE.test(li.title || '')) return;
+      const st = stages[i] || 0, since = ((pd[i] || {})[st] || '').slice(0, 10) || created;
+      const sp = specs[num + (lis.length > 1 ? '-' + (i + 1) : '')], drawn = sp && sp.status === 'complete' ? new Date(sp.at + 4 * 3600e3).toISOString().slice(0, 10) : '';
+      const f = fab[o.id + ':' + i] || {}, delivered = (dlv[i] && dlv[i].d) || (shipped ? ((o.fulfillments || []).map(x => x.created_at).filter(Boolean).sort().pop() || '').slice(0, 10) : '');
+      const s = trackStep(st, since, drawn, (f.delivered || '').slice(0, 10), delivered);
+      const h = [...String(o.id) + i].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+      items.push({ name: trackName(li.title) + ((li.quantity || 1) > 1 ? ' ×' + li.quantity : ''), type: trackType(li.title), color: TRACK_COLORS[h % TRACK_COLORS.length],
+        step: s.step, since: s.since || '', booked: booked[i] || '' });
+    });
+    if (!items.length) return notFound();
+    const pr = promiseOf(o), slow = Math.min.apply(null, items.map(x => x.step));
+    logEvent('public', 'track_ok', { order: num, ip });
+    res.json({ ok: true, order: o.name, items, late: pr.over > 0 && slow < 12,
+      window: { from: addWorkDays(created, pr.lo), to: addWorkDays(created, pr.hi) }, today: uaeNow().slice(0, 10) });
+  } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
+});
 
 app.get('/api/orders', requireAuth, async (req, res) => {
   try {
