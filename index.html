@@ -154,6 +154,8 @@
   .promise.ok{background:rgba(47,122,58,.14);color:#2f7a3a}
   .promise.late{background:rgba(179,38,30,.12);color:#b3261e}
   .promise-u{display:block;font:500 10px var(--ui);color:var(--ink2);margin-top:3px}
+  .pdot.pdel.done{display:grid;place-items:center;color:#fff;font:700 9px var(--ui)}
+  .pdot.pdel:not(.done){border-style:dashed}
   .delrow{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--panelline);font:600 12px var(--ui);color:var(--ink2)}
   .delrow.booked{color:#2f7a3a}
   .delrow input[type=date],.delrow select{width:auto;font:600 12.5px var(--ui);padding:6px 8px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink)}
@@ -4939,7 +4941,7 @@ function crewRow(o,line,editable){
     const chips=crewList(o,line,st).map(a=>'<span class="crew'+(editable?' edit':'')+'" data-ck="'+oid+':'+line+':'+st+':'+esc(a.n)+'" data-wr-name="'+esc(a.n)+'" title="'+PROD_STAGES[st]+' — '+esc(a.n)+' · '+esc(a.d)+'"'+drop+'>'+esc(a.n)+(editable?'<span class="x" title="Remove '+esc(a.n)+'" onclick="event.stopPropagation();removeCrew(\''+oid+'\','+line+','+st+',\''+esc(a.n).replace(/'/g,"")+'\')">×</span>':'')+'</span>').join("");
     cells+='<div class="crewcell">'+chips+(editable?'<span class="crew empty edit" title="Drop a name for '+PROD_STAGES[st]+' (more than one is fine)"'+drop+'>+</span>':'')+'</div>';
   }
-  cells+='<div class="crewcell"></div>';   /* Delivery booked: date + time below */
+  cells+='<div class="crewcell"></div><div class="crewcell"></div>';   /* Delivery booked (date + time below) · Delivered */
   return '<div class="crewrow">'+cells+'</div>'+deliveryRow(o,line,editable);
 }
 function crewOver(ev,el){ev.preventDefault();el.classList.add('over');}
@@ -5061,8 +5063,13 @@ function prodBar(o,line,cur,editable){
     row+='<div class="'+dcls+'"'+click+' title="'+PROD_STAGES[i]+'"></div>';
     if(i<n-1) row+='<div class="pconn'+(i<cur?" done":"")+'"></div>';
   }
-  const SHORT=["Draw","Carp","Foam","Fab","Pack","Deliver"];   /* phones show the short names */
-  const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur?" on":"")+'" data-s="'+SHORT[i]+'"><span class="plf">'+nm+'</span></span>').join("");
+  /* final step: DELIVERED — done when the team ticked it (marks the line fulfilled in Shopify) */
+  const dv=((o.delivered||{})[line])||null, isDel=!!(dv&&dv.d);
+  const delClick=(editable&&!isDel)?(' onclick="event.stopPropagation();markDelivered(\''+o.id+'\','+line+')" style="cursor:pointer"'):"";
+  row+='<div class="pconn'+(isDel?" done":"")+'"></div><div class="pdot pdel'+(isDel?" done":"")+'"'+delClick+' title="'+(isDel?"Delivered "+esc(dv.d)+(dv.f?" · fulfilled in Shopify":" · Shopify not updated yet"):"Mark as delivered")+'">'+(isDel?'<span>✓</span>':'')+'</div>';
+  const SHORT=["Draw","Carp","Foam","Fab","Pack","Booked","Done"];   /* phones show the short names */
+  const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur&&!isDel?" on":"")+'" data-s="'+SHORT[i]+'"><span class="plf">'+nm+'</span></span>').join("")
+    +'<span class="plabel'+(isDel?" on":"")+'" data-s="Done"><span class="plf">Delivered</span></span>';
   return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div>'+crewRow(o,line,editable)+'</div>';
 }
 function renderProduction(q){
