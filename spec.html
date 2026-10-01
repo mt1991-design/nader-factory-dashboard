@@ -2538,10 +2538,7 @@ function applyOrderText(O,text){
     /* older Shopify orders: "2 seats in the middle" = 2 middle seats + the two end seats; "4 seater"/"4 modules" as said */
     const mid=t.match(/(\d)\s*(seats?|modules?|pieces?)\s*in\s*the\s*middle/i), mods=t.match(/(\d)\s*(modules|seats)\b(?!\s*in)/i);
     if("n" in v){ if(mid)v.n=Math.min(6,+mid[1]+2); else if(mods&&+mods[1]>=2&&+mods[1]<=6)v.n=+mods[1];
-      /* a wider sofa NEVER gets an extra seat unless the order says so ("5 seats"/"5 modules") — the seats just get wider.
-         A narrower one can drop a seat so seats don't end up tiny (300 Mapleton = 3, not 4 × 62). Mariam 1 Oct. */
-      else if(sz&&MODELS[O.model]){ const d=MODELS[O.model].defaults, arms=(d.A||0)+(d.A2!=null?d.A2:(d.A||0)), std=(d.W-arms)/d.n;
-        if(v.W<d.W)v.n=Math.max(2,Math.min(d.n,Math.round((v.W-arms)/std))); else v.n=d.n; }
+      else if(MODELS[O.model]) v.n=MODELS[O.model].defaults.n;   /* never assume: the seat count only changes when the order says so (Mariam 1 Oct) */
       if(MODELS[O.model].minSeats)v.n=Math.max(v.n,MODELS[O.model].minSeats); }
   }
   const fab=t.match(/(?:fabric|upholstery)\s*(?:code)?\s*[:\-]\s*([^\n]{2,60})/i);
