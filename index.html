@@ -149,6 +149,9 @@
   .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
   .teamstrip .addrow{max-width:420px}
   .promisetd{white-space:nowrap}
+  .tagchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+  .tagchip{display:inline-block;padding:2px 8px;border-radius:20px;background:#f3ecdf;border:1px solid #e3d6bf;color:#6b5634;font:600 10.5px var(--ui);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+  .tagchips.big .tagchip{font-size:12.5px;padding:4px 10px;max-width:none}
   .factcount{font:600 11px var(--ui);letter-spacing:0;text-transform:none;color:var(--ink2)}
   .factfilters{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 12px}
   .factstage{display:flex;flex-wrap:wrap;gap:6px}
@@ -5137,6 +5140,9 @@ function fmtMoney(v,c){if(v===""||v==null)return"";return (c?c+" ":"")+v;}
 function fmtAddr(a){if(!a)return'<span class="muted">— no address on file —</span>';
   const L=[a.name,a.company,a.address1,a.address2,[a.zip,a.city].filter(Boolean).join(" "),[a.province,a.country].filter(Boolean).join(", "),a.phone].filter(Boolean).map(esc);
   return L.length?L.join("\n"):'<span class="muted">—</span>';}
+/* the team's own Shopify tags (e.g. "Delivery 7th to 11 oct", "Items Ready") — the dashboard's internal tags are hidden */
+const SYS_TAG=/^(prodstage|pd|crew|delivery|delivered|shopfulfilled|state|signature|payment)[:-]|^(sales-form|bespoke|changed-order)$|^quote \d/i;
+function humanTags(o){ return String(o.tags||"").split(",").map(t=>t.trim()).filter(t=>t&&!SYS_TAG.test(t)); }
 function openOrderDetail(o){
   const st=shopifyStatus(o);
   const oq2=esc(o.order).replace(/'/g,"");
@@ -5159,7 +5165,7 @@ function openOrderDetail(o){
     ${o.billing_address?`<div class="odsec"><h4>Billing address</h4><div class="odaddr">${fmtAddr(o.billing_address)}</div></div>`:''}
     <div class="odsec"><h4>Items</h4><table class="oditems"><thead><tr><th>Product</th><th>SKU</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th></th></tr></thead><tbody>${items||'<tr><td colspan="5" class="muted">No items</td></tr>'}</tbody></table></div>
     ${o.note?`<div class="odsec"><h4>Note</h4><div style="font-size:13px">${esc(o.note)}</div></div>`:''}
-    ${o.tags?`<div class="odsec"><h4>Tags</h4><div style="font-size:13px">${esc(o.tags)}</div></div>`:''}
+    ${humanTags(o).length?`<div class="odsec"><h4>Tags</h4><div class="tagchips big">${humanTags(o).map(t=>'<span class="tagchip">'+esc(t)+'</span>').join('')}</div></div>`:''}
     <div class="odsec oddraw"><h4>Factory drawing</h4>
       <div class="odrow"><span class="k">Status</span><span><span class="pill fail">Needs drawing</span></span></div>
       <div class="odrow"><span class="k">Assigned to</span><span><select onchange="setDrawer('${oq2}',this.value)">${DRAWERS.map(function(nm){return '<option'+(nm===assignedDrawer(o)?' selected':'')+'>'+esc(nm)+'</option>';}).join('')}</select></span></div>

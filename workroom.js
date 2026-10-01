@@ -151,6 +151,8 @@ function decorateRows(){
   tb.querySelectorAll("tr[data-oi]").forEach(tr=>{const o=SHOPIFY[+tr.dataset.oi];if(!o)return;
     tr.classList.add("wr-row"); tr.style.setProperty("--stripe",stripeFor(o));
     if(seen.has(o))return; seen.add(o);
+    { const tg=(typeof humanTags==="function")?humanTags(o):[]; const c0=tr.querySelector("td.ono");
+      if(tg.length&&c0&&!c0.querySelector(".tagchips")) c0.insertAdjacentHTML("beforeend",'<div class="tagchips">'+tg.slice(0,3).map(t=>'<span class="tagchip" title="'+esc(t)+'">'+esc(t)+'</span>').join("")+(tg.length>3?'<span class="tagchip">+'+(tg.length-3)+'</span>':'')+'</div>'); }
     if((o.tnotes||[]).length){ const c=tr.querySelector("td.ono"); if(c&&!c.querySelector(".wr-nchip")) c.insertAdjacentHTML("beforeend",'<span class="wr-nchip" title="'+esc((o.tnotes[o.tnotes.length-1]||{}).text||"")+'">📝 '+o.tnotes.length+'</span>'); }
     const p=tr.querySelector(".pill.sent"); if(!p||o.isDraft||o.state!=="open"||salesView==="production")return;
     const st=Math.max(...(o.prod_stages&&o.prod_stages.length?o.prod_stages:[0]));
