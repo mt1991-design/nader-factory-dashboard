@@ -948,7 +948,7 @@ const AsakusaDraw=WarpDraw.make({
 /* an ottoman on an L-shape sits in front of the plain end, in the plan (Mariam's #29292687 drawing): as wide as
    arm + end seat unless its width is given, its depth from the order */
 const MA_OTT=V=>{if(!+V.OTT||(V.SHAPE!=="CR"&&V.SHAPE!=="CL")||V.OTSH==="Round")return null;const w=MA_SEATS(V),left=V.SHAPE==="CR";
-  const ow=+V.OTW||(left?MA_AL(V)+w[0]:MA_AR(V)+w[w.length-1]),od=+V.OTD||65;return {left,x0:left?0:V.W-ow,x1:left?ow:V.W,y0:V.D,y1:V.D+od};};
+  const ow=+V.OTW||(left?MA_AL(V)+w[0]:MA_AR(V)+w[w.length-1]),od=+V.OTD||65;const gap=4;return {left,x0:left?0:V.W-ow,x1:left?ow:V.W,y0:V.D+gap,y1:V.D+gap+od};};   // a separate piece: drawn with a small gap
 const MAPL_DEFAULT={W:400,n:4,SHAPE:"U",RL:180,RR:200,D:120,B:25,BC:20,AL:80,A:25,CA:1,OA:1,H:63,AH:53,SH:43,BH:21,LH:3,side:"U"};   // Mariam 30 Sep: arms 80 long, seat depth 95 (20 + 75), seat 43, feet 3
 const MA_AL=V=>+V.CA===0?0:V.A, MA_AR=V=>+V.OA===0?0:V.A;
 const MA_SEATS=V=>seatSplit(V.W-MA_AL(V)-MA_AR(V),Array(Math.max(2,V.n|0)).fill(1),350,4);
@@ -984,12 +984,14 @@ const MapletonDraw=WarpDraw.make({
     const chL=V.SHAPE!=="CR"&&V.SHAPE!=="S", chR=V.SHAPE!=="CL"&&V.SHAPE!=="S", ot=MA_OTT(V);
     if(chL){o+=K.chainV([Y(0),Y(V.B),Y(aL),Y(V.RL)],xL-G,xL,[F(V.B),F(aL-V.B),F(V.RL-aL)]);
       o+=K.chainV([Y(0),Y(aL)],xL-2*G,xL,[F(aL)]);o+=K.chainV([Y(0),Y(V.RL)],xL-3*G,xL,[F(V.RL)]);}
-    else if(ot&&ot.left){o+=K.chainV([Y(0),Y(V.B),Y(V.D),Y(ot.y1)],xL-G,xL,[F(V.B),F(V.D-V.B),F(ot.y1-ot.y0)]);o+=K.chainV([Y(0),Y(ot.y1)],xL-2*G,xL,[F(ot.y1)]);}
+    else if(ot&&ot.left){o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xL-G,xL,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xL-2*G,xL,[F(V.D)]);}
     else{o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xL-G,xL,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xL-2*G,xL,[F(V.D)]);}
     if(ot){o+=hChain([ot.x0,ot.x1],null,Y(ot.y1)+G,Y(ot.y1));
-      o+=`<text x="${((X(ot.x0)+X(ot.x1))/2).toFixed(1)}" y="${((Y(ot.y0)+Y(ot.y1))/2).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="18" fill="#1c1a17">Ottoman</text>`;}
+      /* the ottoman's own depth, on its open side */
+      {const xo=ot.left?X(ot.x1):X(ot.x0),dx=ot.left?G:-G;o+=K.chainV([Y(ot.y0),Y(ot.y1)],xo+dx,xo,[F(ot.y1-ot.y0)]);}
+      o+=`<text x="${((X(ot.x0)+X(ot.x1))/2).toFixed(1)}" y="${((Y(ot.y0)+Y(ot.y1))/2).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="18" fill="#1c1a17">Ottoman</text><text x="${((X(ot.x0)+X(ot.x1))/2).toFixed(1)}" y="${((Y(ot.y0)+Y(ot.y1))/2+20).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#9a7b45">separate piece</text>`;}
     if(chR){o+=K.chainV([Y(0),Y(V.B),Y(aR),Y(V.RR)],xR+G,xR,[F(V.B),F(aR-V.B),F(V.RR-aR)]);o+=K.chainV([Y(0),Y(V.RR)],xR+2*G,xR,[F(V.RR)]);}
-    else if(ot&&!ot.left){o+=K.chainV([Y(0),Y(V.B),Y(V.D),Y(ot.y1)],xR+G,xR,[F(V.B),F(V.D-V.B),F(ot.y1-ot.y0)]);o+=K.chainV([Y(0),Y(ot.y1)],xR+2*G,xR,[F(ot.y1)]);}
+    else if(ot&&!ot.left){o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xR+G,xR,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xR+2*G,xR,[F(V.D)]);}
     else{o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xR+G,xR,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xR+2*G,xR,[F(V.D)]);}
     o+=K.innerV([Y(V.B),Y(V.B+V.BC),Y(V.D)],X(a+w[0]+w[1]/2),[F(V.BC),F(V.D-V.B-V.BC)]);
     o+=K.innerV([Y(V.B),Y(V.D)],X(a+w[0]+w[1]+w[2]/2),[F(V.D-V.B)+" seat depth"]);      // total seat depth (cushion + seat)
