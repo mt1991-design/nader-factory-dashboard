@@ -160,6 +160,10 @@
   .promise.ok{background:rgba(47,122,58,.14);color:#2f7a3a}
   .promise.late{background:rgba(179,38,30,.12);color:#b3261e}
   .promise-u{display:block;font:500 10px var(--ui);color:var(--ink2);margin-top:3px}
+  .stored{flex-basis:100%;text-align:right;color:#7c6031;font-weight:700}
+  .dc-card{width:440px}.dc-what{font-size:14px;margin:0 0 10px}.dc-warn{font-size:13px;background:#fdf3e2;border:1px solid #ecd3a6;border-radius:8px;padding:9px 11px;margin:0 0 12px}
+  .dc-tick{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600;margin:0 0 14px}.dc-tick input{width:18px;height:18px}
+  .dc-btns{display:flex;gap:8px;justify-content:flex-end}.dc-go{flex:0 0 auto;padding:10px 14px;border-radius:9px;border:0;background:#2f7a3a;color:#fff;font:700 13px var(--ui);cursor:pointer}.dc-go:disabled{opacity:.45;cursor:not-allowed}
   .pdot.pdel.done{display:grid;place-items:center;color:#fff;font:700 9px var(--ui)}
   .pdot.pdel:not(.done){border-style:dashed}
   .delrow{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--panelline);font:600 12px var(--ui);color:var(--ink2)}
@@ -4869,7 +4873,7 @@ function matchStatus(o){ if(salesStatuses.size===0) return o.isDraft?true:(o.sta
 function salesRowClick(tr){const i=+tr.getAttribute("data-oi");const o=SHOPIFY[i];if(o)openOrderDetail(o);}
 /* ---- production timeline (factory edits, sales views) ---- */
 let FACTORY_MODE=false;
-const PROD_STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing","Delivery booked"];
+const PROD_STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing","Stored in warehouse","Delivery booked"];
 function applyRoleMode(){
   const dt=$("tab-drafts"); if(dt) dt.style.display=FACTORY_MODE?"none":"";
   const nb=document.querySelector('#screen-sales .topbar a'); if(nb) nb.style.display=FACTORY_MODE?"none":"";
@@ -4952,7 +4956,7 @@ function crewRow(o,line,editable){
     const chips=crewList(o,line,st).map(a=>'<span class="crew'+(editable?' edit':'')+'" data-ck="'+oid+':'+line+':'+st+':'+esc(a.n)+'" data-wr-name="'+esc(a.n)+'" title="'+PROD_STAGES[st]+' — '+esc(a.n)+' · '+esc(a.d)+'"'+drop+'>'+esc(a.n)+(editable?'<span class="x" title="Remove '+esc(a.n)+'" onclick="event.stopPropagation();removeCrew(\''+oid+'\','+line+','+st+',\''+esc(a.n).replace(/'/g,"")+'\')">×</span>':'')+'</span>').join("");
     cells+='<div class="crewcell">'+chips+(editable?'<span class="crew empty edit" title="Drop a name for '+PROD_STAGES[st]+' (more than one is fine)"'+drop+'>+</span>':'')+'</div>';
   }
-  cells+='<div class="crewcell"></div><div class="crewcell"></div>';   /* Delivery booked (date + time below) · Delivered */
+  cells+='<div class="crewcell"></div><div class="crewcell"></div><div class="crewcell"></div>';   /* Stored · Delivery booked (date + time below) · Delivered */
   return '<div class="crewrow">'+cells+'</div>'+deliveryRow(o,line,editable);
 }
 function crewOver(ev,el){ev.preventDefault();el.classList.add('over');}
@@ -4981,26 +4985,43 @@ function deliveryRow(o,line,editable){
   const w=((o.delivery||{})[line])||"", cur=(o.prod_stages||[])[line]||0;
   if(!w&&cur<4)return "";
   const oid=esc(String(o.id));
+  const pdl=((o.prod_dates||{})[line])||{}, inStore=cur>=5&&pdl[5]&&!w;
+  const storeHTML=pdl[5]?'<span class="stored">🏬 In the warehouse since '+esc(fmtDay(String(pdl[5]).slice(0,10)))+' · '+Math.max(0,Math.floor((Date.now()-Date.parse(String(pdl[5]).slice(0,10)+"T00:00:00+04:00"))/864e5))+' days</span>':'';
   const dv=((o.delivered||{})[line])||null;
   const dvHTML=dv&&dv.d?'<span class="delivered">✓ Delivered '+esc(fmtDay(dv.d))+(dv.f?' · marked fulfilled in Shopify':' · <em title="Shopify still needs the fulfilment permission — the dashboard will update Shopify once it is added">Shopify not updated yet</em>')+'</span>':'';
-  if(!editable) return '<div class="delrow'+(w?" booked":"")+'">🚚 '+(w?'Delivery booked · <b>'+esc(fmtDelivery(w))+'</b>':'Delivery not booked yet')+dvHTML+'</div>';
+  if(!editable) return '<div class="delrow'+(w?" booked":"")+'">'+storeHTML+'🚚 '+(w?'Delivery booked · <b>'+esc(fmtDelivery(w))+'</b>':'Delivery not booked yet')+dvHTML+'</div>';
   const date=w.slice(0,10), time=w.slice(11,16);
-  return '<div class="delrow edit'+(w?" booked":"")+'" onclick="event.stopPropagation()"><span>🚚 Delivery booked with customer</span>'
+  return '<div class="delrow edit'+(w?" booked":"")+'" onclick="event.stopPropagation()">'+storeHTML+'<span>🚚 Delivery booked with customer</span>'
     +'<input type="date" id="dd-'+oid+'-'+line+'" value="'+date+'" onchange="saveDelivery(\''+oid+'\','+line+')" aria-label="Delivery date">'
     +'<select id="dt-'+oid+'-'+line+'" onchange="saveDelivery(\''+oid+'\','+line+')" aria-label="Delivery time"><option value="">Time…</option>'+DELIVERY_TIMES.map(t=>'<option'+(t===time?" selected":"")+'>'+t+'</option>').join("")+'</select>'
     +(w&&!dv?'<button type="button" class="delclear" onclick="saveDelivery(\''+oid+'\','+line+',true)" title="Clear the delivery booking">Clear</button>':'')
     +(w?(dv&&dv.d?dvHTML+(dv.f?'':'<button type="button" class="delclear" onclick="markDelivered(\''+oid+'\','+line+')" title="Try updating Shopify again">Retry Shopify</button>')
       :'<button type="button" class="delbtn" onclick="markDelivered(\''+oid+'\','+line+')" title="The piece has been handed over — marks this item fulfilled in Shopify">✓ Delivered</button>'):'')+'</div>';
 }
-function markDelivered(id,line){
+function markDelivered(id,line,confirmed){
   const o=SHOPIFY.find(x=>String(x.id)===String(id)), it=o&&o.items[line];
-  if(!confirm("Mark "+(it?it.product:"this piece")+" as DELIVERED?\n\nThis marks the item as fulfilled in Shopify."))return;
+  if(!confirmed){ openDeliveredConfirm(id,line,o,it); return; }
   fetch("/api/delivered",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line})})
     .then(r=>r.json()).then(d=>{ if(!d||!d.ok){alert("Couldn't save: "+((d&&d.error)||"error"));return;}
       if(o){o.delivered=o.delivered||{};o.delivered[line]={d:d.date,f:!!d.shopify};}
       if(!d.shopify)alert(d.shopErr==="needs-permission"?"Delivered is saved. Shopify wasn't updated yet: the app still needs the fulfilment permission. It will show 'Retry Shopify' until then.":"Delivered is saved, but Shopify said: "+d.shopErr);
       rerenderProd(); })
     .catch(()=>alert("Network error."));
+}
+/* Delivered is two steps: open this box → tick "the customer has received it" → confirm. It updates Shopify. */
+function openDeliveredConfirm(id,line,o,it){
+  let m=$("delConfirm"); if(m) m.remove();
+  m=document.createElement("div"); m.id="delConfirm"; m.className="odoverlay"; m.style.alignItems="center";
+  m.innerHTML='<div class="odcard dc-card"><div class="odhead"><div class="odtitle">Mark as delivered?</div></div><div class="odbody">'
+    +'<p class="dc-what"><b>'+esc(o?o.order:"")+'</b> · '+esc(it?it.product:"")+'<br><span class="muted">'+esc(o&&o.customer||"")+'</span></p>'
+    +'<p class="dc-warn">This marks the item as <b>fulfilled in Shopify</b>. Only do this once the piece has been handed over.</p>'
+    +'<label class="dc-tick"><input type="checkbox" id="dcTick"> The customer has received this piece</label>'
+    +'<div class="dc-btns"><button type="button" class="ghost small" id="dcCancel">Cancel</button><button type="button" class="dc-go" id="dcGo" disabled>Confirm delivered &amp; fulfil in Shopify</button></div></div></div>';
+  document.body.appendChild(m);
+  m.addEventListener("click",e=>{ if(e.target===m) m.remove(); });
+  $("dcCancel").onclick=()=>m.remove();
+  $("dcTick").onchange=e=>{ $("dcGo").disabled=!e.target.checked; };
+  $("dcGo").onclick=()=>{ $("dcGo").disabled=true; $("dcGo").textContent="Saving…"; m.remove(); markDelivered(id,line,true); };
 }
 function saveDelivery(id,line,clear){
   const d=$("dd-"+id+"-"+line), t=$("dt-"+id+"-"+line);
@@ -5078,7 +5099,7 @@ function prodBar(o,line,cur,editable){
   const dv=((o.delivered||{})[line])||null, isDel=!!(dv&&dv.d);
   const delClick=(editable&&!isDel)?(' onclick="event.stopPropagation();markDelivered(\''+o.id+'\','+line+')" style="cursor:pointer"'):"";
   row+='<div class="pconn'+(isDel?" done":"")+'"></div><div class="pdot pdel'+(isDel?" done":"")+'"'+delClick+' title="'+(isDel?"Delivered "+esc(dv.d)+(dv.f?" · fulfilled in Shopify":" · Shopify not updated yet"):"Mark as delivered")+'">'+(isDel?'<span>✓</span>':'')+'</div>';
-  const SHORT=["Draw","Carp","Foam","Fab","Pack","Booked","Done"];   /* phones show the short names */
+  const SHORT=["Draw","Carp","Foam","Fab","Pack","Stored","Booked","Done"];   /* phones show the short names */
   const labels=PROD_STAGES.map((nm,i)=>'<span class="plabel'+(i===cur&&!isDel?" on":"")+'" data-s="'+SHORT[i]+'"><span class="plf">'+nm+'</span></span>').join("")
     +'<span class="plabel'+(isDel?" on":"")+'" data-s="Done"><span class="plf">Delivered</span></span>';
   return '<div class="pbar2"><div class="prow">'+row+'</div><div class="plabels">'+labels+'</div>'+crewRow(o,line,editable)+'</div>';

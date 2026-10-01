@@ -320,8 +320,8 @@ function extractPdf(note) {
   const m = String(note).match(/https?:\/\/\S+\/pdf\/[a-zA-Z0-9]+/);
   return m ? m[0] : '';
 }
-// Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing, 5=Delivery booked). Shared + persistent.
-const PROD_STAGE_COUNT = 6;
+// Production timeline stored on the order as a tag `prodstage:N` (0=Drawing … 4=Packing, 5=Stored in warehouse, 6=Delivery booked). Shared + persistent.
+const PROD_STAGE_COUNT = 7;
 const clampStage = n => Math.max(0, Math.min(PROD_STAGE_COUNT - 1, parseInt(n, 10) || 0));
 // Who worked on each production stage of each line: tags `crew:<line>:<stage>:<Name>@<yyyy-mm-dd>` (stage 0 Drawing … 4 Packing).
 // Several people can share a stage (one tag each) → crew[line][stage] = [{n,d}, …]
@@ -611,10 +611,10 @@ app.post('/api/delivery', requireAuth, async (req, res) => {
     const cur = ((await r.json()).order || {}).tags || '';
     const pdStage = t => { const m = t.match(/^pd:(\d+):(\d)@/); return m && +m[1] === line ? +m[2] : null; };
     let tags = cur.split(',').map(t => t.trim()).filter(t => t && !t.startsWith('delivery:' + line + ':'));
-    const s = when ? 5 : 4;
+    const s = when ? 6 : (tags.some(t => pdStage(t) === 5) ? 5 : 4);   // booked → 6; cleared → back to the warehouse (5) if it was stored, else Packing
     tags = tags.filter(t => !new RegExp('^prodstage:' + line + ':').test(t) && !/^prodstage:\d+$/.test(t) && !(pdStage(t) != null && pdStage(t) > s));
     tags.push('prodstage:' + line + ':' + s);
-    if (when) { tags.push('delivery:' + line + ':' + when); if (!tags.some(t => pdStage(t) === 5)) tags.push('pd:' + line + ':5@' + uaeNow()); }
+    if (when) { tags.push('delivery:' + line + ':' + when); if (!tags.some(t => pdStage(t) === 6)) tags.push('pd:' + line + ':6@' + uaeNow()); }
     const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, {
       method: 'PUT', headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
       body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });

@@ -8,7 +8,7 @@
 const $=id=>document.getElementById(id);
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;
 const STG=PROD_STAGES;                         /* Drawing, Carpentry, Foaming, Fabrication, Packing */
-const LATE=[3,6,3,6,2,7];                      /* days in a stage before the badge turns amber */
+const LATE=[3,6,3,6,2,14,7];                      /* days in a stage before the badge turns amber */
 const ROLE_NAME={0:"Drawer",1:"Carpenter",2:"Foamer",3:"Fabricator",4:"Packer"};
 const COLORS=["#8A4B2A","#5F6B3A","#3F5E73","#6B1A22","#7A5A9A","#2E6A5E","#94702F","#9A4C62","#4F5D8A","#6E6259"];
 const colorOf=n=>COLORS[drawHash(String(n).toLowerCase())%COLORS.length];
@@ -156,7 +156,8 @@ function decorateRows(){
     const st=Math.max(...(o.prod_stages&&o.prod_stages.length?o.prod_stages:[0]));
     if(o.items.some((it,i)=>lineCheck(o,i))){p.textContent="Check dimensions";p.classList.add("wr-pill-wait");}
     else if(needsDrawing(o)){p.textContent="Awaiting drawing";p.classList.add("wr-pill-wait");}
-    else if(st===5){const w=Object.values(o.delivery||{})[0];p.textContent=w?"Delivery "+fmtDelivery(w):"Delivery booked";p.classList.add("wr-pill-ready");}
+    else if(st===6){const w=Object.values(o.delivery||{})[0];p.textContent=w?"Delivery "+fmtDelivery(w):"Delivery booked";p.classList.add("wr-pill-ready");}
+    else if(st===5){p.textContent="In the warehouse";p.classList.add("wr-pill-wait");}
     else if(st>=1){p.textContent="In "+STG[st].toLowerCase();p.classList.add("wr-pill-prod");}
     else{p.textContent="Ready for carpentry";p.classList.add("wr-pill-ready");}
   });
@@ -341,7 +342,7 @@ openOrderDetail=function(o){
   const lines=o.items.map((it,i)=>i).filter(i=>isFurnitureLine(o.items[i].product));
   if(!lines.length)return;
   const html=lines.map(i=>{const L=lineInfo(o,i),shipped=o.state==="shipped";
-    const steps=STG.map((s,k)=>{const done=shipped||k<L.cur,cur=!shipped&&k===L.cur;const who=crewList(o,i,k).map(a=>a.n).join(", ");const when=k===0?(lineDrawn(o,i)?"Drawing complete":"Awaiting drawing"):k===5?((o.delivery||{})[i]?fmtDelivery(o.delivery[i]):""):(L.pd[k]?"Started "+L.pd[k].slice(8,10)+"/"+L.pd[k].slice(5,7)+" "+L.pd[k].slice(11,16):"");
+    const steps=STG.map((s,k)=>{const done=shipped||k<L.cur,cur=!shipped&&k===L.cur;const who=crewList(o,i,k).map(a=>a.n).join(", ");const when=k===0?(lineDrawn(o,i)?"Drawing complete":"Awaiting drawing"):k===6?((o.delivery||{})[i]?fmtDelivery(o.delivery[i]):""):(L.pd[k]?"Started "+L.pd[k].slice(8,10)+"/"+L.pd[k].slice(5,7)+" "+L.pd[k].slice(11,16):"");
       return `<div class="s${done?" d":cur?" c":""}"><span class="b">${done?"✓":k+1}</span><div><div class="n">${s}${cur?' <span class="wr-age'+(L.days>=LATE[k]?" late":"")+'">'+L.days+"d</span>":""}</div><div class="m">${esc([who,when].filter(Boolean).join(" · "))||(done||cur?"":"Not started")}</div></div><span></span></div>`;}).join("");
     return (lines.length>1?`<div class="wr-line">${esc(o.items[i].product)}</div>`:"")+`<div class="wr-vt">${steps}</div>`;}).join("");
   if(notesEl) notesEl.insertAdjacentHTML("afterend",`<div class="odsec"><h4>Production</h4>${html}</div>`); else $("od-body").insertAdjacentHTML("afterbegin",`<div class="odsec"><h4>Production</h4>${html}</div>`);
