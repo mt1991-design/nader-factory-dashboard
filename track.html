@@ -624,6 +624,9 @@ h1 em{font-style:italic;color:var(--accent)}
 .pv .pv-delay{border-style:dashed}
 .pv .pv-cust{border-color:var(--gold)}
 .stage-count:empty{display:none}
+body:not(.pv-on) #timeline li.done,body:not(.pv-on) #timeline li.current{cursor:pointer}
+#timeline li.done:hover .tl-name{text-decoration:underline;text-underline-offset:3px}
+.seg.done,.seg.current{cursor:pointer}
 .stage-text .stage-nav{display:flex;flex-direction:row;justify-self:stretch;width:100%}
 .stage-nav{display:flex;gap:10px;justify-content:center;align-items:center;margin-top:14px}
 .stage-nav .arrow{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--paper);cursor:pointer;display:grid;place-items:center;color:var(--ink)}
@@ -852,7 +855,7 @@ body{background:transparent}
 
     <div class="info-col">
       <div class="piece">
-        <div class="label">Your piece</div>
+        <div class="label" id="pieceLabel">Your piece</div>
         <h2 id="pieceName">Kobe Sofa</h2>
         <p id="pieceSpec">Three-seater · Velvet, Bordeaux</p>
       </div>
@@ -1079,12 +1082,13 @@ body{background:transparent}
   function setMulti(items){
     state.multi = items && items.length > 1 ? items : null;
     const box = $('multiList');
-    if (!state.multi){ box.hidden = true; startRot(state.stage); return; }
+    if (!state.multi){ box.hidden = true; $('pieceLabel').textContent = 'Your piece'; startRot(state.stage); return; }
     document.querySelectorAll('#sceneHolder use.mslot').forEach(u => { const it = state.multi[+u.dataset.slot];
       u.style.display = it ? '' : 'none'; if (!it) return; u.setAttribute('href', '#pcs-' + (DRAWING[it.type] || 'sofa')); u.style.setProperty('--fab', it.color || '#b09a80'); });
     box.hidden = true;   /* no per-piece breakdown for customers */
     box.innerHTML = '<div class="label">Your pieces</div>' + state.multi.map(it => `<div class="pc-row"><span class="pc-dot" style="background:${it.color || '#b09a80'}"></span><div><div class="pc-n">${it.name}</div><div class="pc-s">${stepName(it.type, it.stage)} · stage ${it.stage + 1} of ${N}</div></div><span class="pc-bar"><i style="width:${Math.round((it.stage + 1) / N * 100)}%"></i></span></div>`).join('');
     stepsFor(''); $('pieceName').textContent = state.multi.length + ' pieces'; $('pieceSpec').textContent = state.multi.map(it => it.name).join(' · ');
+    $('pieceSpec').textContent = ''; $('pieceLabel').textContent = 'Your order';
     const overall = orderStage(state.multi.map(it => it.stage)); state.actual = overall;
     state.stage = -1; clearTimers(); renderText(overall); state.stage = overall; paintRing(overall, 'instant'); showScene(overall, false); if (window.syncPv) syncPv();
   }
@@ -1113,11 +1117,11 @@ body{background:transparent}
       if (it === 'busy'){ k = multiIdx; label = 'All your pieces in the workshop'; }
       else {
         quietPiece(it.type, it.color || '#b09a80');
-        label = it.name;
+        label = '';
       }
       scenes.forEach((s, n) => s.toggleAttribute('hidden', n !== k));
       if (k === 0) startPencil(); else { pencilAnims.forEach(a => a.cancel()); pencilAnims = []; }
-      tag.textContent = label; tag.hidden = false;
+      tag.textContent = label || ''; tag.hidden = !label;
       tag.classList.remove('in'); void tag.offsetWidth; tag.classList.add('in');
     };
     show();
@@ -1357,6 +1361,10 @@ body{background:transparent}
   $('nextBtn').addEventListener('click', () => goTo(cur() + 1));
   $('nowBtn').addEventListener('click', () => look(state.actual));
   ['prevBtn', 'nowBtn', 'nextBtn'].forEach(id => $('stageNav').appendChild($(id)));
+  const lookAt = k => { if (!state.cust || k < 0 || k > state.actual) return; if (k === state.actual) look(k); else goTo(k); };
+  $('timeline').addEventListener('click', e => { const li = e.target.closest('li'); if (!li) return; lookAt([].indexOf.call(li.parentNode.children, li)); });
+  segEls.forEach((el, k) => el.addEventListener('click', () => lookAt(k)));
+  numEls.forEach((el, k) => el.addEventListener('click', () => lookAt(k)));
   document.addEventListener('keydown', e => {
     if (!PREVIEW || e.target.tagName === 'INPUT') return;   /* stage switching is preview-only */
     if (e.key === 'ArrowRight') goTo(cur() + 1);

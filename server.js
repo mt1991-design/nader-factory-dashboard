@@ -449,7 +449,7 @@ const TRACK_ORIGINS = ['https://nader.ae', 'https://www.nader.ae', 'https://91fb
 const TRACK_HITS = new Map();
 const TRACK_COLORS = ['#b09a80', '#cdbfa8', '#9c8f80', '#8a7766', '#b0875a', '#6f5646', '#c3a099', '#8f9a7e', '#6c7682'];   // sand, oat, mushroom, taupe, camel, mocha, dusty rose, sage, slate
 const last9 = p => String(p || '').replace(/\D/g, '').slice(-9);
-const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment|^\s*(extra\s+)?fabric\b|swatch|sample|^\s*shipping|^\s*custom\s*(fee|charge)/i;
+const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment|^\s*(extra\s+)?fabric\b|swatch|sample|^\s*shipping|^\s*custom\s*(fee|charge)|\bshould\b|\bready\b|\bweeks?\b|\bplease\b|\bnote\b|\bwill\b|\bby\s+the\b/i;   // notes typed in as line items
 function trackType(t) {
   t = String(t || '').toLowerCase();
   if (/sofa\s*bed|day\s*-?bed/.test(t)) return 'sofa';
