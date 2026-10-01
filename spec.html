@@ -2484,7 +2484,10 @@ function applyOrderText(O,text){
     const sz=t.match(/(\d{3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/i);
     /* U-shapes written as width × left chaise × right chaise ("400x240x240") */
     const sz3=t.match(/(\d{3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})\s*(?:cm)?\s*[x×]\s*(\d{2,3})/i);
-    if(sz3&&v.side==="U"&&"RR" in v){v.W=+sz3[1];v.RL=+sz3[2];v.RR=+sz3[3];if("SHAPE" in v)v.SHAPE="U";}
+    if(sz3&&v.side==="U"&&"RR" in v){v.W=+sz3[1];v.RL=+sz3[2];v.RR=+sz3[3];if("SHAPE" in v)v.SHAPE="U";
+      /* the facing names the LONGER chaise: right hand facing = longer on the right, left hand facing = longer on the left */
+      const hf=/\b(rhf|right[\s-]*hand)/i.test(t)?"R":/\b(lhf|left[\s-]*hand)/i.test(t)?"L":null;
+      if(hf){const lo=Math.min(v.RL,v.RR),hi=Math.max(v.RL,v.RR);if(hf==="R"){v.RR=hi;v.RL=lo;}else{v.RL=hi;v.RR=lo;}}}
     /* two numbers: the bigger one is the overall width, the smaller the chaise ("220 × 290" = 290 wide, 220 chaise) */
     if(sz&&!sz3&&+sz[2]>+sz[1]){const w=sz[2];sz[2]=sz[1];sz[1]=w;}
     if(sz&&!(sz3&&v.side==="U"&&"RR" in v)){v.W=+sz[1];if(+sz[2]>v.D+10)v.RL=+sz[2];}
