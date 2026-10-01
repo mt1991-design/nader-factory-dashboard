@@ -901,6 +901,14 @@ app.post('/api/admin/agents', requireAuth, async (req, res) => {
   catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 
+// admin: which Shopify permissions the dashboard's token has (to confirm fulfilment / order editing are enabled)
+app.get('/api/admin/shopify-scopes', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'admin')) return res.status(403).json({ ok: false });
+  try { const r = await fetch(`https://${STORE}/admin/oauth/access_scopes.json`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    const d = await r.json(); res.json({ ok: true, scopes: (d.access_scopes || []).map(x => x.handle).sort() }); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+
 app.get('/api/health', (req, res) =>
   res.json({ ok: true, store: STORE, apiVersion: APIVER, configured: !!(STORE && TOKEN) }));
 
