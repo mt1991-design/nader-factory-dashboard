@@ -2493,7 +2493,8 @@ function applyOrderText(O,text){
       if(one&&+one[1]>=120&&+one[1]<=600&&"W" in v)v.W=+one[1];}
     const hand=/\b(rhf|right[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?right|right[\s-]*(side\s*)?chaise/i.test(t)?"R":
                /\b(lhf|left[\s-]*hand)|chaise\s*(is\s*)?(on\s*(the\s*)?)?left|left[\s-]*(side\s*)?chaise/i.test(t)?"L":null;
-    if(v.side==="U"){ if("SHAPE" in v&&hand&&!/\bu[\s-]*shape/i.test(t)){v.SHAPE=hand==="R"?"CR":"CL"; if(hand==="R"&&"RR" in v&&sz&&+sz[2]>v.D+10)v.RR=+sz[2];} }
+    /* three sizes (W × left × right) = a U-shape: "left/right hand facing" then only says which chaise is longer — keep the U */
+    if(v.side==="U"){ if("SHAPE" in v&&hand&&!/\bu[\s-]*shape/i.test(t)&&!(sz3&&"RR" in v)){v.SHAPE=hand==="R"?"CR":"CL"; if(hand==="R"&&"RR" in v&&sz&&+sz[2]>v.D+10)v.RR=+sz[2];} }
     else if(v.side!=="N"&&hand)v.side=hand;
     const sd=t.match(/seat\s*depth\D{0,4}(\d{2,3})/i)||t.match(/(\d{2,3})\s*(?:cm)?\s*seat\s*depth/i);
     if(sd&&+sd[1]>=50&&+sd[1]<=130)v.D=v.B+ +sd[1];
