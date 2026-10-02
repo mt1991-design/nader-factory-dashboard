@@ -111,7 +111,7 @@
   .is-locked .mdraw-acts,.is-locked .upbtn{display:none!important}
 
 /* ---- customer mode (/drawing?t=…): just the drawing + the approval box ---- */
-body.custview aside.ed,body.custview .foot,body.custview #backLink,body.custview #savedSel,body.custview #saveState,body.custview #lockBox,body.custview #statusBox{display:none!important}
+body.custview #sheet .notes,body.custview aside.ed,body.custview .foot,body.custview #backLink,body.custview #savedSel,body.custview #saveState,body.custview #lockBox,body.custview #statusBox{display:none!important}
 body.custview .wrap{display:block!important;max-width:1100px;margin:0 auto}
 .cust-box{max-width:820px;margin:18px auto 14px;box-sizing:border-box;width:calc(100% - 24px);padding:20px 22px;border-radius:12px;background:#fffdf8;border:1px solid #e3d6bb;box-shadow:0 2px 10px rgba(40,30,20,.06);font-size:14.5px;line-height:1.55;color:#2b2621}
 .cust-box h2{margin:0 0 6px;font:600 21px/1.25 Georgia,'Times New Roman',serif;color:#6B1A22}
@@ -3001,6 +3001,9 @@ async function custBoot(){
   window.addEventListener('resize',fit);setTimeout(fit,300);
   document.getElementById("tbTitle").textContent="Your drawing · Order "+d.order;document.title="Your drawing — Order "+d.order+" — Nader";
   const doc=document.querySelector('.mast .doc');if(doc)doc.textContent='Drawing for your approval';
+  /* no workshop notes / internal sections for the customer */
+  document.querySelectorAll('#sheet .notes').forEach(n=>n.remove());
+  document.querySelectorAll('#sheet .section-h').forEach(h=>{if(/workshop|production/i.test(h.textContent))h.remove();});
   const sheet=document.getElementById('sheet'),box=document.createElement('section');box.className='cust-box noprint';box.id='custBox';
   sheet.parentNode.insertBefore(box,sheet);
   const st=d.status||{},ch=st.changes||[];

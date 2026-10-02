@@ -538,7 +538,10 @@ app.get('/api/drawing', async (req, res) => {
     if (!st.sent && !k.test) return res.status(404).json({ ok: false, error: 'notfound' });
     const sp = await workerJson('/spec/' + drawSpecId(o, k.line));
     if (!sp || !sp.data) return res.status(404).json({ ok: false, error: 'notfound' });
-    res.json({ ok: true, order: o.name, data: sp.data, test: !!k.test, status: { approved: st.approved || null, changes: st.changes || [] } });
+    /* the customer never gets the team's internal notes, the agent or who drew / locked it */
+    const data = Object.assign({}, sp.data); delete data.notes; delete data.unlockReq; delete data.locked; delete data.completedBy; delete data.unlockedBy;
+    if (data.cust) data.cust = Object.assign({}, data.cust, { agent: '', showroom: '' });
+    res.json({ ok: true, order: o.name, data, test: !!k.test, status: { approved: st.approved || null, changes: st.changes || [] } });
   } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
 });
 app.post('/api/drawing/approve', async (req, res) => {
@@ -665,9 +668,10 @@ app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async
       const st = stages[0] || 0, since = ((pd[0] || {})[st] || '').slice(0, 10) || created, s0 = trackStep(st, since, '', '', (dlv[0] && dlv[0].d) || '');
       items.push({ name: 'Your order', type: 'sofa', color: TRACK_COLORS[0], step: s0.step, since: s0.since || '', booked: booked[0] || '' }); }
     if (!items.length) return notFound();
-    const pr = promiseOf(o), slow = Math.min.apply(null, items.map(x => x.step));
+    const pr = promiseOf(o), st = items.map(x => x.step), lo = Math.min.apply(null, st), hi = Math.max.apply(null, st);
+    const shown = lo >= 10 ? lo : Math.min(hi, 9), slow = shown;   /* the stage the customer sees (same rule as the tracker) */
     logEvent('public', 'track_ok', { order: num, ip });
-    res.json({ ok: true, order: o.name, items, late: pr.over > 0 && slow < 12,
+    res.json({ ok: true, order: o.name, items, late: pr.over > 0 && slow < 11,   /* stored / delivering / delivered: never 'delayed' */
       window: { from: addWorkDays(created, pr.lo), to: addWorkDays(created, pr.hi) }, today: uaeNow().slice(0, 10) });
   } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
 });
