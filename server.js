@@ -671,7 +671,7 @@ app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async
     const pr = promiseOf(o), st = items.map(x => x.step), lo = Math.min.apply(null, st), hi = Math.max.apply(null, st);
     const shown = lo >= 10 ? lo : Math.min(hi, 9), slow = shown;   /* the stage the customer sees (same rule as the tracker) */
     logEvent('public', 'track_ok', { order: num, ip });
-    res.json({ ok: true, order: o.name, items, late: pr.over > 0 && slow < 11,   /* stored / delivering / delivered: never 'delayed' */
+    res.json({ ok: true, order: o.name, items, late: pr.over > 0 && slow < 11, overdue: pr.over > 0,   /* stored+: no delay message, but overdue keeps 'Being confirmed' */
       window: { from: addWorkDays(created, pr.lo), to: addWorkDays(created, pr.hi) }, today: uaeNow().slice(0, 10) });
   } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
 });

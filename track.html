@@ -1257,8 +1257,8 @@ body{background:transparent}
       else if (booked) { const t = new Date(booked + ':00');
         $('windowLabel').textContent = 'Delivery booked'; $('windowDates').textContent = fmt(t, true) + ' · ' + t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         $('windowNote').textContent = 'Our team will call you before arrival.'; }
-      else if (stage === 11) { $('windowLabel').textContent = 'Ready for delivery'; $('windowDates').textContent = 'Stored safely in our warehouse';
-        $('windowNote').textContent = 'Our team will be in touch to arrange delivery with you, or we’ll keep it until the date you’ve asked for.'; }
+      else if (stage === 11 && L.overdue) { $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = 'Being confirmed';   /* past the date: marked late behind the scenes, no delay message */
+        $('windowNote').textContent = 'Our team is contacting you to book a delivery time, or you’ve asked us for a later delivery date.'; }
       else if (late) { $('windowLabel').textContent = 'Delivery date'; $('windowDates').textContent = 'Being confirmed';
         $('windowNote').textContent = 'Our team will be in touch with your new delivery date.'; }
       else { $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = L.window.from === L.window.to ? fmt(D(L.window.to), true) : `${fmt(D(L.window.from))} – ${fmt(D(L.window.to), true)}`;
