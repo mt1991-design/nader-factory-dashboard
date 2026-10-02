@@ -56,6 +56,14 @@
   .logincard{width:340px;max-width:92vw;background:var(--panel);border:1px solid var(--panelline);border-radius:18px;box-shadow:var(--shadow);padding:34px 30px;text-align:center;margin-top:12vh;animation:fadeup .5s both}
   .loginlogo{height:44px;width:auto;margin:0 auto 6px;display:block}
   .loginsub{font:600 11px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--ink2);margin:0 0 22px}
+  .attn{border:1px solid #f0d9a6;background:#fffaf0;border-radius:12px;padding:12px 14px;margin:0 0 14px;display:grid;gap:8px}
+  .attn-h{font:700 13px var(--ui);color:#8a5a00;display:flex;align-items:center;gap:8px}
+  .attn-n{background:#c0392b;color:#fff;border-radius:999px;font:700 11px var(--ui);padding:1px 8px}
+  .attn-row{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:space-between;align-items:center;background:#fff;border:1px solid #eee3c8;border-radius:9px;padding:9px 11px;font:13px var(--ui)}
+  .attn-row.warn{border-left:4px solid #e0a32e}.attn-row.cust{border-left:4px solid #6B1A22}
+  .attn-sub{font-size:12px;color:#6b655c;margin-top:2px}
+  .attn-acts{display:flex;gap:6px;flex-wrap:wrap}
+  #tab-orders.has-attn::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#c0392b;margin-left:6px;vertical-align:middle}
   .dctl{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
   .dchip{flex-basis:100%;font:600 11px var(--ui);padding:4px 9px;border-radius:7px;line-height:1.35}
   .dchip.ok{background:#e6f4ea;color:#1e6b3a}.dchip.sent{background:#eef1f6;color:#34495e}.dchip.warn{background:#fdf0d5;color:#8a5a00}
@@ -292,6 +300,7 @@
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
         <button class="roletab" id="tab-production" onclick="setSalesView('production')">Production status</button>
       </div>
+      <section id="attn" class="attn" hidden aria-live="polite"></section>
       <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
         <label class="sortlabel">Sort by
@@ -5176,6 +5185,22 @@ async function drawTest(oi,i){
     dMsg(oi,i,"✓ Test email sent to "+to.trim());}
   catch(e){dMsg(oi,i,"Test failed: "+e.message);}
 }
+/* ---------- "Needs your attention": unlock / edit requests from the team + changes customers asked for ---------- */
+function renderAttn(){
+  const box=$("attn");if(!box)return;
+  const rows=[];
+  SHOPIFY.forEach((o,oi)=>{if(o.isDraft)return;Object.keys(o.drawst||{}).forEach(k=>{const i=+k,st=o.drawst[k]||{},it=o.items[i]||{},oq=esc(o.order).replace(/'/g,"");
+    const nm=esc(o.order)+(o.items.length>1?' · item '+(i+1):'')+' — '+esc(it.product||'');
+    const open='<button type="button" class="dbtn" onclick="specLineItem(\''+oq+'\','+i+')">📄 Open sheet</button>';
+    if(st.edit&&!st.edit.done)rows.push({t:st.edit.t,h:'<div class="attn-row warn"><div><b>🔓 Unlock / edit requested</b> · '+nm+'<div class="attn-sub">'+esc(st.edit.by||'')+' · '+dDay(st.edit.t)+(st.edit.reason?' — “'+esc(st.edit.reason)+'”':'')+'</div></div><div class="attn-acts">'+open+(ROLES_HAS_ADMIN()?'<button type="button" class="dbtn main" onclick="drawEditDone('+oi+','+i+')">✓ Fixed</button>':'')+'</div></div>'});
+    const last=(st.changes||[]).slice(-1)[0];
+    if(last&&!st.approved&&(!st.sent||last.t>st.sent.t))rows.push({t:last.t,h:'<div class="attn-row cust"><div><b>✎ Customer asked for a change</b> · '+nm+'<div class="attn-sub">'+esc(o.customer||'')+' · '+dDay(last.t)+' — “'+esc(last.text||'')+'”</div></div><div class="attn-acts">'+open+'<button type="button" class="dbtn main" onclick="drawSend('+oi+','+i+')">Send updated drawing</button></div></div>'});
+  });});
+  rows.sort((a,b)=>String(b.t).localeCompare(String(a.t)));
+  box.hidden=!rows.length;
+  box.innerHTML=rows.length?'<div class="attn-h">Needs your attention <span class="attn-n">'+rows.length+'</span></div>'+rows.map(r=>r.h).join(''):'';
+  const tab=$("tab-orders");if(tab)tab.classList.toggle("has-attn",!!rows.length);
+}
 function drawCopy(oi,i){const st=((SHOPIFY[oi]||{}).drawst||{})[i]||{};if(!st.sent||!st.sent.link)return;
   try{navigator.clipboard.writeText(st.sent.link);dMsg(oi,i,"✓ Link copied");}catch(e){prompt("Copy this link:",st.sent.link);}}
 async function drawEditReq(oi,i){
@@ -5285,7 +5310,7 @@ function markPaid(sel,id){
 }
 window.markPaid=markPaid;
 function specFromDetail(orderNo,i){closeOrderDetail();specLineItem(orderNo,i);}
-function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;
+function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;renderAttn();
   const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length,nProd=SHOPIFY.filter(o=>!o.isDraft&&!isShipped(o)).length;
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
