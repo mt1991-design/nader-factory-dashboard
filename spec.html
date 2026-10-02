@@ -2427,13 +2427,13 @@ const cleanId=s=>String(s||"").replace(/[^A-Za-z0-9-]/g,"");
 const num=s=>{const m=String(s||"").replace(/,/g,"").match(/-?\d+(?:\.\d+)?/);return m?parseFloat(m[0]):NaN;};
 const today=()=>new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 
-const SPEC_FIELDS=["Category","Upholstery Material","Fabric Supplier","Fabric Catalogue Code","Foam Firmness","Feather Filling","Leg / Base Material","Finish Colour / Details","Extra Cushions"];
+const SPEC_FIELDS=["Category","Quantity","Upholstery Material","Fabric Supplier","Fabric Catalogue Code","Foam Firmness","Feather Filling","Leg / Base Material","Finish Colour / Details","Extra Cushions"];
 function blankOrder(product){
   const m=modelFor(product);
   return {product:product||"Kobe Corner Sofa",model:m,orderNo:"",date:today(),assigned:"",
     photo:m?MODELS[m].photo:"",photoSide:m?MODELS[m].photoSide:"",mirror:false,
     V:m?{...MODELS[m].defaults}:{...KOBE_DEFAULT},
-    spec:SPEC_FIELDS.map(k=>[k,k==="Category"?(m&&MODELS[m].kind==="table"?"Dining Table":m&&MODELS[m].kind==="chair"?"Dining Chair":/corner/i.test(product||"")?"Corner Sofa":m&&MODELS[m].bed?"Bed":m&&MODELS[m].stool?"Bar Stool":m?"Sofa":""):""]),
+    spec:SPEC_FIELDS.map(k=>[k,k==="Quantity"?"1":k==="Category"?(m&&MODELS[m].kind==="table"?"Dining Table":m&&MODELS[m].kind==="chair"?"Dining Chair":/corner/i.test(product||"")?"Corner Sofa":m&&MODELS[m].bed?"Bed":m&&MODELS[m].stool?"Bar Stool":m?"Sofa":""):""]),
     cust:{name:"",phone:"",email:"",addr:"",area:"",emirate:"",agent:"",showroom:""},notes:""};
 }
 const DEMO=()=>Object.assign(blankOrder(window.DEMO_PRODUCT||"Kobe Corner Sofa"),{
@@ -2607,6 +2607,7 @@ async function fromOrder(o,i){
   const itemNote=(o.items||[]).length>1?itemSection(o.note,i,it.product):String(o.note||"");
   O.notes=itemNote.split("\n").filter(l=>!/\bAED\b|total|SIGNED PDF|https?:\/\//i.test(l)).join("\n").replace(/\n{3,}/g,"\n\n").trim();
   if(it.variant&&!/default title/i.test(it.variant))O.spec.unshift(["Variant",it.variant]);
+  { const qr=O.spec.find(x=>x[0]==="Quantity"); if(qr)qr[1]=String(it.qty||1); }   /* e.g. 8 dining chairs */
   /* form orders: sizes ONLY from the form's dimension boxes (blank / "Standard" = the product's DWG standard size) */
   const extra=(o.items||[]).filter((x,j)=>j!==i&&!modelFor(x.product)&&!/sofa|bed|chair|table|stool|ottoman/i.test(x.product)).map(x=>x.product);
   if(extra.length)O.notes=[extra.join("\n"),O.notes].filter(Boolean).join("\n");
@@ -2952,6 +2953,11 @@ async function boot(){
   const origTitle=ORDER.orderedAs||ORDER.product||"";
   if(ORDER.photo&&/cdn\.shopify\.com/.test(ORDER.photo)&&!ORDER.photoManual&&CUSTOM_RE.test(origTitle)){ORDER.photo="";save();}
   if(!ORDER.photo&&ORDER.product&&!ORDER.photoCleared){const p=await productPhoto(origTitle);if(p){ORDER.photo=p;save();}}
+  /* sheets saved before Quantity existed: add the row (from the order when we know it) */
+  if(ORDER&&Array.isArray(ORDER.spec)&&!ORDER.spec.some(r=>r[0]==="Quantity")){let q="1";
+    if(Q.o){try{const r=await fetch(Q.k==="draft"?"/api/draft_orders":"/api/orders",{credentials:"same-origin"});const d=await r.json();
+      const o=(d.orders||d.drafts||[]).find(x=>x.order===Q.o);const it=o&&(o.items||[])[Q.i|0];if(it&&it.qty)q=String(it.qty);}catch(e){}}
+    const ci=ORDER.spec.findIndex(r=>r[0]==="Category");ORDER.spec.splice(ci+1,0,["Quantity",q]);}
   start();loadSavedList();
 }
 boot();
