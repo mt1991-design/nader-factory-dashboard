@@ -5119,7 +5119,7 @@ function prodBar(o,line,cur,editable){
 function fmtOrderDate(d){if(!d)return"";const x=new Date(d+"T12:00:00");return isNaN(x)?d:x.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
 /* ---------- DRAWING APPROVAL (manual): check the drawing → Send to customer → approved / change requested ----------
    Email goes through EmailJS once the "drawing approval" template exists (DRAW_EMAIL.template); WhatsApp always opens. */
-const DRAW_EMAIL={service:"service_itfuapy",template:"",key:"0i4e9U2tktd_FGAT_"};
+const DRAW_EMAIL={service:"service_itfuapy",template:"template_w9lhq6v",key:"0i4e9U2tktd_FGAT_"};
 const dDay=t=>{const d=new Date(String(t||"").replace(" ","T"));return isNaN(d)?"":d.toLocaleDateString("en-GB",{day:"numeric",month:"short"});};
 function drawCtl(o,i,oi){
   if(o.isDraft||o.state!=="open")return "";
