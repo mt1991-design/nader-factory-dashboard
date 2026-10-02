@@ -57,7 +57,7 @@
   .spec{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:2px}
   .spec .cell{padding:4px 11px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}.spec .cell:nth-child(3n){border-right:none}
   .spec .cell .k{font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.spec .cell .v{font-size:13px;font-weight:600;margin-top:2px;min-height:1.2em}.spec .cell .v.big{color:var(--maroon);font-family:Georgia,serif;font-weight:700}
-  .cust{display:grid;grid-template-columns:1.4fr 1.6fr 1fr;border:1px solid var(--line);border-radius:6px;background:var(--tint2);overflow:hidden}
+  .cust{display:grid;grid-template-columns:1.6fr 1fr;border:1px solid var(--line);border-radius:6px;background:var(--tint2);overflow:hidden}
   .cust .col{padding:7px 11px;border-right:1px solid var(--line)}.cust .col:last-child{border-right:none}
   .cust .lab{font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-dk);font-weight:700;margin-bottom:3px}.cust .row{font-size:10px;line-height:1.5}.cust .row span.k{color:var(--muted)}
   .notes{border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:6px;background:#fffdf8;padding:7px 12px;font-size:11px;line-height:1.45;min-height:12mm}.notes .lab{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-dk);font-weight:700;margin-bottom:3px}
@@ -2757,9 +2757,9 @@ function renderSheet(){
 <div class="panel ottpanel"><div class="cap"><span>Ottoman — plan &amp; front</span><b>cm · to scale</b></div><div class="body" id="ottBody"></div></div></div>
 <div class="section-h"><span class="t">Specification</span><span class="rule"></span></div>
 <div class="spec" id="spec"></div>
-<div class="section-h"><span class="t">Customer &amp; Delivery</span><span class="rule"></span></div>
+<div class="section-h"><span class="t">Delivery &amp; Sales</span><span class="rule"></span></div>
 <div class="cust">
-  <div class="col"><div class="lab">Customer</div><div class="row" contenteditable="true" data-c="name">${esc(c.name)}</div><div class="row"><span class="k">Tel</span> <span contenteditable="true" data-c="phone">${esc(c.phone)}</span></div><div class="row"><span class="k">Email</span> <span contenteditable="true" data-c="email">${esc(c.email)}</span></div></div>
+  <!-- customer name / phone / email are not shown to the factory (Mariam 2 Oct) -->
   <div class="col"><div class="lab">Delivery Address</div><div class="row" contenteditable="true" data-c="addr">${esc(c.addr)}</div><div class="row" contenteditable="true" data-c="area">${esc(c.area)}</div><div class="row"><span class="k">Emirate</span> <span contenteditable="true" data-c="emirate">${esc(c.emirate)}</span></div></div>
   <div class="col"><div class="lab">Sales</div><div class="row"><span class="k">Agent</span> <span contenteditable="true" data-c="agent">${esc(c.agent)}</span></div><div class="row"><span class="k">Showroom</span> <span contenteditable="true" data-c="showroom">${esc(c.showroom)}</span></div></div>
 </div>
