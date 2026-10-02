@@ -109,6 +109,26 @@
   .is-stool .bigfront .body svg{max-height:92mm}.is-stool .toppanel .body svg{max-height:66mm}
   .ottpanel .body{padding:3px 10px}.ottpanel .body svg{max-height:40mm}
   .is-locked .mdraw-acts,.is-locked .upbtn{display:none!important}
+
+/* ---- customer mode (/drawing?t=…): just the drawing + the approval box ---- */
+body.cust aside.ed,body.cust .foot,body.cust #backLink,body.cust #savedSel,body.cust #saveState,body.cust #lockBox,body.cust #statusBox{display:none!important}
+body.cust .wrap{display:block!important;max-width:1100px;margin:0 auto}
+.cust-box{max-width:820px;margin:18px auto 14px;padding:20px 22px;border-radius:12px;background:#fffdf8;border:1px solid #e3d6bb;box-shadow:0 2px 10px rgba(40,30,20,.06);font-size:14.5px;line-height:1.55;color:#2b2621}
+.cust-box h2{margin:0 0 6px;font:600 21px/1.25 Georgia,'Times New Roman',serif;color:#6B1A22}
+.cust-box p{margin:0 0 12px;max-width:62ch}
+.cb-tick{display:flex;gap:10px;align-items:flex-start;margin:6px 0 10px;font-weight:600;cursor:pointer}
+.cb-tick input{width:18px;height:18px;margin-top:2px;accent-color:#6B1A22}
+.cb-in{display:block;width:100%;max-width:420px;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid #d6c8aa;border-radius:8px;margin:0 0 10px;background:#fff}
+.cb-acts{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 6px}
+.cb-main,.cb-sec{font:600 14px inherit;padding:10px 18px;border-radius:8px;cursor:pointer}
+.cb-main{background:#6B1A22;color:#fff;border:1px solid #6B1A22}
+.cb-sec{background:#fff;color:#6B1A22;border:1px solid #cdbb95}
+.cb-main:focus-visible,.cb-sec:focus-visible{outline:2px solid #A98B54;outline-offset:2px}
+.cb-msg{min-height:1.2em;font-size:13.5px;color:#6B1A22;margin-top:4px}
+.cb-note{background:#f6efe1;border-radius:8px;padding:8px 12px;margin:0 0 10px;font-size:13.5px}
+.cb-ok b{display:block;font:600 20px Georgia,serif;color:#1e6b3a;margin-bottom:4px}
+.cb-ok p{margin:0}
+@media print{.cust-box{display:none}}
 </style>
 
 <div class="toolbar">
@@ -2420,7 +2440,7 @@ function modelFor(title){const full=dropSameAs(title),t=dropSameAs(baseName(titl
 const WORKER="https://nader-drafts.partner-e88.workers.dev";
 const SF={url:"https://91fb05.myshopify.com/api/2024-10/graphql.json",token:"be7a8d7a841c0bd4c963af0573d3ee9d"};
 const qs=new URLSearchParams(location.search);
-const Q={o:qs.get("o")||"",i:parseInt(qs.get("i")||"0",10)||0,k:qs.get("k")||"",id:qs.get("id")||"",p:qs.get("p")||""};
+const Q={o:qs.get("o")||"",i:parseInt(qs.get("i")||"0",10)||0,k:qs.get("k")||"",id:qs.get("id")||"",p:qs.get("p")||"",t:qs.get("t")||""};
 let LIVE=false, SPEC_ID="", ORDER=null, V=null, IS_ADMIN=false, ME="", FROM_SAVE=false;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cleanId=s=>String(s||"").replace(/[^A-Za-z0-9-]/g,"");
@@ -2736,6 +2756,7 @@ function renderSpec(){
   const cells=auto.map(s=>`<div class="cell auto"><div class="k">${s[0]}</div><div class="v${s[2]?' big':''}">${esc(s[1])}</div></div>`)
     .concat(ORDER.spec.map((s,i)=>`<div class="cell"><div class="k">${esc(s[0])}</div><div class="v" contenteditable="true" spellcheck="false" data-s="${i}">${esc(s[1])}</div></div>`));
   document.getElementById('spec').innerHTML=cells.join("");
+  lockCells();
 }
 function photoFlip(){
   const img=document.getElementById("photo");if(!img)return;
@@ -2756,20 +2777,45 @@ function manualPanel(key,label){
    A saved sheet that is "Drawing complete" locks the next time it's opened — or straight away with "Lock now".
    Only an admin can unlock (the server enforces it too). Notes / customer details stay editable. ---------- */
 const isLocked=()=>!!(ORDER&&ORDER.locked);
+/* once the drawing is complete, the whole sheet is read-only — except the fabric (supplier + catalogue code), which
+   often arrives later (Mariam 2 Oct) */
+const LOCK_FREE=/^fabric\s+(supplier|catalogue\s+code)$/i;
+function lockCells(){
+  const L=isLocked()||document.body.classList.contains('cust');
+  document.querySelectorAll('#sheet [contenteditable]').forEach(el=>{
+    const s=el.dataset.s, key=s!=null&&ORDER.spec[+s]?ORDER.spec[+s][0]:'';
+    el.setAttribute('contenteditable', (!L||(LOCK_FREE.test(key)&&!document.body.classList.contains('cust')))?'true':'false');
+  });
+}
+/* not an admin: ask one to unlock (goes to the dashboard's "Edit requested" list) */
+async function requestUnlock(){
+  const box=document.getElementById('unlockReq'); if(!box)return;
+  const why=(document.getElementById('unlockWhy')||{}).value||'';
+  if(!why.trim()){document.getElementById('unlockMsg').textContent='Say what needs changing so the admin knows.';return;}
+  document.getElementById('unlockMsg').textContent='Sending…';
+  try{const r=await fetch('/api/drawing/edit-request',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({order:Q.o||ORDER.orderNo||'',line:Q.i|0,spec:SPEC_ID,reason:why.trim()})});const d=await r.json();
+    document.getElementById('unlockMsg').textContent=d.ok?'✓ Sent — an admin will unlock it and make the change.':'Could not send: '+(d.error||'error');
+    if(d.ok){ORDER.unlockReq={t:Date.now(),by:ME,reason:why.trim()};}}
+  catch(e){document.getElementById('unlockMsg').textContent='Could not send — check your connection.';}
+}
 function applyLock(){
-  const L=isLocked(), box=document.getElementById('lockBox'); if(!box)return;
+  const L=isLocked(), box=document.getElementById('lockBox'); if(!box){lockCells();return;}
   document.body.classList.toggle('is-locked',L);document.body.classList.toggle('is-stool',!!(ORDER.model&&MODELS[ORDER.model].stool));
   document.querySelectorAll('.ed input,.ed select,.ed .photo-btn,.ed .seg button').forEach(el=>{el.disabled=L;});
   const ss=document.getElementById('statusSel'); if(ss)ss.disabled=L;
   if(L){const k=ORDER.locked,when=k.at?new Date(k.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
     box.className="lockbox on noprint";
     box.innerHTML=`<b>🔒 Drawing locked</b>Drawing complete${when?" · "+esc(when):""}${k.by?" · "+esc(k.by):""}. The template, sizes, photo and drawings can't be changed. Only an admin can unlock it.`+(IS_ADMIN?`<button type="button" class="unlock" id="unlockBtn">Unlock to edit (admin)</button>`:"");
+    if(!IS_ADMIN&&LIVE)box.innerHTML+=`<div id="unlockReq" style="margin-top:8px"><textarea id="unlockWhy" rows="2" placeholder="What needs changing?" style="width:100%;box-sizing:border-box;font:inherit;font-size:12px;padding:6px;border:1px solid #cfc3a8;border-radius:6px"></textarea><button type="button" class="unlock" id="unlockAsk">Request admin to unlock</button><div id="unlockMsg" style="font-size:11.5px;margin-top:4px"></div></div>`;
+    const ask=document.getElementById('unlockAsk'); if(ask)ask.onclick=requestUnlock;
     const b=document.getElementById('unlockBtn'); if(b)b.onclick=()=>{ORDER.locked=null;ORDER.unlockedBy=ME;applyLock();save();};
   }else if(LIVE&&drawStatus()==="complete"){
     box.className="lockbox off noprint";
     box.innerHTML=`New drawing — you can edit it now; it locks as soon as it's closed and reopened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
     document.getElementById('lockBtn').onclick=()=>{ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
   }else{box.className="";box.innerHTML="";}
+  lockCells();
 }
 function renderStatus(){
   const box=document.getElementById('statusBox'); if(!box)return;
@@ -2924,7 +2970,49 @@ function start(){
   renderSheet();wire();buildDimFields();syncInputs();renderDrawings();
 }
 
+/* ---------- CUSTOMER MODE (/drawing?t=…): the customer checks their drawing, approves it or asks for a change ---------- */
+const fmtDay=t=>{const d=new Date(String(t).replace(' ','T'));return isNaN(d)?String(t).slice(0,10):d.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});};
+async function custBoot(){
+  document.body.classList.add('cust');
+  let d=null;try{const r=await fetch('/api/drawing?t='+encodeURIComponent(Q.t));d=await r.json();}catch(e){}
+  if(!d||!d.ok){const g=document.getElementById("gate");g.hidden=false;
+    g.innerHTML='<div class="gate"><h3 style="margin:0 0 6px">This link isn’t available</h3><div class="muted">Please contact our team on WhatsApp <b>+971 56 292 9107</b> and we’ll send you a new link.</div></div>';return;}
+  ORDER=d.data;start();
+  document.getElementById("tbTitle").textContent="Your drawing · Order "+d.order;document.title="Your drawing — Order "+d.order+" — Nader";
+  const doc=document.querySelector('.mast .doc');if(doc)doc.textContent='Drawing for your approval';
+  const sheet=document.getElementById('sheet'),box=document.createElement('section');box.className='cust-box noprint';box.id='custBox';
+  sheet.parentNode.insertBefore(box,sheet);
+  const st=d.status||{},ch=st.changes||[];
+  const draw=()=>{
+    if(st.approved){box.innerHTML=`<div class="cb-ok"><b>✓ Drawing approved</b><p>Thank you${st.approved.name?', '+esc(st.approved.name):''}. You approved this drawing on ${fmtDay(st.approved.t)}. Our team will now start making your piece.</p></div>`;return;}
+    const last=ch.length?ch[ch.length-1]:null;
+    box.innerHTML=`<h2>Please check your drawing</h2>
+      <p>Check the sizes and details below. If everything is right, tick the box and approve it. If something needs changing, tell us and our team will update the drawing for you.</p>
+      ${last?`<div class="cb-note">We received your change request on ${fmtDay(last.t)}. Our team will send you an updated drawing.</div>`:''}
+      <label class="cb-tick"><input type="checkbox" id="cbAgree"> I’ve checked the drawing and the sizes and details are correct.</label>
+      <input id="cbName" class="cb-in" placeholder="Your name" autocomplete="name">
+      <div class="cb-acts"><button type="button" id="cbApprove" class="cb-main">Approve drawing</button><button type="button" id="cbChangeBtn" class="cb-sec">Request a change</button></div>
+      <div id="cbChange" hidden><textarea id="cbText" rows="3" class="cb-in" placeholder="Tell us what needs changing — for example a size, the chaise side or the legs."></textarea><button type="button" id="cbSend" class="cb-sec">Send request</button></div>
+      <div id="cbMsg" class="cb-msg" role="status"></div>`;
+    const msg=t=>{document.getElementById('cbMsg').textContent=t;};
+    document.getElementById('cbChangeBtn').onclick=()=>{document.getElementById('cbChange').hidden=false;document.getElementById('cbText').focus();};
+    document.getElementById('cbApprove').onclick=async()=>{
+      if(!document.getElementById('cbAgree').checked){msg('Please tick the box to confirm you’ve checked the drawing.');return;}
+      msg('Saving…');
+      try{const r=await fetch('/api/drawing/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:Q.t,agree:true,name:document.getElementById('cbName').value})});const j=await r.json();
+        if(j.ok){st.approved=j.approved;draw();}else msg('Something went wrong. Please try again, or contact our team on WhatsApp +971 56 292 9107.');}
+      catch(e){msg('No connection. Please try again.');}};
+    document.getElementById('cbSend').onclick=async()=>{
+      const t=document.getElementById('cbText').value.trim();if(!t){msg('Tell us what needs changing first.');return;}
+      msg('Sending…');
+      try{const r=await fetch('/api/drawing/change',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:Q.t,text:t})});const j=await r.json();
+        if(j.ok){ch.push({t:new Date().toISOString()});draw();msg('✓ Sent. Our team will update your drawing and send it again.');}else msg('Something went wrong. Please try again.');}
+      catch(e){msg('No connection. Please try again.');}};
+  };
+  draw();
+}
 async function boot(){
+  if(Q.t)return custBoot();
   let sess=null;
   try{if(location.protocol.startsWith("http")){const r=await fetch("/api/session",{credentials:"same-origin"});sess=await r.json();}}catch(e){}
   if(!sess||!sess.ok){

@@ -83,6 +83,8 @@ function servePage(file) {
 app.get(['/', '/index.html'], servePage('index.html'));
 app.get(['/spec', '/spec.html'], servePage('spec.html'));
 /* customer order tracker — public page, embedded only in nader.ae/pages/track-order (unlisted: no links to it anywhere) */
+/* the customer's drawing page (spec sheet in customer mode — opened from the link the team sends) */
+app.get('/drawing', (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); res.setHeader('Cache-Control', 'no-cache'); next(); }, servePage('spec.html'));
 app.get(['/track', '/track.html'], (req, res, next) => {
   res.setHeader('Content-Security-Policy', "frame-ancestors https://nader.ae https://www.nader.ae https://91fb05.myshopify.com https://*.myshopify.com https://*.shopifypreview.com https://admin.shopify.com");
   res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next();
@@ -441,6 +443,123 @@ function mapAddress(a) {
   };
 }
 
+/* ---------- DRAWING APPROVAL (manual): the team checks the drawing, presses Send; the customer approves or asks for a change ----------
+   Status per order line lives in the worker doc "drawings" under "<orderId>:<line>":
+   { sent:{t,by,n}, approved:{t,name}, changes:[{t,text}], edit:{t,by,reason,done?} }. Approval also tags the Shopify order drawok:<line>@<date>.
+   The customer link carries an HMAC token (order id + line) — nothing else can be guessed from it. */
+let DRAWST = null, DRAWST_AT = 0, drawQ = Promise.resolve();
+async function drawDoc(fresh) {
+  if (!fresh && DRAWST && Date.now() - DRAWST_AT < 15000) return DRAWST;
+  const d = await workerJson('/doc/drawings'); if (d && d.ok) { DRAWST = d.data || {}; DRAWST_AT = Date.now(); }
+  return DRAWST || {};
+}
+function drawUpdate(key, fn) {
+  const run = drawQ.then(async () => {
+    const all = JSON.parse(JSON.stringify(await drawDoc(true)));
+    all[key] = fn(all[key] || {}) || all[key];
+    const out = await docSet('drawings', all); if (!out || !out.ok) throw new Error('save failed');
+    DRAWST = all; DRAWST_AT = Date.now(); return all[key];
+  });
+  drawQ = run.catch(() => {}); return run;
+}
+const drawToken = (id, line) => { const b = Buffer.from(id + '.' + line).toString('base64url');
+  return b + '.' + crypto.createHmac('sha256', SECRET).update('draw:' + b).digest('base64url').slice(0, 22); };
+function drawParse(t) {
+  const [b, mac] = String(t || '').split('.'); if (!b || !mac) return null;
+  const want = crypto.createHmac('sha256', SECRET).update('draw:' + b).digest('base64url').slice(0, 22);
+  if (mac.length !== want.length || !crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(want))) return null;
+  const [id, line] = Buffer.from(b, 'base64url').toString().split('.'); return /^\d+$/.test(id) ? { id, line: parseInt(line, 10) || 0 } : null;
+}
+async function drawOrder(id) {
+  let o = (await cached('orders', FETCH.orders, false)).find(x => String(x.id) === String(id));
+  if (!o) { const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,name,line_items,tags,cancelled_at`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    if (r.ok) o = (await r.json()).order; }
+  return o;
+}
+const drawSpecId = (o, line) => String(o.name || '').replace(/\D/g, '') + ((o.line_items || []).length > 1 ? '-' + (line + 1) : '');
+async function tagOrder(id, add, dropPrefix) {
+  const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+  if (!r.ok) throw new Error('Shopify ' + r.status);
+  let tags = (((await r.json()).order || {}).tags || '').split(',').map(t => t.trim()).filter(t => t && !(dropPrefix && t.startsWith(dropPrefix)));
+  if (add) tags.push(add);
+  const up = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, { method: 'PUT',
+    headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });
+  if (!up.ok) throw new Error('Shopify PUT ' + up.status);
+  if (CACHE.orders) delete CACHE.orders;
+}
+/* team: send the drawing to the customer (after checking the PDF) — returns the customer's link */
+app.post('/api/drawing/send', requireAuth, async (req, res) => {
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0);
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try {
+    const who = req.session.name || req.session.username;
+    const link = `https://${req.headers.host}/drawing?t=${drawToken(id, line)}`;
+    const rec = await drawUpdate(id + ':' + line, r => { r.sent = { t: uaeNow(), by: who, n: ((r.sent || {}).n || 0) + 1, link }; if (r.edit) r.edit.done = r.edit.done || { t: uaeNow(), by: who }; return r; });
+    logEvent(req.session.username, 'drawing_sent', { id, line, ip: clientIp(req) });
+    res.json({ ok: true, rec, link });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+/* team: the drawing is wrong → ask an admin to edit it (or an admin marks it fixed) */
+app.post('/api/drawing/edit-request', requireAuth, async (req, res) => {
+  const b = req.body || {}, line = Math.max(0, parseInt(b.line, 10) || 0);
+  let id = String(b.id || '').replace(/\D/g, '');
+  if (!id && b.order) {   /* from the spec sheet: it knows the order number, not the Shopify id */
+    const num = String(b.order).replace(/\D/g, ''); try { const o = (await cached('orders', FETCH.orders, false)).find(x => String(x.name || '').replace(/\D/g, '') === num.slice(0, 8) || String(x.name || '').replace(/\D/g, '') === num); if (o) id = String(o.id); } catch (e) {}
+  }
+  if (!id) return res.status(400).json({ ok: false, error: 'order not found' });
+  try {
+    const who = req.session.name || req.session.username;
+    const rec = await drawUpdate(id + ':' + line, r => {
+      if (b.done) { if (r.edit) r.edit.done = { t: uaeNow(), by: who }; }
+      else r.edit = { t: uaeNow(), by: who, reason: String(b.reason || '').trim().slice(0, 1000) };
+      return r; });
+    logEvent(req.session.username, b.done ? 'drawing_edit_done' : 'drawing_edit_request', { id, line, ip: clientIp(req) });
+    res.json({ ok: true, rec });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+/* customer: open the drawing (public, token only) */
+const DRAW_HITS = new Map();
+function drawLimit(req) { const ip = clientIp(req), now = Date.now(), h = (DRAW_HITS.get(ip) || []).filter(t => now - t < 10 * 60e3);
+  h.push(now); DRAW_HITS.set(ip, h); if (DRAW_HITS.size > 5000) DRAW_HITS.clear(); return h.length > 40; }
+app.get('/api/drawing', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  if (drawLimit(req)) return res.status(429).json({ ok: false, error: 'busy' });
+  const k = drawParse(req.query.t); if (!k) return res.status(404).json({ ok: false, error: 'notfound' });
+  try {
+    const o = await drawOrder(k.id); if (!o || o.cancelled_at) return res.status(404).json({ ok: false, error: 'notfound' });
+    const st = (await drawDoc(false))[k.id + ':' + k.line] || {};
+    if (!st.sent) return res.status(404).json({ ok: false, error: 'notfound' });
+    const sp = await workerJson('/spec/' + drawSpecId(o, k.line));
+    if (!sp || !sp.data) return res.status(404).json({ ok: false, error: 'notfound' });
+    res.json({ ok: true, order: o.name, data: sp.data, status: { approved: st.approved || null, changes: st.changes || [] } });
+  } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
+});
+app.post('/api/drawing/approve', async (req, res) => {
+  if (drawLimit(req)) return res.status(429).json({ ok: false, error: 'busy' });
+  const b = req.body || {}, k = drawParse(b.t); if (!k) return res.status(404).json({ ok: false, error: 'notfound' });
+  if (!b.agree) return res.status(400).json({ ok: false, error: 'tick the box to confirm' });
+  try {
+    const st = (await drawDoc(true))[k.id + ':' + k.line] || {}; if (!st.sent) return res.status(404).json({ ok: false, error: 'notfound' });
+    const day = uaeNow().slice(0, 10), name = String(b.name || '').trim().slice(0, 80);
+    const rec = await drawUpdate(k.id + ':' + k.line, r => { r.approved = { t: uaeNow(), name }; return r; });
+    try { await tagOrder(k.id, 'drawok:' + k.line + '@' + day, 'drawok:' + k.line + '@'); } catch (e) {}
+    logEvent('customer', 'drawing_approved', { id: k.id, line: k.line, name, ip: clientIp(req) });
+    res.json({ ok: true, approved: rec.approved });
+  } catch (e) { res.status(500).json({ ok: false, error: 'unavailable' }); }
+});
+app.post('/api/drawing/change', async (req, res) => {
+  if (drawLimit(req)) return res.status(429).json({ ok: false, error: 'busy' });
+  const b = req.body || {}, k = drawParse(b.t); if (!k) return res.status(404).json({ ok: false, error: 'notfound' });
+  const text = String(b.text || '').trim().slice(0, 1500); if (!text) return res.status(400).json({ ok: false, error: 'empty' });
+  try {
+    const st = (await drawDoc(true))[k.id + ':' + k.line] || {}; if (!st.sent) return res.status(404).json({ ok: false, error: 'notfound' });
+    const rec = await drawUpdate(k.id + ':' + k.line, r => { (r.changes = r.changes || []).push({ t: uaeNow(), text }); delete r.approved; return r; });
+    try { await tagOrder(k.id, '', 'drawok:' + k.line + '@'); } catch (e) {}
+    logEvent('customer', 'drawing_change_request', { id: k.id, line: k.line, ip: clientIp(req) });
+    res.json({ ok: true, changes: rec.changes });
+  } catch (e) { res.status(500).json({ ok: false, error: 'unavailable' }); }
+});
+
 /* ---------- PUBLIC order tracker for nader.ae/pages/track-order ----------
    The customer must give BOTH the order number AND the phone number on the order (last 9 digits must match);
    a wrong pair gets the same "not found" answer as a missing order. Only production progress is returned —
@@ -603,6 +722,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     out.forEach(o => { const f = {}; (o.items || []).forEach((it, i) => { const r = fab[o.id + ':' + i]; if (r) f[i] = r; }); o.fabric = f; });
     let nts = {}; try { nts = await notesDoc(false); } catch (e) {}
     out.forEach(o => { o.tnotes = nts[o.id] || []; });
+    let dst = {}; try { dst = await drawDoc(false); } catch (e) {}
+    out.forEach(o => { const m = {}; (o.items || []).forEach((it, i) => { if (dst[o.id + ':' + i]) m[i] = dst[o.id + ':' + i]; }); o.drawst = m; });
     res.json({ ok: true, orders: out, lead: leadTime(stats), weekly: weeklyOrders(stats) });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message, detail: e.body });

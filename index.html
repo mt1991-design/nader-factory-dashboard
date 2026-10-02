@@ -55,6 +55,13 @@
   .logincard{width:340px;max-width:92vw;background:var(--panel);border:1px solid var(--panelline);border-radius:18px;box-shadow:var(--shadow);padding:34px 30px;text-align:center;margin-top:12vh;animation:fadeup .5s both}
   .loginlogo{height:44px;width:auto;margin:0 auto 6px;display:block}
   .loginsub{font:600 11px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--ink2);margin:0 0 22px}
+  .dctl{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
+  .dchip{flex-basis:100%;font:600 11px var(--ui);padding:4px 9px;border-radius:7px;line-height:1.35}
+  .dchip.ok{background:#e6f4ea;color:#1e6b3a}.dchip.sent{background:#eef1f6;color:#34495e}.dchip.warn{background:#fdf0d5;color:#8a5a00}
+  .dbtn{font:600 11px var(--ui);padding:4px 10px;border-radius:6px;border:1px solid #d9cfbd;background:#fff;color:#6B1A22;cursor:pointer;white-space:nowrap}
+  .dbtn.main{background:#6B1A22;color:#fff;border-color:#6B1A22}
+  .dbtn:focus-visible{outline:2px solid #A98B54;outline-offset:2px}
+  .dmsg{font:600 11px var(--ui);color:#1e6b3a}
   .roleswitch{display:inline-flex;gap:4px;background:var(--field);border:1px solid var(--fieldline);border-radius:9px;padding:3px}
   .rsbtn{border:none;background:transparent;color:var(--ink2);font:600 11px var(--ui);letter-spacing:.04em;padding:6px 12px;border-radius:7px;cursor:pointer;text-transform:uppercase}
   .rsbtn.on{background:var(--accent,#6B1A22);color:#fff}
@@ -5109,6 +5116,68 @@ function prodBar(o,line,cur,editable){
 }
 /* one sort for Orders AND Production status (the Sort menu + clickable headers) */
 function fmtOrderDate(d){if(!d)return"";const x=new Date(d+"T12:00:00");return isNaN(x)?d:x.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
+/* ---------- DRAWING APPROVAL (manual): check the drawing → Send to customer → approved / change requested ----------
+   Email goes through EmailJS once the "drawing approval" template exists (DRAW_EMAIL.template); WhatsApp always opens. */
+const DRAW_EMAIL={service:"service_itfuapy",template:"",key:"0i4e9U2tktd_FGAT_"};
+const dDay=t=>{const d=new Date(String(t||"").replace(" ","T"));return isNaN(d)?"":d.toLocaleDateString("en-GB",{day:"numeric",month:"short"});};
+function drawCtl(o,i,oi){
+  if(o.isDraft||o.state!=="open")return "";
+  const st=(o.drawst||{})[i]||{}, drawn=lineDrawn(o,i)||((o.prod_stages||[])[i]||0)>=1;
+  if(!drawn&&!st.sent)return "";
+  const B=(fn,t,cls)=>'<button type="button" class="dbtn'+(cls?" "+cls:"")+'" onclick="event.stopPropagation();'+fn+'">'+t+'</button>';
+  const oq=esc(o.order).replace(/'/g,"");
+  let h='<div class="dctl" onclick="event.stopPropagation()">';
+  const edit=st.edit&&!st.edit.done, lastCh=(st.changes||[]).slice(-1)[0], chAfter=lastCh&&(!st.sent||lastCh.t>st.sent.t);
+  if(edit)h+='<div class="dchip warn">⚠ Edit requested from admin'+(st.edit.by?' by '+esc(st.edit.by):'')+(st.edit.reason?': '+esc(st.edit.reason):'')+'</div>'+(ROLES_HAS_ADMIN()?B("drawEditDone("+oi+","+i+")","✓ Fixed"):"");
+  if(st.approved)h+='<div class="dchip ok">✓ Drawing approved by customer · '+dDay(st.approved.t)+(st.approved.name?' ('+esc(st.approved.name)+')':'')+'</div>';
+  else if(chAfter)h+='<div class="dchip warn">✎ Customer asked for changes ('+dDay(lastCh.t)+'): '+esc(lastCh.text||"")+'</div>';
+  else if(st.sent)h+='<div class="dchip sent">✉ Sent to customer · '+dDay(st.sent.t)+(st.sent.by?' by '+esc(st.sent.by):'')+' · waiting for approval</div>';
+  if(!st.approved){
+    h+=B("specLineItem('"+oq+"',"+i+")","📄 Check drawing");
+    h+=B("drawSend("+oi+","+i+")",st.sent?"Send again":"Send to customer","main");
+    if(st.sent&&st.sent.link)h+=B("drawCopy("+oi+","+i+")","Copy link");
+    if(!edit)h+=B("drawEditReq("+oi+","+i+")","Request edit from admin");
+  }
+  return h+'<span class="dmsg" id="dmsg-'+oi+'-'+i+'"></span></div>';
+}
+function ROLES_HAS_ADMIN(){try{return typeof USER!=="undefined"&&USER&&(USER.roles||[]).indexOf("admin")>=0;}catch(e){return false;}}
+function dMsg(oi,i,t){const el=document.getElementById("dmsg-"+oi+"-"+i);if(el)el.textContent=t;}
+function waNum(p){let d=String(p||"").replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("05")&&d.length===10)d="971"+d.slice(1);return d;}
+async function drawSend(oi,i){
+  const o=SHOPIFY[oi];if(!o)return;
+  if(!confirm("Send the drawing for "+o.order+" to "+(o.customer||"the customer")+"?\n\nMake sure you've opened the drawing and checked it first."))return;
+  dMsg(oi,i,"Sending…");
+  try{
+    const r=await fetch("/api/drawing/send",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");
+    o.drawst=o.drawst||{};o.drawst[i]=d.rec;
+    const it=o.items[i]||{},first=String(o.customer||"").split(" ")[0]||"there";
+    let emailed=false;
+    if(DRAW_EMAIL.template&&o.email&&window.emailjs){
+      try{await emailjs.send(DRAW_EMAIL.service,DRAW_EMAIL.template,{to_email:o.email,customer_name:o.customer||"",order_no:o.order,product:it.product||"",approve_link:d.link},{publicKey:DRAW_EMAIL.key});emailed=true;}catch(e){}
+    }
+    const ph=waNum(o.phone||(o.shipping_address||{}).phone);
+    if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent("Hello "+first+",\n\nThe drawing for your Nader order "+o.order+" is ready for you to check:\n"+d.link+"\n\nIf everything is right, tick the box and approve it. If something needs changing, tell us on the page and our team will update it.\n\n— Nader.ae"),"_blank");
+    renderSalesDash();
+    setTimeout(()=>dMsg(oi,i,emailed?"✓ Email sent to customer"+(ph?" + WhatsApp opened":""):(ph?"✓ WhatsApp opened — press send in WhatsApp":"✓ Link ready — use Copy link")),60);
+  }catch(e){dMsg(oi,i,"Couldn't send: "+e.message);}
+}
+function drawCopy(oi,i){const st=((SHOPIFY[oi]||{}).drawst||{})[i]||{};if(!st.sent||!st.sent.link)return;
+  try{navigator.clipboard.writeText(st.sent.link);dMsg(oi,i,"✓ Link copied");}catch(e){prompt("Copy this link:",st.sent.link);}}
+async function drawEditReq(oi,i){
+  const o=SHOPIFY[oi];if(!o)return;
+  const why=prompt("What's wrong with the drawing? (the admin will see this)");if(!why||!why.trim())return;
+  dMsg(oi,i,"Sending…");
+  try{const r=await fetch("/api/drawing/edit-request",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i,reason:why.trim()})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");o.drawst=o.drawst||{};o.drawst[i]=d.rec;renderSalesDash();}
+  catch(e){dMsg(oi,i,"Couldn't send: "+e.message);}
+}
+async function drawEditDone(oi,i){
+  const o=SHOPIFY[oi];if(!o)return;
+  try{const r=await fetch("/api/drawing/edit-request",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i,done:true})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");o.drawst=o.drawst||{};o.drawst[i]=d.rec;renderSalesDash();}
+  catch(e){dMsg(oi,i,"Couldn't save: "+e.message);}
+}
 function salesCmp(a,b){ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
   const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
   /* "date" follows the order number (they run in date order), so the numbers always read …80, 81, 82 */
@@ -5131,10 +5200,11 @@ function renderProduction(q){
       const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
       const spec=(cur>=1||lineDrawn(o,i))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
       const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
+      const dctl=drawCtl(o,i,oi);
       // every line item gets its OWN progress bar
       /* the order date + days to promise under the number, so the sort is visible */
       const when=first?'<div class="muted" style="font-size:11px;margin-top:3px;white-space:nowrap">'+fmtOrderDate(o.date)+'</div><div class="promisetd" style="margin-top:4px">'+promiseCell(o)+'</div>':"";
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+when+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,editable)+'</td><td colspan="3">'+prodBar(o,i,cur,editable)+'</td></tr>';
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+when+'</td><td>'+prod+meta+dctl+'</td><td class="fabtd">'+fabricCell(o,i,editable)+'</td><td colspan="3">'+prodBar(o,i,cur,editable)+'</td></tr>';
     });
   });
   tb.innerHTML=shown?html:'<tr><td colspan="6" class="muted" style="padding:16px 10px">No open orders in production.</td></tr>';
@@ -5223,7 +5293,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const st=shopifyStatus(o);
     const oid=lineId(o,i),done=DB.getOrder(oid)||SAVED_SPECS.has(specKey(oid));
     const multi=o.items.length>1;
-    const specCls=done?"specbtn done":"specbtn",specTxt=done?"✓ Spec'd":"＋ Spec",oq=esc(o.order).replace(/'/g,"");
+    const specCls="specbtn",specTxt="＋ Spec",oq=esc(o.order).replace(/'/g,"");   /* always the same red button (Mariam 2 Oct) */
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
     const editBtn=(i===0&&o.edit_state&&!(o.state==="shipped")&&canEditOrder(o))?'<a class="pdflink" href="#" onclick="event.preventDefault();event.stopPropagation();editOrder('+oi+')" title="'+(o.isDraft?'Edit this order — the customer re-signs':'Change this paid order — any extra is added to the order and requested from the customer')+'">✎ Edit</a> ':"";
     const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
@@ -5241,7 +5311,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
         +'</select>'
       :"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
-    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
+    const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi));
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="7" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
