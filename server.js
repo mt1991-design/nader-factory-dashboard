@@ -929,6 +929,33 @@ app.get('/api/formlink', requireAuth, (req, res) => {
   res.json({ ok: true, k: payload + '.' + sig });
 });
 
+// Change the payment method on a SIGNED draft (customer picked the wrong one) — no re-signing needed:
+// swaps the payment-* tag, updates the "💳 Payment method" note line and records who changed it.
+app.post('/api/draft/payment', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), m = String(b.method || '');
+  const TAG = { cash: 'payment-cash', transfer: 'payment-bank-transfer', card: 'payment-card' }, NAME = { cash: 'CASH', transfer: 'BANK TRANSFER', card: 'CARD' };
+  if (!id || !TAG[m]) return res.status(400).json({ ok: false, error: 'bad request' });
+  try {
+    const g = await fetch(`https://${STORE}/admin/api/${APIVER}/draft_orders/${id}.json?fields=id,tags,note,status,invoice_url`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+    if (!g.ok) throw new Error('Shopify ' + g.status);
+    const d = (await g.json()).draft_order || {};
+    if (d.status === 'completed') return res.status(409).json({ ok: false, error: 'already paid' });
+    const old = /payment-cash/.test(d.tags || '') ? 'cash' : /payment-bank-transfer/.test(d.tags || '') ? 'transfer' : /payment-card/.test(d.tags || '') ? 'card' : '';
+    const tags = String(d.tags || '').split(',').map(t => t.trim()).filter(t => t && !/^payment-(cash|bank-transfer|card)$/.test(t)); tags.push(TAG[m]);
+    const who = req.session.name || req.session.username, day = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+    let note = String(d.note || '');
+    note = /💳 Payment method: [^\n]*/.test(note) ? note.replace(/💳 Payment method: [^\n]*/, '💳 Payment method: ' + NAME[m]) : '💳 Payment method: ' + NAME[m] + '\n' + note;
+    note += `\nPayment method changed${old ? ' from ' + NAME[old] : ''} to ${NAME[m]} by ${who}, ${day}`;
+    const u = await fetch(`https://${STORE}/admin/api/${APIVER}/draft_orders/${id}.json`, { method: 'PUT',
+      headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ draft_order: { id: Number(id), tags: tags.join(', '), note } }) });
+    if (!u.ok) throw new Error('Shopify PUT ' + u.status);
+    if (CACHE.drafts) delete CACHE.drafts;
+    logEvent(req.session.username, 'payment_method_changed', { id, from: old, to: m, ip: clientIp(req) });
+    res.json({ ok: true, method: m, invoice_url: d.invoice_url || '' });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // Mark a cash / bank-transfer draft as PAID → completes the draft into a real (paid) order,
 // which moves it out of Drafts and into Orders. (Card orders convert via the checkout link.)
 app.post('/api/mark_paid', requireAuth, async (req, res) => {

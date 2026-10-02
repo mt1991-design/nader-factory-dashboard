@@ -64,6 +64,9 @@
   .attn-sub{font-size:12px;color:#6b655c;margin-top:2px}
   .attn-acts{display:flex;gap:6px;flex-wrap:wrap}
   #tab-orders.has-attn::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#c0392b;margin-left:6px;vertical-align:middle}
+  .payctl{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
+  .paysel{padding:4px 8px;border-radius:6px;border:1px solid #d9c9a0;background:#fff8e7;color:#8a5a00;font:700 11px var(--ui);cursor:pointer}
+  .paysel.paid{background:#fff;color:#1e6b3a;border-color:#bfe0c8}
   .dctl{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
   .dchip{flex-basis:100%;font:600 11px var(--ui);padding:4px 9px;border-radius:7px;line-height:1.35}
   .dchip.ok{background:#e6f4ea;color:#1e6b3a}.dchip.sent{background:#eef1f6;color:#34495e}.dchip.warn{background:#fdf0d5;color:#8a5a00}
@@ -5309,6 +5312,36 @@ function markPaid(sel,id){
     }).catch(()=>{ alert("Network error — please try again."); sel.value="unpaid"; sel.disabled=false; });
 }
 window.markPaid=markPaid;
+const PAY_LBL={cash:"💵 Cash",transfer:"🏦 Bank transfer",card:"💳 Card"};
+const BANK_TXT="Account holder: NADER DESIGN FURNITURE L.L.C\nIBAN: AE530860000009374388061\nBIC: WIOBAEADXXX\nBank: Etihad Airways Centre, 5th Floor, Abu Dhabi, UAE";
+function payControls(o,oi){
+  const m=o.payment_method||"", sel='<select onclick="event.stopPropagation()" onchange="changePayment(this,'+oi+')" title="Customer chose the wrong one? Change it here — no need to sign again" class="paysel">'
+    +["cash","transfer","card"].map(k=>'<option value="'+k+'"'+(k===m?" selected":"")+'>'+PAY_LBL[k]+'</option>').join("")+(m?"":'<option value="" selected>Payment method?</option>')+'</select>';
+  let acts="";
+  if(m==="card")acts+='<button type="button" class="dbtn main" onclick="event.stopPropagation();payLink('+oi+')">Send card payment link</button><button type="button" class="dbtn" onclick="event.stopPropagation();payCopy('+oi+')">Copy link</button>';
+  if(m==="transfer")acts+='<button type="button" class="dbtn main" onclick="event.stopPropagation();payBank('+oi+')">Send bank details</button>';
+  if(m==="cash"||m==="transfer")acts+='<select onclick="event.stopPropagation()" onchange="markPaid(this,'+o.id+')" title="Change to Paid to move this into Orders" class="paysel paid"><option value="unpaid">Unpaid</option><option value="paid">✓ Mark Paid → Orders</option></select>';
+  return '<div class="payctl" onclick="event.stopPropagation()">'+sel+acts+'<span class="dmsg" id="pmsg-'+oi+'"></span></div>';
+}
+async function changePayment(sel,oi){
+  const o=SHOPIFY[oi];if(!o)return;const m=sel.value;if(!m||m===o.payment_method)return;
+  if(!confirm("Change the payment method for "+o.order+" to "+PAY_LBL[m].replace(/^\S+\s/,"")+"?\n\nThe customer doesn't need to sign again. This is noted on the order."))
+    {sel.value=o.payment_method||"";return;}
+  sel.disabled=true;
+  try{const r=await fetch("/api/draft/payment",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,method:m})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");o.payment_method=m;if(d.invoice_url)o.invoice_url=d.invoice_url;renderSalesDash();
+    const el=document.getElementById("pmsg-"+oi);if(el)el.textContent="✓ Changed to "+PAY_LBL[m].replace(/^\S+\s/,"")+(m==="card"?" — now send the payment link":m==="transfer"?" — now send the bank details":"");}
+  catch(e){alert("Couldn't change it: "+e.message);sel.value=o.payment_method||"";sel.disabled=false;}
+}
+function payFirst(o){return String(o.customer||"").split(" ")[0]||"there";}
+function payLink(oi){const o=SHOPIFY[oi];if(!o)return;if(!o.invoice_url){alert("No payment link on this draft yet — open it in Shopify and press Send invoice.");return;}
+  const ph=waNum(o.phone||(o.shipping_address||{}).phone);
+  const msg="Hello "+payFirst(o)+",\n\nHere is the secure link to pay for your Nader order "+o.order+" by card:\n"+o.invoice_url+"\n\nThank you!\n— Nader.ae";
+  if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(msg),"_blank");else payCopy(oi);}
+function payCopy(oi){const o=SHOPIFY[oi];if(!o||!o.invoice_url)return;try{navigator.clipboard.writeText(o.invoice_url);const el=document.getElementById("pmsg-"+oi);if(el)el.textContent="✓ Link copied";}catch(e){prompt("Copy this link:",o.invoice_url);}}
+function payBank(oi){const o=SHOPIFY[oi];if(!o)return;const ph=waNum(o.phone||(o.shipping_address||{}).phone);
+  const msg="Hello "+payFirst(o)+",\n\nHere are our bank details to pay for your Nader order "+o.order+":\n\n"+BANK_TXT+"\n\nPlease use "+o.order+" as the payment reference so we can match your payment.\n\nThank you!\n— Nader.ae";
+  if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(msg),"_blank");else prompt("Copy and send:",msg);}
 function specFromDetail(orderNo,i){closeOrderDetail();specLineItem(orderNo,i);}
 function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb=$("salesrows");if(!tb)return;renderAttn();
   const nOrders=SHOPIFY.filter(o=>!o.isDraft).length,nDrafts=SHOPIFY.filter(o=>o.isDraft).length,nProd=SHOPIFY.filter(o=>!o.isDraft&&!isShipped(o)).length;
@@ -5343,12 +5376,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
               ? '<br><span style="display:inline-block;margin-top:6px;padding:4px 11px;border-radius:20px;background:#fdf0d5;color:#8a5a00;font:700 11px var(--ui);letter-spacing:.02em">◷ Needs signature</span>'
               : '')
       ):"";
-    const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed"&&(o.payment_method==="cash"||o.payment_method==="transfer"))
-      ? '<br><select onclick="event.stopPropagation()" onchange="markPaid(this,'+o.id+')" title="Change to Paid to move this into Orders" style="margin-top:6px;padding:4px 8px;border-radius:6px;border:1px solid #d9c9a0;background:#fff8e7;color:#8a5a00;font:700 11px var(--ui);cursor:pointer">'
-          +'<option value="unpaid">'+(o.payment_method==="cash"?"💵 Cash":"🏦 Transfer")+' · Unpaid</option>'
-          +'<option value="paid">✓ Mark Paid → Orders</option>'
-        +'</select>'
-      :"";
+    /* signed draft: payment method can be changed by the team (no re-signing), + what to send for it, + Mark Paid */
+    const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed")?payControls(o,oi):"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi));
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
