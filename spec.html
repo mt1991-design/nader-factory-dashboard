@@ -129,6 +129,23 @@ body.custview .wrap{display:block!important;max-width:1100px;margin:0 auto}
 .cb-ok b{display:block;font:600 20px Georgia,serif;color:#1e6b3a;margin-bottom:4px}
 .cb-ok p{margin:0}
 @media print{.cust-box{display:none}}
+/* phones: a real mobile layout (not a shrunken A4) — drawings full width, details stacked */
+@media (max-width:760px){
+  body.custview .sheet{width:auto!important;min-height:0!important;padding:12px 10px!important;box-shadow:none!important}
+  body.custview .sheet-scroll{overflow:visible}
+  body.custview .wrap{padding:0 0 30px!important}
+  body.custview .grid2c{grid-template-columns:1fr!important}
+  body.custview .spec{grid-template-columns:1fr 1fr!important}
+  body.custview .cust{grid-template-columns:1fr!important}
+  body.custview .mast{flex-direction:column;align-items:flex-start;gap:6px}
+  body.custview .mast-meta{grid-template-columns:1fr 1fr!important}
+  body.custview .panel svg,body.custview .panel img{max-width:100%;height:auto}
+  body.custview .cust-box{margin:12px auto 10px;padding:16px}
+  body.custview .cust-box h2{font-size:19px}
+  body.custview .cb-acts button{flex:1 1 100%}
+  body.custview .toolbar{padding:8px 12px}
+  body.custview .toolbar .ttl{font-size:10.5px;letter-spacing:.08em}
+}
 </style>
 
 <div class="toolbar">
@@ -2979,7 +2996,8 @@ async function custBoot(){
     g.innerHTML='<div class="gate"><h3 style="margin:0 0 6px">This link isn’t available</h3><div class="muted">Please contact our team on WhatsApp <b>+971 56 292 9107</b> and we’ll send you a new link.</div></div>';return;}
   ORDER=d.data;start();
   /* phones: shrink the A4 sheet to the screen instead of scrolling sideways */
-  const fit=()=>{const sh=document.getElementById('sheet');if(!sh)return;sh.style.zoom='';const w=sh.scrollWidth,avail=window.innerWidth-24;sh.style.zoom=w>avail?String(avail/w):'';};
+  const fit=()=>{const sh=document.getElementById('sheet');if(!sh)return;sh.style.zoom='';if(window.innerWidth<=760)return;   /* phones get the stacked layout instead */
+    const w=sh.scrollWidth,avail=window.innerWidth-24;sh.style.zoom=w>avail?String(avail/w):'';};
   window.addEventListener('resize',fit);setTimeout(fit,300);
   document.getElementById("tbTitle").textContent="Your drawing · Order "+d.order;document.title="Your drawing — Order "+d.order+" — Nader";
   const doc=document.querySelector('.mast .doc');if(doc)doc.textContent='Drawing for your approval';
