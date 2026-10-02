@@ -5139,6 +5139,7 @@ function drawCtl(o,i,oi){
     if(st.sent&&st.sent.link)h+=B("drawCopy("+oi+","+i+")","Copy link");
     if(!edit)h+=B("drawEditReq("+oi+","+i+")","Request edit from admin");
   }
+  if(ROLES_HAS_ADMIN())h+=B("drawTest("+oi+","+i+")","✉ Test to me");
   return h+'<span class="dmsg" id="dmsg-'+oi+'-'+i+'"></span></div>';
 }
 function ROLES_HAS_ADMIN(){try{return typeof USER!=="undefined"&&USER&&(USER.roles||[]).indexOf("admin")>=0;}catch(e){return false;}}
@@ -5162,6 +5163,18 @@ async function drawSend(oi,i){
     renderSalesDash();
     setTimeout(()=>dMsg(oi,i,emailed?"✓ Email sent to customer"+(ph?" + WhatsApp opened":""):(ph?"✓ WhatsApp opened — press send in WhatsApp":"✓ Link ready — use Copy link")),60);
   }catch(e){dMsg(oi,i,"Couldn't send: "+e.message);}
+}
+/* admin: email a TEST version of the customer's drawing email to yourself — nothing is saved, nothing goes to Shopify */
+async function drawTest(oi,i){
+  const o=SHOPIFY[oi];if(!o)return;
+  const to=prompt("Send a TEST drawing email to (nothing is saved, the customer gets nothing):",(USER&&USER.email)||"contact@nader.ae");if(!to||!/@/.test(to))return;
+  dMsg(oi,i,"Sending test…");
+  try{const r=await fetch("/api/drawing/test-link",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");
+    if(!window.emailjs)throw new Error("email not loaded — refresh the page");
+    await emailjs.send(DRAW_EMAIL.service,DRAW_EMAIL.template,{to_email:to.trim(),customer_name:"(TEST) "+(o.customer||""),order_no:o.order,product:(o.items[i]||{}).product||"",approve_link:d.link},{publicKey:DRAW_EMAIL.key});
+    dMsg(oi,i,"✓ Test email sent to "+to.trim());}
+  catch(e){dMsg(oi,i,"Test failed: "+e.message);}
 }
 function drawCopy(oi,i){const st=((SHOPIFY[oi]||{}).drawst||{})[i]||{};if(!st.sent||!st.sent.link)return;
   try{navigator.clipboard.writeText(st.sent.link);dMsg(oi,i,"✓ Link copied");}catch(e){prompt("Copy this link:",st.sent.link);}}

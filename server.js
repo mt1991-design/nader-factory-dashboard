@@ -462,13 +462,13 @@ function drawUpdate(key, fn) {
   });
   drawQ = run.catch(() => {}); return run;
 }
-const drawToken = (id, line) => { const b = Buffer.from(id + '.' + line).toString('base64url');
+const drawToken = (id, line, test) => { const b = Buffer.from(id + '.' + line + (test ? '.t' : '')).toString('base64url');
   return b + '.' + crypto.createHmac('sha256', SECRET).update('draw:' + b).digest('base64url').slice(0, 22); };
 function drawParse(t) {
   const [b, mac] = String(t || '').split('.'); if (!b || !mac) return null;
   const want = crypto.createHmac('sha256', SECRET).update('draw:' + b).digest('base64url').slice(0, 22);
   if (mac.length !== want.length || !crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(want))) return null;
-  const [id, line] = Buffer.from(b, 'base64url').toString().split('.'); return /^\d+$/.test(id) ? { id, line: parseInt(line, 10) || 0 } : null;
+  const [id, line, tf] = Buffer.from(b, 'base64url').toString().split('.'); return /^\d+$/.test(id) ? { id, line: parseInt(line, 10) || 0, test: tf === 't' } : null;
 }
 async function drawOrder(id) {
   let o = (await cached('orders', FETCH.orders, false)).find(x => String(x.id) === String(id));
@@ -499,6 +499,13 @@ app.post('/api/drawing/send', requireAuth, async (req, res) => {
     res.json({ ok: true, rec, link });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
+/* admin: a TEST link for any order line — the page works, but approving / requesting a change saves nothing */
+app.post('/api/drawing/test-link', requireAuth, (req, res) => {
+  if (!hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'admin only' });
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0);
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  res.json({ ok: true, link: `https://${req.headers.host}/drawing?t=${drawToken(id, line, true)}` });
+});
 /* team: the drawing is wrong → ask an admin to edit it (or an admin marks it fixed) */
 app.post('/api/drawing/edit-request', requireAuth, async (req, res) => {
   const b = req.body || {}, line = Math.max(0, parseInt(b.line, 10) || 0);
@@ -527,17 +534,18 @@ app.get('/api/drawing', async (req, res) => {
   const k = drawParse(req.query.t); if (!k) return res.status(404).json({ ok: false, error: 'notfound' });
   try {
     const o = await drawOrder(k.id); if (!o || o.cancelled_at) return res.status(404).json({ ok: false, error: 'notfound' });
-    const st = (await drawDoc(false))[k.id + ':' + k.line] || {};
-    if (!st.sent) return res.status(404).json({ ok: false, error: 'notfound' });
+    const st = k.test ? {} : ((await drawDoc(false))[k.id + ':' + k.line] || {});
+    if (!st.sent && !k.test) return res.status(404).json({ ok: false, error: 'notfound' });
     const sp = await workerJson('/spec/' + drawSpecId(o, k.line));
     if (!sp || !sp.data) return res.status(404).json({ ok: false, error: 'notfound' });
-    res.json({ ok: true, order: o.name, data: sp.data, status: { approved: st.approved || null, changes: st.changes || [] } });
+    res.json({ ok: true, order: o.name, data: sp.data, test: !!k.test, status: { approved: st.approved || null, changes: st.changes || [] } });
   } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
 });
 app.post('/api/drawing/approve', async (req, res) => {
   if (drawLimit(req)) return res.status(429).json({ ok: false, error: 'busy' });
   const b = req.body || {}, k = drawParse(b.t); if (!k) return res.status(404).json({ ok: false, error: 'notfound' });
   if (!b.agree) return res.status(400).json({ ok: false, error: 'tick the box to confirm' });
+  if (k.test) return res.json({ ok: true, test: true, approved: { t: uaeNow(), name: String(b.name || '').trim().slice(0, 80) } });   /* test link: nothing saved */
   try {
     const st = (await drawDoc(true))[k.id + ':' + k.line] || {}; if (!st.sent) return res.status(404).json({ ok: false, error: 'notfound' });
     const day = uaeNow().slice(0, 10), name = String(b.name || '').trim().slice(0, 80);
@@ -551,6 +559,7 @@ app.post('/api/drawing/change', async (req, res) => {
   if (drawLimit(req)) return res.status(429).json({ ok: false, error: 'busy' });
   const b = req.body || {}, k = drawParse(b.t); if (!k) return res.status(404).json({ ok: false, error: 'notfound' });
   const text = String(b.text || '').trim().slice(0, 1500); if (!text) return res.status(400).json({ ok: false, error: 'empty' });
+  if (k.test) return res.json({ ok: true, test: true, changes: [{ t: uaeNow(), text }] });   /* test link: nothing saved */
   try {
     const st = (await drawDoc(true))[k.id + ':' + k.line] || {}; if (!st.sent) return res.status(404).json({ ok: false, error: 'notfound' });
     const rec = await drawUpdate(k.id + ':' + k.line, r => { (r.changes = r.changes || []).push({ t: uaeNow(), text }); delete r.approved; return r; });

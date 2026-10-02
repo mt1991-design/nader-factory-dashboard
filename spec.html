@@ -3004,6 +3004,8 @@ async function custBoot(){
   const sheet=document.getElementById('sheet'),box=document.createElement('section');box.className='cust-box noprint';box.id='custBox';
   sheet.parentNode.insertBefore(box,sheet);
   const st=d.status||{},ch=st.changes||[];
+  if(d.test){const tb=document.createElement('div');tb.className='noprint';tb.style.cssText='max-width:820px;margin:12px auto 0;width:calc(100% - 24px);box-sizing:border-box;padding:10px 14px;border-radius:10px;background:#fdf0d5;color:#8a5a00;font:600 13px/1.4 -apple-system,Helvetica,Arial,sans-serif';
+    tb.textContent='TEST LINK — this is what the customer sees. Approving or requesting a change here saves nothing and the customer is not contacted.';box.parentNode.insertBefore(tb,box);}
   const draw=()=>{
     if(st.approved){box.innerHTML=`<div class="cb-ok"><b>✓ Drawing approved</b><p>Thank you${st.approved.name?', '+esc(st.approved.name):''}. You approved this drawing on ${fmtDay(st.approved.t)}. Our team will now start making your piece.</p></div>`;return;}
     const last=ch.length?ch[ch.length-1]:null;
