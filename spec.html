@@ -1438,6 +1438,8 @@ const KandaDraw=WarpDraw.make({
    Top: 18 | 71.33 × 3 | 18 = 250; back 18, bolster back cushions 20 (4 across 3 seats — one more than the seats), seat 60 → depth 98.
    Front: plinth 5, base 20, seat cushion 20 → seat 45, back 23 → 68 (the DWG front is drawn 306 wide: scaled to the plan). */
 const LILY_DEFAULT={W:250,n:3,RL:150,D:98,B:18,BC:20,A:18,CA:1,OA:1,OT:1,OD:52,FB:0,H:68,SH:45,BH:20,LH:5,side:"L"};
+/* side cushions down a full-backrest chaise: the first runs to the seat front, the rest of the chaise splits evenly */
+const LI_SIDE=V=>{const ys=V.B+V.BC,ye=V.RL,out=[[ys,V.D]],k=Math.max(1,Math.round((ye-V.D)/72)),h=(ye-V.D)/k;for(let i=0;i<k;i++)out.push([V.D+i*h,V.D+(i+1)*h]);return out;};
 const LI_AC=V=>+V.CA===0?0:V.A, LI_AO=V=>+V.OA===0?0:V.A;
 const LI_SEATS=V=>seatSplit(V.W-LI_AC(V)-LI_AO(V),Array(Math.max(1,V.n|0)).fill(1),214,3);
 const LilyDraw=WarpDraw.make({
@@ -1471,9 +1473,9 @@ const LilyDraw=WarpDraw.make({
       d+=`M${P(x0,y0+r+bow)}Q${P(x0,y0+bow)} ${P(x0+r,y0+bow)}Q${P(xm,y0-bow)} ${P(x1-r,y0+bow)}Q${P(x1,y0+bow)} ${P(x1,y0+r+bow)}L${P(x1,y1-r-bow)}Q${P(x1,y1-bow)} ${P(x1-r,y1-bow)}Q${P(xm,y1+bow)} ${P(x0+r,y1-bow)}Q${P(x0,y1-bow)} ${P(x0,y1-r-bow)}Z`;}
     if(+V.CA===0)d+=`M${P(0,2)}L${P(0,V.B)}`; if(+V.OA===0)d+=`M${P(V.W,2)}L${P(V.W,V.B)}`;
     /* "full backrest" chaise: bolsters run down the chaise's inner side too (team drawing #29292731) */
-    if(+V.FB){const cx0=a,cx1=a+V.BC,ys=y1,ye=V.RL-.5,k=Math.max(1,Math.round((ye-ys)/72)),h=(ye-ys)/k;
-      for(let i=0;i<k;i++){const t0=ys+i*h,t1=t0+h,tm=(t0+t1)/2;
-        d+=`M${P(cx0+r+bow,t0)}Q${P(cx0+bow,t0)} ${P(cx0+bow,t0+r)}Q${P(cx0-bow,tm)} ${P(cx0+bow,t1-r)}Q${P(cx0+bow,t1)} ${P(cx0+r+bow,t1)}L${P(cx1-r-bow,t1)}Q${P(cx1-bow,t1)} ${P(cx1-bow,t1-r)}Q${P(cx1+bow,tm)} ${P(cx1-bow,t0+r)}Q${P(cx1-bow,t0)} ${P(cx1-r-bow,t0)}Z`;}}
+    if(+V.FB){const cx0=a,cx1=a+V.BC;
+      LI_SIDE(V).forEach(([t0,t1])=>{const tm=(t0+t1)/2;
+        d+=`M${P(cx0+r+bow,t0)}Q${P(cx0+bow,t0)} ${P(cx0+bow,t0+r)}Q${P(cx0-bow,tm)} ${P(cx0+bow,t1-r)}Q${P(cx0+bow,t1)} ${P(cx0+r+bow,t1)}L${P(cx1-r-bow,t1)}Q${P(cx1-bow,t1)} ${P(cx1-bow,t1-r)}Q${P(cx1+bow,tm)} ${P(cx1-bow,t0+r)}Q${P(cx1-bow,t0)} ${P(cx1-r-bow,t0)}Z`;});}
     return d;},
   /* arm left off: close the back at that end */
   extraFront(V,c){const {X,Y}=c,P=(x,h)=>X(x).toFixed(1)+","+Y(h).toFixed(1);let d="";
@@ -1488,8 +1490,8 @@ const LilyDraw=WarpDraw.make({
     const xC=X(0), xP=X(V.W), ot=+V.OT, dP=ot?V.D+V.OD:V.D;
     if(V.side!=="N"){o+=K.chainV([Y(0),Y(V.B),Y(V.D),Y(V.RL)],xC+out*G,xC,[F(V.B),F(V.D-V.B),F(V.RL-V.D)]);o+=K.chainV([Y(0),Y(V.RL)],xC+out*2*G,xC,[F(V.RL)]);
       /* full-backrest chaise: back cushion + each side cushion down the chaise, and the chaise split cushion | seat (team drawing #29292731) */
-      if(+V.FB){const ys=V.B+V.BC,ye=V.RL-.5,k=Math.max(1,Math.round((ye-ys)/72)),h=(ye-ys)/k,st=[Y(V.B),Y(ys)],lb=[F(V.BC)];
-        for(let i=1;i<=k;i++){st.push(Y(ys+i*h));lb.push(F(Math.round(h)));}
+      if(+V.FB){const cs=LI_SIDE(V),st=[Y(V.B)],lb=[];let prev=V.B;
+        cs.forEach(([t0,t1],i)=>{if(i===0){st.push(Y(t0));lb.push(F(V.BC));prev=t0;}st.push(Y(t1));lb.push(F(Math.round((t1-prev)*100)/100));prev=t1;});
         o+=K.innerV(st,X(a+V.BC+6),lb);
         const cw=w[0];o+=innerH(K,X(a),X(a+V.BC),Y((V.D+V.RL)/2),F(V.BC))+innerH(K,X(a+V.BC),X(a+cw),Y((V.D+V.RL)/2),F(Math.round((cw-V.BC)*100)/100));}}
     else{o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xC+out*G,xC,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xC+out*2*G,xC,[F(V.D)]);}
@@ -1956,6 +1958,8 @@ const BretagneDraw=WarpDraw.make({
   xb:[0,24,98,172,246,270], xt:V=>{const w=BR_SEATS(V),o=BR_AO(V),ch=BR_AC(V);return [0,o,o+w[0],V.W-ch-w[w.length-1],V.W-ch,V.W];},
   xbF:[0,1.7,25.7,99.7,173.7,247.7,271.7,273.7], xtF:V=>{const w=BR_SEATS(V),o=BR_AO(V),ch=BR_AC(V);return [-1.7,0,o,o+w[0],V.W-ch-w[w.length-1],V.W-ch,V.W,V.W+1.7];},
   yb:[0,24,104,160], yt:V=>[0,V.B,V.D,V.RL], topDepth:V=>V.RL,
+  /* the chaise arm column: CAL = how far the arm runs down the chaise (default: to the seat front, as the DWG) */
+  yRight:{x:245.5,yb:[0,24,104,160],yt:V=>[0,V.B,Math.min(V.RL-5,Math.max(V.D,+V.CAL||V.D)),V.RL]}, sideRows:1,
   hb:[0,19,35.5,68], ht:V=>[0,V.LH,V.SH-4.5,V.H], frontHeight:V=>V.H,
   cells:{top:{xs:[24,98,172,246],band:[-0.5,104.6],contain:true},front:{xs:[25.7,99.7,173.7,247.7],band:[19.5,69],contain:true}},
   seatRange:V=>{const w=BR_SEATS(V);return {x0:BR_AO(V),x1:V.W-BR_AC(V),n:w.length,widths:w};},
@@ -1973,7 +1977,11 @@ const BretagneDraw=WarpDraw.make({
       o+=hChain(bs,null,Y(0)-2*G,Y(0))+hChain([0,V.W],null,Y(0)-3*G,Y(0));}
     else o+=hChain([0,V.W],null,Y(0)-2*G,Y(0));
     const xC=X(V.W),xP=X(0);
-    if(V.side!=="N"){o+=K.chainV([Y(0),Y(V.D),Y(V.RL)],xC-out*G,xC,[F(V.D),F(V.RL-V.D)]);o+=K.chainV([Y(0),Y(V.RL)],xC-out*2*G,xC,[F(V.RL)]);}
+    const cal=+V.CAL>V.D?Math.min(V.RL-5,+V.CAL):0;
+    if(V.side!=="N"&&cal){   /* arm down the chaise: back | arm | chaise end, then arm end and the whole chaise (team Canva #29292707) */
+      o+=K.chainV([Y(0),Y(V.B),Y(cal),Y(V.RL)],xC-out*G,xC,[F(V.B),F(cal-V.B),F(V.RL-cal)]);o+=K.chainV([Y(0),Y(cal)],xC-out*2*G,xC,[F(cal)]);o+=K.chainV([Y(0),Y(V.RL)],xC-out*3*G,xC,[F(V.RL)]);
+      const xi=X(V.W-ch-w[w.length-1]);o+=K.innerV([Y(V.D),Y(V.RL)],xi+out*14,[F(V.RL-V.D)]);}
+    else if(V.side!=="N"){o+=K.chainV([Y(0),Y(V.D),Y(V.RL)],xC-out*G,xC,[F(V.D),F(V.RL-V.D)]);o+=K.chainV([Y(0),Y(V.RL)],xC-out*2*G,xC,[F(V.RL)]);}
     o+=K.chainV([Y(0),Y(V.B),Y(V.D)],xP+out*G,xP,[F(V.B),F(V.D-V.B)]);o+=K.chainV([Y(0),Y(V.D)],xP+out*2*G,xP,[F(V.D)]);return o;},
   dimsFront(V,c){const {X,Y,G,K,F,out,callout}=c,xC=X(V.W),xP=X(0);
     let o=K.chainV([Y(0),Y(V.H)],xP+out*G,xP,[F(V.H)]);
