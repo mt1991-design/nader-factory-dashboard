@@ -418,3 +418,7 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .dc-date{display:flex;align-items:center;gap:10px;margin:8px 0 10px;font-weight:600}
 .dc-date input{padding:6px 8px;border:1px solid #d9cfbd;border-radius:6px;font:inherit}
 .dvdate{padding:2px 4px;border:1px solid #cfe3d4;border-radius:5px;font:inherit;font-size:12px;background:#f3fbf5;color:#1e6b3a}
+
+.rowlog{margin-top:6px;max-width:420px;padding:6px;border:1px solid #e2e0da;border-radius:8px;background:#fafaf8}
+.logbtn{border-color:#d8d5cd;color:#55524c}
+.logbtn[aria-expanded=true]{background:#f3f3f1}
