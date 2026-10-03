@@ -412,3 +412,5 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .tagchip.team .tt-x{border:0;background:none;color:#1f4f8f;cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 2px}
 .tagadd{border:1px dashed #c7d9f2;background:#fff;color:#1f4f8f;border-radius:999px;font:600 10.5px var(--ui,inherit);padding:2px 8px;cursor:pointer;margin:2px 0}
 .tagadd:focus-visible,.tt-x:focus-visible{outline:2px solid #1f4f8f;outline-offset:2px}
+
+.tagchip.sys{background:#f3f3f1;color:#55524c;border-color:#e2e0da;font-weight:500}

@@ -5264,7 +5264,34 @@ function fmtAddr(a){if(!a)return'<span class="muted">— no address on file —<
   const L=[a.name,a.company,a.address1,a.address2,[a.zip,a.city].filter(Boolean).join(" "),[a.province,a.country].filter(Boolean).join(", "),a.phone].filter(Boolean).map(esc);
   return L.length?L.join("\n"):'<span class="muted">—</span>';}
 /* the team's own Shopify tags (e.g. "Delivery 7th to 11 oct", "Items Ready") — the dashboard's internal tags are hidden */
-const SYS_TAG=/^(prodstage|pd|crew|delivery|delivered|shopfulfilled|state|signature|payment)[:-]|^(sales-form|bespoke|changed-order)$|^quote \d/i;
+const SYS_TAG=/^(prodstage|pd|crew|delivery|delivered|shopfulfilled|state|signature|payment|drawok)[:-]|^(sales-form|bespoke|changed-order)$|^quote \d/i;
+/* the dashboard's own Shopify tags, in plain English (so every tag on the Shopify order is visible here too) */
+function sysTagText(t){
+  const S=(typeof PROD_STAGES!=="undefined"?PROD_STAGES:["Drawing","Carpentry","Foaming","Fabrication","Packing","Stored in warehouse","Delivery booked"]);
+  const it=n=>"Item "+(+n+1), st=n=>S[+n]||("stage "+n), d=x=>{const z=new Date(String(x).replace(" ","T"));return isNaN(z)?x:z.toLocaleString("en-GB",{day:"numeric",month:"short",...(String(x).length>10?{hour:"2-digit",minute:"2-digit"}:{})});};
+  let m;
+  if((m=t.match(/^prodstage:(\d+):(\d+)$/)))return it(m[1])+" · now at "+st(m[2]);
+  if((m=t.match(/^prodstage:(\d+)$/)))return "All items · now at "+st(m[1]);
+  if((m=t.match(/^pd:(\d+):(\d)@(.+)$/)))return it(m[1])+" · reached "+st(m[2])+" · "+d(m[3]);
+  if((m=t.match(/^crew:(\d+):(\d+):([^@]+)@(.+)$/)))return it(m[1])+" · "+st(m[2])+" by "+m[3]+" · "+d(m[4]);
+  if((m=t.match(/^delivery:(\d+):(.+)$/)))return it(m[1])+" · delivery booked for "+d(m[2]);
+  if((m=t.match(/^delivered:(\d+)@(.+)$/)))return it(m[1])+" · delivered "+d(m[2]);
+  if((m=t.match(/^shopfulfilled:(\d+)$/)))return it(m[1])+" · fulfilled in Shopify";
+  if((m=t.match(/^drawok:(\d+)@(.+)$/)))return it(m[1])+" · drawing approved by customer "+d(m[2]);
+  if(/^signature:signed$/i.test(t))return "Signed by the customer";
+  if(/^signature:pending$/i.test(t))return "Waiting for the customer's signature";
+  if((m=t.match(/^payment-(.+)$/i)))return "Payment: "+m[1].replace(/-/g," ");
+  if(/^state:/i.test(t))return "Sales-form link";
+  return t;
+}
+/* Shopify tags (beige) + team tags (blue) + ＋ Tag — used on the sales AND factory lists */
+function tagChipsHTML(o,oi){
+  const tg=humanTags(o);
+  return '<div class="tagchips">'+tg.map(t=>'<span class="tagchip" title="Shopify tag">'+esc(t)+'</span>').join("")
+    +(o.ttags||[]).map(t=>'<span class="tagchip team" title="Team tag · '+esc(t.by||"")+'">'+esc(t.text)+'<button type="button" class="tt-x" aria-label="Remove tag" onclick="event.stopPropagation();ttagDel('+oi+',\''+t.id+'\')">×</button></span>').join("")
+    +'<button type="button" class="tagadd" onclick="event.stopPropagation();ttagAdd('+oi+')">＋ Tag</button></div>';
+}
+function sysTags(o){ return String(o.tags||"").split(",").map(t=>t.trim()).filter(t=>t&&SYS_TAG.test(t)); }
 function humanTags(o){ return String(o.tags||"").split(",").map(t=>t.trim()).filter(t=>t&&!SYS_TAG.test(t)); }
 function openOrderDetail(o){
   const st=shopifyStatus(o);
@@ -5289,6 +5316,7 @@ function openOrderDetail(o){
     <div class="odsec"><h4>Items</h4><table class="oditems"><thead><tr><th>Product</th><th>SKU</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th></th></tr></thead><tbody>${items||'<tr><td colspan="5" class="muted">No items</td></tr>'}</tbody></table></div>
     ${o.note?`<div class="odsec"><h4>Note</h4><div style="font-size:13px">${esc(o.note)}</div></div>`:''}
     ${(humanTags(o).length||(o.ttags||[]).length)?`<div class="odsec"><h4>Tags</h4><div class="tagchips big">${humanTags(o).map(t=>'<span class="tagchip" title="Shopify tag">'+esc(t)+'</span>').join('')}${(o.ttags||[]).map(t=>'<span class="tagchip team" title="Team tag · '+esc(t.by||'')+' · '+esc(t.t||'')+'">'+esc(t.text)+'</span>').join('')}</div><div class="muted" style="font-size:11px;margin-top:4px">Beige = Shopify tags · Blue = team tags</div></div>`:''}
+    ${sysTags(o).length?`<div class="odsec"><h4>Production log (Shopify tags) <span class="muted" style="font-weight:400">· ${sysTags(o).length}</span></h4><div class="tagchips big">${sysTags(o).sort((x,y)=>{const a=(x.match(/^\w+:(\d+)/)||[])[1]||0,b=(y.match(/^\w+:(\d+)/)||[])[1]||0;return a-b||x.localeCompare(y);}).map(t=>'<span class="tagchip sys" title="'+esc(t)+'">'+esc(sysTagText(t))+'</span>').join('')}</div></div>`:''}
     <div class="odsec oddraw"><h4>Factory drawing</h4>
       <div class="odrow"><span class="k">Status</span><span><span class="pill fail">Needs drawing</span></span></div>
       <div class="odrow"><span class="k">Assigned to</span><span><select onchange="setDrawer('${oq2}',this.value)">${DRAWERS.map(function(nm){return '<option'+(nm===assignedDrawer(o)?' selected':'')+'>'+esc(nm)+'</option>';}).join('')}</select></span></div>
@@ -5457,7 +5485,7 @@ function renderFactoryProd(){
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
       const oq=esc(o.order).replace(/'/g,"");
       const specBtn='<button class="specbtn done" style="margin-top:6px" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')" title="Open the spec sheet — check, edit and print / save PDF">📄 Spec sheet</button>';
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order):"")+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,true)+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order)+tagChipsHTML(o,oi):"")+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,true)+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
     });
   });
   tb.innerHTML=shown?html:"";

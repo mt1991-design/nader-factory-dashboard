@@ -153,9 +153,7 @@ function decorateRows(){
     if(seen.has(o))return; seen.add(o);
     { const tg=(typeof humanTags==="function")?humanTags(o):[]; const c0=tr.querySelector("td.ono");
       /* every Shopify tag (beige) + the team's own tags (blue), and ＋ Tag to add one */
-      if(c0&&!c0.querySelector(".tagchips")) c0.insertAdjacentHTML("beforeend",'<div class="tagchips">'+tg.map(t=>'<span class="tagchip" title="Shopify tag">'+esc(t)+'</span>').join("")
-        +(o.ttags||[]).map(t=>'<span class="tagchip team" title="Team tag · '+esc(t.by||"")+'">'+esc(t.text)+'<button type="button" class="tt-x" aria-label="Remove tag" onclick="event.stopPropagation();ttagDel('+(+tr.dataset.oi)+',\''+t.id+'\')">×</button></span>').join("")
-        +'<button type="button" class="tagadd" onclick="event.stopPropagation();ttagAdd('+(+tr.dataset.oi)+')">＋ Tag</button></div>'); }
+      if(c0&&!c0.querySelector(".tagchips")&&typeof tagChipsHTML==="function") c0.insertAdjacentHTML("beforeend",tagChipsHTML(o,+tr.dataset.oi)); }
     if((o.tnotes||[]).length){ const c=tr.querySelector("td.ono"); if(c&&!c.querySelector(".wr-nchip")) c.insertAdjacentHTML("beforeend",'<span class="wr-nchip" title="'+esc((o.tnotes[o.tnotes.length-1]||{}).text||"")+'">📝 '+o.tnotes.length+'</span>'); }
     const p=tr.querySelector(".pill.sent"); if(!p||o.isDraft||o.state!=="open"||salesView==="production")return;
     const st=Math.max(...(o.prod_stages&&o.prod_stages.length?o.prod_stages:[0]));
@@ -464,6 +462,6 @@ mountOverlays(); setupBars();
 /* ---------- team tags: short bubble notes from sales / factory (blue), separate from Shopify tags (beige) ---------- */
 async function ttagSave(oi,body){const o=SHOPIFY[oi];if(!o)return;
   try{const r=await fetch("/api/ttags",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.assign({id:o.id},body))});const d=await r.json();
-    if(!d.ok)throw new Error(d.error||"error");o.ttags=d.tags;renderSalesDash();}catch(e){alert("Couldn't save the tag: "+e.message);}}
+    if(!d.ok)throw new Error(d.error||"error");o.ttags=d.tags;renderSalesDash();if(typeof renderFactoryProd==="function")renderFactoryProd();}catch(e){alert("Couldn't save the tag: "+e.message);}}
 function ttagAdd(oi){const t=prompt("Add a team tag (short — e.g. Waiting for fabric, Call before delivery):");if(t&&t.trim())ttagSave(oi,{text:t.trim().slice(0,60)});}
 function ttagDel(oi,tid){if(confirm("Remove this team tag?"))ttagSave(oi,{tid});}
