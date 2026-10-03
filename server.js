@@ -865,7 +865,7 @@ app.post('/api/crew', requireAuth, async (req, res) => {
 
 // Book (or clear) the delivery date + time agreed with the customer for one line. Booking moves the line to stage 5.
 app.post('/api/delivery', requireAuth, async (req, res) => {
-  if (!hasRole(req, 'factory') && !hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
+  if (!hasRole(req, 'factory') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'only the factory team books deliveries' });
   const b = req.body || {}, id = b.id, line = Math.max(0, parseInt(b.line, 10) || 0);
   const when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(b.when || '')) ? b.when : '';
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
