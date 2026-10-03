@@ -5147,7 +5147,8 @@ function drawCtl(o,i,oi){
   else if(changed)h+='<div class="dchip warn">⟳ Drawing changed since it was sent ('+(st.changed.by?esc(st.changed.by)+', ':'')+dDay(st.changed.t)+') — send it again</div>';
   if(st.approved)h+='<div class="dchip ok">✓ Drawing approved by customer · '+dDay(st.approved.t)+(st.approved.name?' ('+esc(st.approved.name)+')':'')+'</div>';
   else if(chAfter)h+='<div class="dchip warn">✎ Customer asked for changes ('+dDay(lastCh.t)+'): '+esc(lastCh.text||"")+'</div>';
-  else if(st.sent&&!resign&&!changed)h+='<div class="dchip sent">✉ Sent to customer · '+dDay(st.sent.t)+(st.sent.by?' by '+esc(st.sent.by):'')+' · waiting for approval</div>';
+  else if(st.sent&&!resign&&!changed)h+=(st.sent.emailed===false?'<div class="dchip warn">⚠ Email did NOT go out ('+esc(st.sent.mailErr||"not sent")+') · '+dDay(st.sent.t)+(st.sent.by?' by '+esc(st.sent.by):'')+' — press Send again</div>'
+    :'<div class="dchip sent">'+(st.sent.emailed?'✉ Emailed to customer':'✉ Sent (WhatsApp only — email wasn’t switched on yet)')+' · '+dDay(st.sent.t)+(st.sent.by?' by '+esc(st.sent.by):'')+' · waiting for approval</div>');
   if(!st.approved){
     h+=B("specLineItem('"+oq+"',"+i+")","📄 Check drawing");
     h+=B("drawSend("+oi+","+i+")",(resign||changed)?"Send to customer":st.sent?"Send again":"Send to customer","main");
@@ -5168,14 +5169,11 @@ async function drawSend(oi,i){
     if(!d.ok)throw new Error(d.error||"error");
     o.drawst=o.drawst||{};o.drawst[i]=d.rec;
     const it=o.items[i]||{},first=String(o.customer||"").split(" ")[0]||"there";
-    let emailed=false;
-    if(DRAW_EMAIL.template&&o.email&&window.emailjs){
-      try{await emailjs.send(DRAW_EMAIL.service,DRAW_EMAIL.template,{to_email:o.email,customer_name:o.customer||"",order_no:o.order,product:it.product||"",approve_link:d.link},{publicKey:DRAW_EMAIL.key});emailed=true;}catch(e){}
-    }
+    const emailed=!!d.emailed;   /* the server sends the email now */
     const ph=waNum(o.phone||(o.shipping_address||{}).phone);
     if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent("Hello "+first+",\n\nThe drawing for your Nader order "+o.order+" is ready for you to check:\n"+d.link+"\n\nIf everything is right, tick the box and approve it. If something needs changing, tell us on the page and our team will update it.\n\n— Nader.ae"),"_blank");
     renderSalesDash();
-    setTimeout(()=>dMsg(oi,i,emailed?"✓ Email sent to customer"+(ph?" + WhatsApp opened":""):(ph?"✓ WhatsApp opened — press send in WhatsApp":"✓ Link ready — use Copy link")),60);
+    setTimeout(()=>dMsg(oi,i,emailed?"✓ Email sent to "+(d.rec.sent.to||"customer")+(ph?" + WhatsApp opened":""):"⚠ Email NOT sent ("+(d.mailErr||"unknown")+")"+(ph?" — WhatsApp opened, press send there":"")),60);
   }catch(e){dMsg(oi,i,"Couldn't send: "+e.message);}
 }
 /* admin: email a TEST version of the customer's drawing email to yourself — nothing is saved, nothing goes to Shopify */
@@ -5183,11 +5181,9 @@ async function drawTest(oi,i){
   const o=SHOPIFY[oi];if(!o)return;
   const to=prompt("Send a TEST drawing email to (nothing is saved, the customer gets nothing):",(USER&&USER.email)||"contact@nader.ae");if(!to||!/@/.test(to))return;
   dMsg(oi,i,"Sending test…");
-  try{const r=await fetch("/api/drawing/test-link",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i})});const d=await r.json();
+  try{const r=await fetch("/api/drawing/test-link",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i,to:to.trim(),name:o.customer||"",order:o.order,product:(o.items[i]||{}).product||""})});const d=await r.json();
     if(!d.ok)throw new Error(d.error||"error");
-    if(!window.emailjs)throw new Error("email not loaded — refresh the page");
-    await emailjs.send(DRAW_EMAIL.service,DRAW_EMAIL.template,{to_email:to.trim(),customer_name:"(TEST) "+(o.customer||""),order_no:o.order,product:(o.items[i]||{}).product||"",approve_link:d.link},{publicKey:DRAW_EMAIL.key});
-    dMsg(oi,i,"✓ Test email sent to "+to.trim());}
+    dMsg(oi,i,d.emailed?"✓ Test email sent to "+to.trim():"⚠ Test email failed: "+(d.mailErr||"unknown"));}
   catch(e){dMsg(oi,i,"Test failed: "+e.message);}
 }
 /* ---------- "Needs your attention": unlock / edit requests from the team + changes customers asked for ---------- */

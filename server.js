@@ -487,6 +487,20 @@ async function tagOrder(id, add, dropPrefix) {
   if (!up.ok) throw new Error('Shopify PUT ' + up.status);
   if (CACHE.orders) delete CACHE.orders;
 }
+/* the drawing email goes out from the SERVER (EmailJS template_w9lhq6v, BCC contact@nader.ae set in the template) —
+   an old dashboard tab can't skip it any more, and the result is recorded (emailed / error) */
+const EMAILJS = { service: 'service_itfuapy', template: 'template_w9lhq6v', key: '0i4e9U2tktd_FGAT_' };
+async function sendDrawingEmail(req, to, params) {
+  if (!to || !/@/.test(to)) return { emailed: false, error: 'no email address on the order' };
+  try {
+    const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': `https://${req.headers.host}`,
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36' },
+      body: JSON.stringify({ service_id: EMAILJS.service, template_id: EMAILJS.template, user_id: EMAILJS.key, template_params: Object.assign({ to_email: to }, params) }) });
+    const txt = (await r.text()).slice(0, 200);
+    return r.ok ? { emailed: true, to } : { emailed: false, to, error: 'EmailJS ' + r.status + ': ' + txt };
+  } catch (e) { return { emailed: false, to, error: e.message }; }
+}
 /* team: send the drawing to the customer (after checking the PDF) — returns the customer's link */
 app.post('/api/drawing/send', requireAuth, async (req, res) => {
   const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0);
@@ -494,17 +508,23 @@ app.post('/api/drawing/send', requireAuth, async (req, res) => {
   try {
     const who = req.session.name || req.session.username;
     const link = `https://${req.headers.host}/drawing?t=${drawToken(id, line)}`;
-    const rec = await drawUpdate(id + ':' + line, r => { r.sent = { t: uaeNow(), by: who, n: ((r.sent || {}).n || 0) + 1, link }; if (r.edit) r.edit.done = r.edit.done || { t: uaeNow(), by: who }; delete r.changed; if (r.resign) r.resign.resent = uaeNow(); return r; });
+    const ord = await drawOrder(id), oc = ((await cached('orders', FETCH.orders, false)).find(x => String(x.id) === id)) || ord || {};
+    const cust = oc.customer || {}, email = cust.email || oc.email || '', li = (oc.line_items || [])[line] || {};
+    const mail = await sendDrawingEmail(req, email, { customer_name: [cust.first_name, cust.last_name].filter(Boolean).join(' ') || 'there', order_no: oc.name || '', product: li.title || '', approve_link: link });
+    const rec = await drawUpdate(id + ':' + line, r => { r.sent = { t: uaeNow(), by: who, n: ((r.sent || {}).n || 0) + 1, link, emailed: mail.emailed, to: mail.to || '', mailErr: mail.error || '' }; if (r.edit) r.edit.done = r.edit.done || { t: uaeNow(), by: who }; delete r.changed; if (r.resign) r.resign.resent = uaeNow(); return r; });
     logEvent(req.session.username, 'drawing_sent', { id, line, ip: clientIp(req) });
-    res.json({ ok: true, rec, link });
+    res.json({ ok: true, rec, link, emailed: mail.emailed, mailErr: mail.error || '' });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 /* admin: a TEST link for any order line — the page works, but approving / requesting a change saves nothing */
-app.post('/api/drawing/test-link', requireAuth, (req, res) => {
+app.post('/api/drawing/test-link', requireAuth, async (req, res) => {
   if (!hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'admin only' });
   const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0);
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
-  res.json({ ok: true, link: `https://${req.headers.host}/drawing?t=${drawToken(id, line, true)}` });
+  const link = `https://${req.headers.host}/drawing?t=${drawToken(id, line, true)}`;
+  if (b.to) { const mail = await sendDrawingEmail(req, String(b.to).trim(), { customer_name: '(TEST) ' + (b.name || ''), order_no: b.order || '', product: b.product || '', approve_link: link });
+    return res.json({ ok: true, link, emailed: mail.emailed, mailErr: mail.error || '' }); }
+  res.json({ ok: true, link });
 });
 /* team: the drawing is wrong → ask an admin to edit it (or an admin marks it fixed) */
 app.post('/api/drawing/edit-request', requireAuth, async (req, res) => {
