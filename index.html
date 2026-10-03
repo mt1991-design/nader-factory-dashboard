@@ -5152,7 +5152,6 @@ function drawCtl(o,i,oi){
     h+=B("specLineItem('"+oq+"',"+i+")","📄 Check drawing");
     h+=B("drawSend("+oi+","+i+")",(resign||changed)?"Send to customer":st.sent?"Send again":"Send to customer","main");
     if(st.sent&&st.sent.link)h+=B("drawCopy("+oi+","+i+")","Copy link");
-    if(!edit)h+=B("drawEditReq("+oi+","+i+")","Request edit from admin");
   }
   if(ROLES_HAS_ADMIN())h+=B("drawTest("+oi+","+i+")","✉ Test to me");
   return h+'<span class="dmsg" id="dmsg-'+oi+'-'+i+'"></span></div>';
@@ -5194,6 +5193,7 @@ async function drawTest(oi,i){
 /* ---------- "Needs your attention": unlock / edit requests from the team + changes customers asked for ---------- */
 function renderAttn(){
   const box=$("attn");if(!box)return;
+  box.hidden=true;box.innerHTML="";return;   /* removed (Mariam 3 Oct): anyone can unlock now; statuses stay on each order row */
   const rows=[];
   SHOPIFY.forEach((o,oi)=>{if(o.isDraft)return;Object.keys(o.drawst||{}).forEach(k=>{const i=+k,st=o.drawst[k]||{},it=o.items[i]||{},oq=esc(o.order).replace(/'/g,"");
     const nm=esc(o.order)+(o.items.length>1?' · item '+(i+1):'')+' — '+esc(it.product||'');
