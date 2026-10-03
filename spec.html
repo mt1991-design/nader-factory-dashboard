@@ -2753,7 +2753,7 @@ function renderSheet(){
   const c=ORDER.cust;
   document.getElementById('sheet').innerHTML=`
 <div class="mast"><div class="mast-l"><div class="wm">NADER</div><div class="sub">DARE TO BE RARE</div></div><div class="mast-r"><div class="doc">Factory Spec Sheet</div><div class="prod" contenteditable="true" spellcheck="false" data-k="product">${esc(ORDER.product)}</div></div></div>
-<div class="mast-meta"><div><div class="k">Order No.</div>${ce("orderNo",ORDER.orderNo)}</div><div><div class="k">Date</div>${ce("date",ORDER.date)}</div><div><div class="k">Assigned To</div>${ce("assigned",ORDER.assigned)}</div><div><div class="k">Status</div><div id="statusBox"></div></div></div>
+<div class="mast-meta"><div><div class="k">Order No.</div>${ce("orderNo",ORDER.orderNo)}</div><div><div class="k">Date</div>${ce("date",ORDER.date)}</div><div><div class="k">Delivery Date</div>${ce("deliveryDate",ORDER.deliveryDate||"")}</div><div><div class="k">Assigned To</div>${ce("assigned",ORDER.assigned)}</div><div><div class="k">Status</div><div id="statusBox"></div></div></div>
 <div class="section-h"><span class="t">Reference &amp; Top View</span><span class="rule"></span></div>
 <div class="grid2c">
   <div class="panel"><div class="cap"><span>Reference Photo</span><b>AS ORDERED</b></div><div class="body">${ORDER.photo?`<img id="photo" src="${esc(ORDER.photo)}" alt="Reference photo">`:'<div class="manual" style="border-color:var(--line);background:none;color:var(--muted)"><span>No photo — use “Replace photo…”</span></div>'}</div></div>
@@ -2809,7 +2809,8 @@ function lockCells(){
   const L=isLocked()||document.body.classList.contains('custview');
   document.querySelectorAll('#sheet [contenteditable]').forEach(el=>{
     const s=el.dataset.s, key=s!=null&&ORDER.spec[+s]?ORDER.spec[+s][0]:'';
-    el.setAttribute('contenteditable', (!L||(LOCK_FREE.test(key)&&!document.body.classList.contains('custview')))?'true':'false');
+    const free=(LOCK_FREE.test(key)||el.dataset.k==='deliveryDate')&&!document.body.classList.contains('custview');   /* delivery date: filled in later, even on a locked sheet */
+    el.setAttribute('contenteditable', (!L||free)?'true':'false');
   });
 }
 /* ---------- change log: who unlocked a finished sheet and exactly what they changed (Mariam 3 Oct) ---------- */
