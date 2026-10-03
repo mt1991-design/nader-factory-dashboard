@@ -755,6 +755,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     out.forEach(o => { const f = {}; (o.items || []).forEach((it, i) => { const r = fab[o.id + ':' + i]; if (r) f[i] = r; }); o.fabric = f; });
     let nts = {}; try { nts = await notesDoc(false); } catch (e) {}
     out.forEach(o => { o.tnotes = nts[o.id] || []; });
+    let ttg = {}; try { ttg = await ttagsDoc(false); } catch (e) {}
+    out.forEach(o => { o.ttags = ttg[o.id] || []; });
     let dst = {}; try { dst = await drawDoc(false); } catch (e) {}
     out.forEach(o => { const m = {}; (o.items || []).forEach((it, i) => { if (dst[o.id + ':' + i]) m[i] = dst[o.id + ':' + i]; }); o.drawst = m; });
     res.json({ ok: true, orders: out, lead: leadTime(stats), weekly: weeklyOrders(stats) });
@@ -1138,6 +1140,28 @@ app.get('/api/file/:fid', requireAuth, async (req, res) => {
 });
 
 /* ---------- TEAM NOTES per order (customer calls etc.) — shared, editable by everyone, kept in Cloudflare KV ---------- */
+/* ---------- TEAM TAGS: short bubble tags the sales / factory team add to an order (kept on the dashboard, not in Shopify) ---------- */
+let TTAGS = null, TTAGS_AT = 0, ttagQ = Promise.resolve();
+async function ttagsDoc(fresh) {
+  if (!fresh && TTAGS && Date.now() - TTAGS_AT < 15000) return TTAGS;
+  const d = await workerJson('/doc/ttags'); if (d && d.ok) { TTAGS = d.data || {}; TTAGS_AT = Date.now(); }
+  return TTAGS || {};
+}
+app.post('/api/ttags', requireAuth, async (req, res) => {
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), text = String(b.text || '').trim().slice(0, 60);
+  if (!id) return res.status(400).json({ ok: false, error: 'no order' });
+  const run = ttagQ.then(async () => {
+    const all = JSON.parse(JSON.stringify(await ttagsDoc(true))), list = all[id] = all[id] || [];
+    if (b.tid) all[id] = list.filter(x => x.id !== b.tid);
+    else { if (!text) throw new Error('empty tag'); list.push({ id: crypto.randomBytes(5).toString('hex'), text, by: req.session.name || req.session.username, t: uaeNow() }); }
+    if (!all[id].length) delete all[id];
+    const out = await docSet('ttags', all); if (!out || !out.ok) throw new Error('save failed');
+    TTAGS = all; TTAGS_AT = Date.now(); return all[id] || [];
+  });
+  ttagQ = run.catch(() => {});
+  try { const tags = await run; logEvent(req.session.username, b.tid ? 'team_tag_remove' : 'team_tag_add', { id, text }); res.json({ ok: true, tags }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 let NOTES = null, NOTES_AT = 0;
 async function notesDoc(fresh) {
   if (!fresh && NOTES && Date.now() - NOTES_AT < 15000) return NOTES;

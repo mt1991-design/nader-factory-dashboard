@@ -5288,7 +5288,7 @@ function openOrderDetail(o){
     ${o.billing_address?`<div class="odsec"><h4>Billing address</h4><div class="odaddr">${fmtAddr(o.billing_address)}</div></div>`:''}
     <div class="odsec"><h4>Items</h4><table class="oditems"><thead><tr><th>Product</th><th>SKU</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th></th></tr></thead><tbody>${items||'<tr><td colspan="5" class="muted">No items</td></tr>'}</tbody></table></div>
     ${o.note?`<div class="odsec"><h4>Note</h4><div style="font-size:13px">${esc(o.note)}</div></div>`:''}
-    ${humanTags(o).length?`<div class="odsec"><h4>Tags</h4><div class="tagchips big">${humanTags(o).map(t=>'<span class="tagchip">'+esc(t)+'</span>').join('')}</div></div>`:''}
+    ${(humanTags(o).length||(o.ttags||[]).length)?`<div class="odsec"><h4>Tags</h4><div class="tagchips big">${humanTags(o).map(t=>'<span class="tagchip" title="Shopify tag">'+esc(t)+'</span>').join('')}${(o.ttags||[]).map(t=>'<span class="tagchip team" title="Team tag · '+esc(t.by||'')+' · '+esc(t.t||'')+'">'+esc(t.text)+'</span>').join('')}</div><div class="muted" style="font-size:11px;margin-top:4px">Beige = Shopify tags · Blue = team tags</div></div>`:''}
     <div class="odsec oddraw"><h4>Factory drawing</h4>
       <div class="odrow"><span class="k">Status</span><span><span class="pill fail">Needs drawing</span></span></div>
       <div class="odrow"><span class="k">Assigned to</span><span><select onchange="setDrawer('${oq2}',this.value)">${DRAWERS.map(function(nm){return '<option'+(nm===assignedDrawer(o)?' selected':'')+'>'+esc(nm)+'</option>';}).join('')}</select></span></div>

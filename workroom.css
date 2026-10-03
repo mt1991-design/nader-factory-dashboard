@@ -406,3 +406,9 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .ad-per{margin-left:auto;width:auto;min-height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--w-line2);background:var(--w-surface);font:600 12px var(--w-ui);color:var(--w-ink);letter-spacing:0;text-transform:none}
 
 .ad-kpi .v.ad-exact{font:600 22px/1.15 var(--w-ui);letter-spacing:-.01em;white-space:normal}
+
+/* team tags (blue) vs Shopify tags (beige) */
+.tagchip.team{background:#e8f0fb;color:#1f4f8f;border-color:#c7d9f2;display:inline-flex;align-items:center;gap:4px}
+.tagchip.team .tt-x{border:0;background:none;color:#1f4f8f;cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 2px}
+.tagadd{border:1px dashed #c7d9f2;background:#fff;color:#1f4f8f;border-radius:999px;font:600 10.5px var(--ui,inherit);padding:2px 8px;cursor:pointer;margin:2px 0}
+.tagadd:focus-visible,.tt-x:focus-visible{outline:2px solid #1f4f8f;outline-offset:2px}
