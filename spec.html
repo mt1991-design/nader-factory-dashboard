@@ -2657,7 +2657,6 @@ function cleanFormNote(t){
     if(skip){if(!x){skip=false;}return;}
     if(/^order$/i.test(x))return;
     if(/^\s{2,}\S/.test(l)&&!/^\s*[-•]/.test(l))return;            // indented lines = the form's item list
-    if(/^signed\b.*(agent:|showroom:)/i.test(x)||/^(agent|showroom):/i.test(x))return;
     out.push(l);
   });
   return out.join("\n");
