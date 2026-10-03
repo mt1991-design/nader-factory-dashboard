@@ -1051,7 +1051,7 @@ app.post('/api/spec', requireAuth, async (req, res) => {
     const oldKeys = old ? new Set((old.spec || []).map(r => r[0])) : null;
     const vKeys = old ? Object.keys(old.V || {}).sort() : [];   /* only sizes that existed — new default keys don't count */
     const vMap = x => vKeys.map(k => k + '=' + String((x.V || {})[k] ?? ''));
-    const drawingOf = (x, keys) => JSON.stringify([x.model || '', vMap(x), specMap(x, keys), !!x.photo, !!x.mirror, x.outline || '']);   /* a shape change counts too */
+    const drawingOf = (x, keys) => JSON.stringify([x.model || '', vMap(x), specMap(x, keys), !!x.photo, !!x.mirror, x.outline || '', x.customDraw ? Object.keys(x.drawings || {}).sort().map(k => k + ':' + String(x.drawings[k] || '').length) : '']);   /* shape / custom drawing changes count too */
     if (old && drawingOf(old, oldKeys) !== drawingOf(data, oldKeys)) {
       try {
         const m = String(id).match(/^(\d{6,})(?:-(\d+))?$/);
