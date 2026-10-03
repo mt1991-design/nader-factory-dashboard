@@ -3043,7 +3043,7 @@ async function custBoot(){
   document.querySelectorAll('#sheet .notes').forEach(n=>n.remove());
   document.querySelectorAll('#sheet .section-h').forEach(h=>{if(/workshop|production/i.test(h.textContent))h.remove();});
   const sheet=document.getElementById('sheet'),box=document.createElement('section');box.className='cust-box noprint';box.id='custBox';
-  sheet.parentNode.insertBefore(box,sheet);
+  const scr=sheet.closest('.sheet-scroll')||sheet;scr.parentNode.insertBefore(box,scr);   /* above the sheet, not beside it */
   const st=d.status||{},ch=st.changes||[];
   if(d.test){const tb=document.createElement('div');tb.className='noprint';tb.style.cssText='max-width:820px;margin:12px auto 0;width:calc(100% - 24px);box-sizing:border-box;padding:10px 14px;border-radius:10px;background:#fdf0d5;color:#8a5a00;font:600 13px/1.4 -apple-system,Helvetica,Arial,sans-serif';
     tb.textContent='TEST LINK — this is what the customer sees. Approving or requesting a change here saves nothing and the customer is not contacted.';box.parentNode.insertBefore(tb,box);}
