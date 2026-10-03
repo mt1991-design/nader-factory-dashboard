@@ -3234,6 +3234,20 @@ async function boot(){
   const origTitle=ORDER.orderedAs||ORDER.product||"";
   if(ORDER.photo&&/cdn\.shopify\.com/.test(ORDER.photo)&&!ORDER.photoManual&&CUSTOM_RE.test(origTitle)){ORDER.photo="";save();}
   if(!ORDER.photo&&ORDER.product&&!ORDER.photoCleared){const p=await productPhoto(origTitle);if(p){ORDER.photo=p;save();}}
+  /* a SAVED sheet doesn't re-read the order — but the sales form can be edited later (✎ Edit → resend). Pull in any
+     customisation notes / customisations the form now has that the sheet doesn't (never removes what the team typed). Mariam 3 Oct */
+  if(ORDER&&FROM_SAVE&&Q.o){try{
+    const r=await fetch(Q.k==="draft"?"/api/draft_orders":"/api/orders",{credentials:"same-origin"});const d=await r.json();
+    const o=(d.orders||d.drafts||[]).find(x=>x.order===Q.o);
+    if(o&&o.edit_state){const fr=await fetch("/api/formstate?id="+encodeURIComponent(o.edit_state),{credentials:"same-origin"});const fj=await fr.json();
+      const st=decodeState(fj.state),disp=(st&&st.display)||[],it=(o.items||[])[Q.i|0]||{};
+      const dd=disp.find(x=>x&&x.product_name===it.product)||disp[Q.i|0];
+      const sp=(dd&&dd.spec)||{},add=[];
+      Object.keys(sp).forEach(k=>{const v=String(sp[k]||"").trim();if(!v)return;
+        if(/customisation notes|special requests/i.test(k))add.push(v);else if(/^customisations?$/i.test(k))add.push("Customisations: "+v);});
+      const cur=String(ORDER.notes||""),fresh=add.filter(v=>cur.indexOf(v)<0);
+      if(fresh.length){ORDER.notes=(cur.trim()?cur.trim()+"\n":"")+fresh.join("\n");save();}
+    }}catch(e){}}
   /* sheets saved before Quantity existed: add the row (from the order when we know it) */
   if(ORDER&&Array.isArray(ORDER.spec)&&!ORDER.spec.some(r=>r[0]==="Quantity")){let q="1";
     if(Q.o){try{const r=await fetch(Q.k==="draft"?"/api/draft_orders":"/api/orders",{credentials:"same-origin"});const d=await r.json();
