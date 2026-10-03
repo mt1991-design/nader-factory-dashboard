@@ -1255,7 +1255,8 @@ body{background:transparent}
       if (stage === N - 1) { const d = (L.items.find(x => x.step === 13) || {}).since;
         $('windowLabel').textContent = 'Delivered'; $('windowDates').textContent = d ? fmt(D(d), true) : ''; $('windowNote').textContent = 'Thank you for choosing Nader. We hope you love your piece.'; }
       else if (booked) { const t = new Date(booked + ':00');
-        $('windowLabel').textContent = 'Delivery booked'; $('windowDates').textContent = fmt(t, true) + ' · ' + t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        $('windowLabel').textContent = 'Delivery booked'; const hh = booked.slice(11, 16), h = parseInt(hh, 10), slot = hh === '00:00' ? '' : h < 12 ? 'morning' : h < 16 ? 'afternoon' : 'evening';
+        $('windowDates').textContent = fmt(t, true) + (slot ? ' · ' + slot : '');   /* time of day, not an exact time */
         $('windowNote').textContent = 'Our team will call you before arrival.'; }
       else if (stage === 11) {   /* stored: always 'being confirmed', never a date */ $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = 'Being confirmed';   /* past the date: marked late behind the scenes, no delay message */
         $('windowNote').textContent = 'Our team is contacting you to book a delivery time, or you’ve asked us for a later delivery date.'; }
