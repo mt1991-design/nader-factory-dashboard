@@ -1180,6 +1180,20 @@ app.post('/api/ttags', requireAuth, async (req, res) => {
   try { const tags = await run; logEvent(req.session.username, b.tid ? 'team_tag_remove' : 'team_tag_add', { id, text }); res.json({ ok: true, tags }); }
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
+/* ---------- FACTORY TEAM: one shared list of names (was per-browser, so names one person added were invisible to others) ---------- */
+app.get('/api/workers', requireAuth, async (req, res) => {
+  try { const d = await workerJson('/doc/workers'); res.json({ ok: true, workers: (d && d.ok && d.data && d.data.list) || null }); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.post('/api/workers', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'factory') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'factory only' });
+  const list = Array.isArray((req.body || {}).workers) ? req.body.workers.map(x => String(x || '').trim().slice(0, 40)).filter(Boolean) : null;
+  if (!list) return res.status(400).json({ ok: false, error: 'workers list required' });
+  const uniq = [...new Set(list)];
+  try { const out = await docSet('workers', { list: uniq, by: req.session.username, t: uaeNow() }); if (!out || !out.ok) throw new Error('save failed');
+    logEvent(req.session.username, 'workers_saved', { n: uniq.length }); res.json({ ok: true, workers: uniq }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 let NOTES = null, NOTES_AT = 0;
 async function notesDoc(fresh) {
   if (!fresh && NOTES && Date.now() - NOTES_AT < 15000) return NOTES;

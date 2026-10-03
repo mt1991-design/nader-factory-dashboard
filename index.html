@@ -4458,6 +4458,7 @@ async function loadShopify(fresh){
     const orders=(od.orders||[]).map(o=>Object.assign({},o,{isDraft:false}));
     /* drafts first (awaiting spec), then placed orders; both newest-first */
     SHOPIFY=drafts.concat(orders).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    if(typeof syncWorkers==="function")syncWorkers();   /* the shared factory team (refreshes with the orders) */
     try{const rs=await fetch("/api/specs",{credentials:"same-origin"});const ds=await rs.json();if(ds&&ds.ok)SAVED_SPECS=new Map((ds.items||[]).map(x=>[x.id,x]));}catch(e){}
     const err=(!ro.ok&&ro.status!==401?" orders":"")+(!rd.ok&&rd.status!==401?" drafts":"");
     const note=$("salesloading");
@@ -4473,8 +4474,10 @@ const DB={
   saveOrders:a=>{try{localStorage.setItem("nader_orders",JSON.stringify(a));return true;}catch(e){return false;}},
   putOrder:o=>{const a=DB.orders().filter(x=>x.id!==o.id);a.push(o);return DB.saveOrders(a);},
   getOrder:id=>DB.orders().find(o=>o.id===id),
-  workers:()=>{try{const w=JSON.parse(localStorage.getItem("nader_workers"));return Array.isArray(w)?w:DEFWORKERS.slice();}catch(e){return DEFWORKERS.slice();}},
-  saveWorkers:a=>localStorage.setItem("nader_workers",JSON.stringify(a))
+  /* factory team: SHARED on the server (window.__WORKERS); the browser copy is only a fallback / first-time migration */
+  workers:()=>{if(Array.isArray(window.__WORKERS))return window.__WORKERS.slice();try{const w=JSON.parse(localStorage.getItem("nader_workers"));return Array.isArray(w)?w:DEFWORKERS.slice();}catch(e){return DEFWORKERS.slice();}},
+  saveWorkers:a=>{window.__WORKERS=a.slice();try{localStorage.setItem("nader_workers",JSON.stringify(a));}catch(e){}
+    fetch("/api/workers",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({workers:a})}).catch(()=>{});}
 };
 function qcState(o){if(!o||!o.qc)return"locked";const v=o.qc.checks||{};const vals=Object.values(v);if(vals.includes("Fail"))return"fail";if(QC_ITEMS.every((_,i)=>v[i]==="Pass"))return"pass";if(vals.length)return"inqc";return"locked";}
 const QCLABEL={locked:"Locked",inqc:"In QC",pass:"Passed",fail:"Failed"};
@@ -5575,6 +5578,21 @@ function renderWorkers(){const box=$("workerlist");if(!box)return;const w=DB.wor
     r.firstChild.addEventListener("click",()=>{CREW_PICK=CREW_PICK===n?"":n;renderWorkers();});
     box.appendChild(r);});
   const tip=document.createElement("div");tip.className="hint";tip.style.margin="4px 0 0";tip.textContent=CREW_PICK?("Now tap a stage to give it to "+CREW_PICK+"."):"Drag a name onto a stage (or tap a name, then a stage).";box.appendChild(tip);}
+/* load the shared factory team; the first time, merge in this browser's names + everyone already credited on orders */
+async function syncWorkers(){
+  try{const r=await fetch("/api/workers",{credentials:"same-origin"});const d=await r.json();if(!d.ok)return;
+    let srv=Array.isArray(d.workers)?d.workers:null;
+    const crewNames=[];(typeof SHOPIFY!=="undefined"?SHOPIFY:[]).forEach(o=>Object.values(o.crew||{}).forEach(ln=>Object.values(ln||{}).forEach(c=>(Array.isArray(c)?c:[c]).forEach(x=>{const n=x&&(x.n||x);if(n&&typeof n==="string")crewNames.push(n);}))));
+    let local=[];try{local=JSON.parse(localStorage.getItem("nader_workers"))||[];}catch(e){}
+    const firstHere=!localStorage.getItem("nader_workers_synced");
+    const merged=[...new Set((srv||[]).concat(firstHere||!srv?local:[]).concat(srv?[]:crewNames).concat(firstHere?crewNames:[]))].filter(Boolean);
+    window.__WORKERS=merged;
+    if(!srv||merged.length!==srv.length)DB.saveWorkers(merged);
+    try{localStorage.setItem("nader_workers_synced","1");}catch(e){}
+    if(typeof renderWorkers==="function")renderWorkers();if(typeof fillWorkers==="function")fillWorkers();
+    if(typeof renderFactoryProd==="function"&&!$("screen-factory").hidden)renderFactoryProd();
+  }catch(e){}
+}
 function addWorker(){const inp=$("newworker"),n=(inp.value||"").trim();if(!n)return;const w=DB.workers();if(!w.includes(n))w.push(n);DB.saveWorkers(w);inp.value="";renderWorkers();}
 function delWorker(i){const w=DB.workers();w.splice(i,1);DB.saveWorkers(w);renderWorkers();}
 
