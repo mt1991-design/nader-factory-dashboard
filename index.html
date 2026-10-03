@@ -5142,12 +5142,15 @@ function drawCtl(o,i,oi){
   let h='<div class="dctl" onclick="event.stopPropagation()">';
   const edit=st.edit&&!st.edit.done, lastCh=(st.changes||[]).slice(-1)[0], chAfter=lastCh&&(!st.sent||lastCh.t>st.sent.t);
   if(edit)h+='<div class="dchip warn">⚠ Edit requested from admin'+(st.edit.by?' by '+esc(st.edit.by):'')+(st.edit.reason?': '+esc(st.edit.reason):'')+'</div>'+(ROLES_HAS_ADMIN()?B("drawEditDone("+oi+","+i+")","✓ Fixed"):"");
+  const resign=st.resign&&!st.approved&&!(st.sent&&st.sent.t>st.resign.t), changed=st.changed&&st.sent&&!st.approved&&st.changed.t>st.sent.t;
+  if(resign)h+='<div class="dchip warn">⟳ Needs re-signing — the drawing changed after the customer approved it ('+(st.resign.by?esc(st.resign.by)+', ':'')+dDay(st.resign.t)+')</div>';
+  else if(changed)h+='<div class="dchip warn">⟳ Drawing changed since it was sent ('+(st.changed.by?esc(st.changed.by)+', ':'')+dDay(st.changed.t)+') — send it again</div>';
   if(st.approved)h+='<div class="dchip ok">✓ Drawing approved by customer · '+dDay(st.approved.t)+(st.approved.name?' ('+esc(st.approved.name)+')':'')+'</div>';
   else if(chAfter)h+='<div class="dchip warn">✎ Customer asked for changes ('+dDay(lastCh.t)+'): '+esc(lastCh.text||"")+'</div>';
-  else if(st.sent)h+='<div class="dchip sent">✉ Sent to customer · '+dDay(st.sent.t)+(st.sent.by?' by '+esc(st.sent.by):'')+' · waiting for approval</div>';
+  else if(st.sent&&!resign&&!changed)h+='<div class="dchip sent">✉ Sent to customer · '+dDay(st.sent.t)+(st.sent.by?' by '+esc(st.sent.by):'')+' · waiting for approval</div>';
   if(!st.approved){
     h+=B("specLineItem('"+oq+"',"+i+")","📄 Check drawing");
-    h+=B("drawSend("+oi+","+i+")",st.sent?"Send again":"Send to customer","main");
+    h+=B("drawSend("+oi+","+i+")",(resign||changed)?"Send to customer":st.sent?"Send again":"Send to customer","main");
     if(st.sent&&st.sent.link)h+=B("drawCopy("+oi+","+i+")","Copy link");
     if(!edit)h+=B("drawEditReq("+oi+","+i+")","Request edit from admin");
   }
@@ -5196,6 +5199,7 @@ function renderAttn(){
     const nm=esc(o.order)+(o.items.length>1?' · item '+(i+1):'')+' — '+esc(it.product||'');
     const open='<button type="button" class="dbtn" onclick="specLineItem(\''+oq+'\','+i+')">📄 Open sheet</button>';
     if(st.edit&&!st.edit.done)rows.push({t:st.edit.t,h:'<div class="attn-row warn"><div><b>🔓 Unlock / edit requested</b> · '+nm+'<div class="attn-sub">'+esc(st.edit.by||'')+' · '+dDay(st.edit.t)+(st.edit.reason?' — “'+esc(st.edit.reason)+'”':'')+'</div></div><div class="attn-acts">'+open+(ROLES_HAS_ADMIN()?'<button type="button" class="dbtn main" onclick="drawEditDone('+oi+','+i+')">✓ Fixed</button>':'')+'</div></div>'});
+    if(st.resign&&!st.approved&&!(st.sent&&st.sent.t>st.resign.t))rows.push({t:st.resign.t,h:'<div class="attn-row warn"><div><b>⟳ Needs re-signing</b> · '+nm+'<div class="attn-sub">Changed after the customer approved it'+(st.resign.by?' — by '+esc(st.resign.by):'')+' · '+dDay(st.resign.t)+'</div></div><div class="attn-acts">'+open+'<button type="button" class="dbtn main" onclick="drawSend('+oi+','+i+')">Send to customer</button></div></div>'});
     const last=(st.changes||[]).slice(-1)[0];
     if(last&&!st.approved&&(!st.sent||last.t>st.sent.t))rows.push({t:last.t,h:'<div class="attn-row cust"><div><b>✎ Customer asked for a change</b> · '+nm+'<div class="attn-sub">'+esc(o.customer||'')+' · '+dDay(last.t)+' — “'+esc(last.text||'')+'”</div></div><div class="attn-acts">'+open+'<button type="button" class="dbtn main" onclick="drawSend('+oi+','+i+')">Send updated drawing</button></div></div>'});
   });});

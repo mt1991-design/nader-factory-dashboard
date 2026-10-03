@@ -129,6 +129,11 @@ body.custview .wrap{display:block!important;max-width:1100px;margin:0 auto}
 .cb-ok b{display:block;font:600 20px Georgia,serif;color:#1e6b3a;margin-bottom:4px}
 .cb-ok p{margin:0}
 @media print{.cust-box{display:none}}
+#histBox,#custInfo{margin:10px 0;padding:10px 12px;border:1px solid #e3d6bb;border-radius:10px;background:#fffdf8;font-size:12px;line-height:1.45;color:#2b2621}
+#histBox .hist-e{padding:6px 0;border-top:1px dashed #e8dcc4}#histBox .hist-e:first-of-type{border-top:0}
+#histBox ul{margin:4px 0 0 16px;padding:0}#histBox li{margin:1px 0}
+.hist-h{font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a6a2e;margin-bottom:4px}
+#histBox .muted,#custInfo .muted{color:#9a907f;font-weight:400;text-transform:none;letter-spacing:0}
 /* phones: a real mobile layout (not a shrunken A4) — drawings full width, details stacked */
 @media (max-width:760px){
   body.custview .sheet{width:auto!important;min-height:0!important;padding:12px 10px!important;box-shadow:none!important}
@@ -2723,6 +2728,7 @@ function applyFormSpec(O,spec){
 let saveT=null;
 function setSaveState(t,cls){const e=document.getElementById("saveState");e.textContent=t;e.className="save"+(cls?" "+cls:"");}
 function save(){
+  recordEdits();
   if(!LIVE){try{localStorage.setItem("nader-spec-demo-"+ORDER.model+((MODELS[ORDER.model]||{}).ver||""),JSON.stringify(ORDER));}catch(e){}return;}
   if(drawStatus()==="complete"&&!ORDER.completedBy)ORDER.completedBy=ME;
   setSaveState("Saving…");clearTimeout(saveT);
@@ -2804,6 +2810,36 @@ function lockCells(){
     el.setAttribute('contenteditable', (!L||(LOCK_FREE.test(key)&&!document.body.classList.contains('custview')))?'true':'false');
   });
 }
+/* ---------- change log: who unlocked a finished sheet and exactly what they changed (Mariam 3 Oct) ---------- */
+const snapOf=()=>JSON.parse(JSON.stringify({model:ORDER.model||"",V:ORDER.V||{},spec:ORDER.spec||[],notes:ORDER.notes||"",photo:!!ORDER.photo,mirror:!!ORDER.mirror}));
+function fieldLabel(k){try{const M=MODELS[ORDER.model];if(M){for(const g of fieldsOf(M))for(const f of g[1])if(f[0]===k)return f[1];}}catch(e){}
+  return ({n:"Seats",side:"Chaise side",SHAPE:"Shape",W:"Overall width",D:"Overall depth",RL:"Left chaise length",RR:"Right chaise length",H:"Height",SH:"Seat height",LH:"Leg height",A:"Arm width",B:"Back depth",BC:"Back cushion depth"})[k]||k;}
+function startEditLog(){ORDER.log=ORDER.log||[];const id="e"+Date.now().toString(36);
+  ORDER.log.push({id,t:Date.now(),by:ME,what:"Unlocked to edit",changes:[]});ORDER._edit={id,snap:snapOf()};}
+function recordEdits(){
+  if(!ORDER||!ORDER._edit||!ORDER.log)return;
+  const a=ORDER._edit.snap,b=snapOf(),ch=[],fmt=v=>v===undefined||v===null||v===""?"—":String(v);
+  if(a.model!==b.model)ch.push("Template: "+fmt(a.model)+" → "+fmt(b.model));
+  new Set([...Object.keys(a.V),...Object.keys(b.V)]).forEach(k=>{if(String(a.V[k]??"")!==String(b.V[k]??""))ch.push(fieldLabel(k)+": "+fmt(a.V[k])+" → "+fmt(b.V[k]));});
+  const sm=x=>Object.fromEntries((x||[]).map(r=>[r[0],r[1]]));const sa=sm(a.spec),sb=sm(b.spec);
+  new Set([...Object.keys(sa),...Object.keys(sb)]).forEach(k=>{if(String(sa[k]??"")!==String(sb[k]??""))ch.push(k+": "+fmt(sa[k])+" → "+fmt(sb[k]));});
+  if(a.notes!==b.notes)ch.push("Workshop notes edited");
+  if(a.photo!==b.photo||a.mirror!==b.mirror)ch.push("Reference photo changed");
+  const e=ORDER.log.find(x=>x.id===ORDER._edit.id);if(e)e.changes=ch;renderHistory();
+}
+function renderHistory(){
+  let box=document.getElementById("histBox");const lb=document.getElementById("lockBox");if(!lb||document.body.classList.contains("custview"))return;
+  if(!box){box=document.createElement("div");box.id="histBox";box.className="noprint";lb.parentNode.insertBefore(box,lb.nextSibling);}
+  const L=(ORDER.log||[]).slice().reverse();
+  box.innerHTML=L.length?'<div class="hist-h">Change log</div>'+L.map(e=>'<div class="hist-e"><b>'+esc(e.by||"")+'</b> · '+new Date(e.t).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+'<div>'+esc(e.what||"")+'</div>'+(e.changes&&e.changes.length?'<ul>'+e.changes.map(c=>'<li>'+esc(c)+'</li>').join("")+'</ul>':(e.what==="Unlocked to edit"?'<div class="muted">no changes yet</div>':''))+'</div>').join(""):"";
+}
+/* the customer's name / phone / email — for the team while editing; never on the printed factory sheet */
+function renderCustInfo(){
+  const lb=document.getElementById("lockBox");if(!lb||document.body.classList.contains("custview"))return;
+  let box=document.getElementById("custInfo");if(!box){box=document.createElement("div");box.id="custInfo";box.className="noprint";lb.parentNode.insertBefore(box,lb);}
+  const c=ORDER.cust||{};if(!c.name&&!c.phone&&!c.email){box.innerHTML="";return;}
+  box.innerHTML='<div class="hist-h">Customer <span class="muted">(not printed)</span></div>'+(c.name?'<div><b>'+esc(c.name)+'</b></div>':'')+(c.phone?'<div>'+esc(c.phone)+'</div>':'')+(c.email?'<div>'+esc(c.email)+'</div>':'');
+}
 /* not an admin: ask one to unlock (goes to the dashboard's "Edit requested" list) */
 async function requestUnlock(){
   const box=document.getElementById('unlockReq'); if(!box)return;
@@ -2823,16 +2859,16 @@ function applyLock(){
   const ss=document.getElementById('statusSel'); if(ss)ss.disabled=L;
   if(L){const k=ORDER.locked,when=k.at?new Date(k.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
     box.className="lockbox on noprint";
-    box.innerHTML=`<b>🔒 Drawing locked</b>Drawing complete${when?" · "+esc(when):""}${k.by?" · "+esc(k.by):""}. The template, sizes, photo and drawings can't be changed. Only an admin can unlock it.`+(IS_ADMIN?`<button type="button" class="unlock" id="unlockBtn">Unlock to edit (admin)</button>`:"");
-    if(!IS_ADMIN&&LIVE)box.innerHTML+=`<div id="unlockReq" style="margin-top:8px"><textarea id="unlockWhy" rows="2" placeholder="What needs changing?" style="width:100%;box-sizing:border-box;font:inherit;font-size:12px;padding:6px;border:1px solid #cfc3a8;border-radius:6px"></textarea><button type="button" class="unlock" id="unlockAsk">Request admin to unlock</button><div id="unlockMsg" style="font-size:11.5px;margin-top:4px"></div></div>`;
+    box.innerHTML=`<b>🔒 Drawing locked</b>Drawing complete${when?" · "+esc(when):""}${k.by?" · "+esc(k.by):""}. The template, sizes, photo and drawings can't be changed. Anyone can unlock it to make a change — it's logged with your name.`+(LIVE?`<button type="button" class="unlock" id="unlockBtn">Unlock to edit</button>`:"");
+    if(false)box.innerHTML+=`<div id="unlockReq" style="margin-top:8px"><textarea id="unlockWhy" rows="2" placeholder="What needs changing?" style="width:100%;box-sizing:border-box;font:inherit;font-size:12px;padding:6px;border:1px solid #cfc3a8;border-radius:6px"></textarea><button type="button" class="unlock" id="unlockAsk">Request admin to unlock</button><div id="unlockMsg" style="font-size:11.5px;margin-top:4px"></div></div>`;
     const ask=document.getElementById('unlockAsk'); if(ask)ask.onclick=requestUnlock;
-    const b=document.getElementById('unlockBtn'); if(b)b.onclick=()=>{ORDER.locked=null;ORDER.unlockedBy=ME;applyLock();save();};
+    const b=document.getElementById('unlockBtn'); if(b)b.onclick=()=>{ORDER.locked=null;ORDER.unlockedBy=ME;startEditLog();applyLock();save();};
   }else if(LIVE&&drawStatus()==="complete"){
     box.className="lockbox off noprint";
     box.innerHTML=`New drawing — you can edit it now; it locks as soon as it's closed and reopened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
-    document.getElementById('lockBtn').onclick=()=>{ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
+    document.getElementById('lockBtn').onclick=()=>{recordEdits();delete ORDER._edit;ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
   }else{box.className="";box.innerHTML="";}
-  lockCells();
+  lockCells();renderHistory();renderCustInfo();
 }
 function renderStatus(){
   const box=document.getElementById('statusBox'); if(!box)return;

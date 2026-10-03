@@ -494,7 +494,7 @@ app.post('/api/drawing/send', requireAuth, async (req, res) => {
   try {
     const who = req.session.name || req.session.username;
     const link = `https://${req.headers.host}/drawing?t=${drawToken(id, line)}`;
-    const rec = await drawUpdate(id + ':' + line, r => { r.sent = { t: uaeNow(), by: who, n: ((r.sent || {}).n || 0) + 1, link }; if (r.edit) r.edit.done = r.edit.done || { t: uaeNow(), by: who }; return r; });
+    const rec = await drawUpdate(id + ':' + line, r => { r.sent = { t: uaeNow(), by: who, n: ((r.sent || {}).n || 0) + 1, link }; if (r.edit) r.edit.done = r.edit.done || { t: uaeNow(), by: who }; delete r.changed; if (r.resign) r.resign.resent = uaeNow(); return r; });
     logEvent(req.session.username, 'drawing_sent', { id, line, ip: clientIp(req) });
     res.json({ ok: true, rec, link });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -1001,17 +1001,37 @@ app.post('/api/spec', requireAuth, async (req, res) => {
   const c = data.cust || {};
   let status = b.status;
   try {
-    /* a LOCKED drawing (drawing complete) can only be changed/unlocked by an admin — everyone else can still edit
-       notes & customer details, but the drawing parts are kept exactly as they were locked */
-    if (!hasRole(req, 'admin')) {
-      const cur = await workerJson('/spec/' + id).catch(() => null);
-      const old = cur && cur.data;
-      if (old && old.locked) {
-        ['model', 'V', 'drawings', 'drawStatus', 'photo', 'photoSide', 'mirror', 'photoManual', 'photoCleared', 'manualChosen', 'locked', 'completedBy']
-          .forEach(k => { if (k in old) data[k] = old[k]; else delete data[k]; });
-        status = (cur.meta && cur.meta.status) || 'complete';
-      }
+    /* anyone can unlock + edit a finished sheet (Mariam 3 Oct) — the sheet keeps a change log (who unlocked, what changed).
+       If the customer had APPROVED this drawing and the drawing changes, the approval is cancelled → "Needs re-signing". */
+    const cur = await workerJson('/spec/' + id).catch(() => null), old = cur && cur.data;
+    /* what the customer approved: template, sizes, photo + spec rows that already existed — fabric supplier / code are
+       filled in later and a newly added row (e.g. Quantity on an older sheet) doesn't count as a change */
+    const FREE = /^fabric\s+(supplier|catalogue\s+code)$/i;
+    const specMap = (x, keys) => { const m = {}; (x.spec || []).forEach(r => { if (!FREE.test(r[0]) && (!keys || keys.has(r[0]))) m[r[0]] = String(r[1] ?? '').trim(); }); return Object.keys(m).sort().map(k => k + '=' + m[k]); };
+    const oldKeys = old ? new Set((old.spec || []).map(r => r[0])) : null;
+    const vKeys = old ? Object.keys(old.V || {}).sort() : [];   /* only sizes that existed — new default keys don't count */
+    const vMap = x => vKeys.map(k => k + '=' + String((x.V || {})[k] ?? ''));
+    const drawingOf = (x, keys) => JSON.stringify([x.model || '', vMap(x), specMap(x, keys), !!x.photo, !!x.mirror]);
+    if (old && drawingOf(old, oldKeys) !== drawingOf(data, oldKeys)) {
+      try {
+        const m = String(id).match(/^(\d{6,})(?:-(\d+))?$/);
+        if (m) {
+          const o = (await cached('orders', FETCH.orders, false)).find(x => String(x.name || '').replace(/\D/g, '') === m[1]);
+          if (o) {
+            const line = m[2] ? parseInt(m[2], 10) - 1 : 0, key = o.id + ':' + line, st = (await drawDoc(false))[key];
+            if (st && (st.approved || st.sent)) {
+              const who = req.session.name || req.session.username;
+              await drawUpdate(key, r => {
+                if (r.approved) { r.resign = { t: uaeNow(), by: who, was: r.approved }; delete r.approved; }
+                else r.changed = { t: uaeNow(), by: who };
+                return r; });
+              if (st.approved) tagOrder(o.id, '', 'drawok:' + line + '@').catch(() => {});
+            }
+          }
+        }
+      } catch (e) { console.error('resign check', e.message); }
     }
+    if (old && old.locked && !data.locked) logEvent(req.session.username, 'spec_unlock', { id });
     const out = await workerJson('/spec/' + id, { method: 'POST', body: JSON.stringify({ data,
       meta: { product: data.product || '', customer: c.name || '', orderNo: data.orderNo || '', by: req.session.username,
         status: ['complete', 'manual', 'check'].includes(status) ? status : '' } }) });
