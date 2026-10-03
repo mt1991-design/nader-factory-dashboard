@@ -2692,7 +2692,7 @@ function applyFormSpec(O,spec){
   Object.keys(spec).forEach(label=>{
     const val=String(spec[label]||"").trim(), L=label.toLowerCase();if(!val)return;
     if(/^product|quantity|price|aed|total|unit/.test(L))return;
-    if(/customisation notes|special requests|cushion notes/.test(L)){notes.push(val);return;}
+    if(/customisation notes|special requests|cushion notes|^customisations?$/.test(L)){notes.push(L.startsWith('customisations')?'Customisations: '+val:val);return;}
     if(m&&MODELS[m].bed){
       if(L==="size"){bedSize(v,val);set(label,val);return;}
       if(L==="width"){const n=num(val);if(n>0){v.MW=n+1;if("n" in v)v.n=LU_AUTO_N(bedPrep(v).W);}return;}   // custom size boxes = the mattress
