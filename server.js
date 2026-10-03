@@ -309,6 +309,13 @@ function warm() { Object.keys(FETCH).forEach(k => refresh(k, FETCH[k]).catch(() 
 setTimeout(warm, 2000);
 setInterval(warm, TTL);
 
+/* the customer block the sales form writes into the note ("CUSTOMER / Sophie Long · 585515838 / sophie@…") */
+function formCustomer(note) {
+  const m = String(note || '').match(/CUSTOMER\s*\n\s*([^\n·]+?)\s*(?:·\s*([^\n]+))?\n\s*([^\s@\n]+@[^\s\n]+)?/);
+  return m ? { name: (m[1] || '').trim(), phone: (m[2] || '').trim(), email: (m[3] || '').trim() } : null;
+}
+/* name shown on the dashboard: the linked Shopify customer's name, else the name on the sales form */
+function bestName(c, note, email) { const n = [c && c.first_name, c && c.last_name].filter(Boolean).join(' '); if (n) return n; const f = formCustomer(note); return (f && f.name) || (c && c.email) || email || ''; }
 function custName(c) {
   if (!c) return '';
   return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || '';
@@ -722,8 +729,8 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       id: o.id,
       order: o.name,
       kind: 'order',
-      customer: custName(o.customer),
-      email: (o.customer && o.customer.email) || o.email || '',
+      customer: bestName(o.customer, o.note, o.email),
+      email: o.email || (o.customer && o.customer.email) || '',
       phone: (o.customer && o.customer.phone) || o.phone || (o.shipping_address && o.shipping_address.phone) || '',
       date: (o.created_at || '').slice(0, 10),
       financial_status: o.financial_status || '',
@@ -773,8 +780,8 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       id: d.id,
       order: d.name,
       kind: 'draft',
-      customer: custName(d.customer),
-      email: (d.customer && d.customer.email) || d.email || '',
+      customer: bestName(d.customer, d.note, d.email),
+      email: d.email || (d.customer && d.customer.email) || '',   /* the draft's own email first (edits change it) */
       phone: (d.customer && d.customer.phone) || (d.shipping_address && d.shipping_address.phone) || '',
       date: (d.created_at || '').slice(0, 10),
       status: d.status || 'open',        // open | invoice_sent | completed
