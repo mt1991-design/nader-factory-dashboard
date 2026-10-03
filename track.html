@@ -1238,7 +1238,7 @@ body{background:transparent}
       li.className = cls;
       let sub, date;
       if (state.live) { const L = state.live.items, cur = L.length === 1 ? L[0] : L.find(x => x.step === stage) || L[0];
-        if (cls === 'done') { sub = 'Complete'; date = ''; } else if (cls === 'current') { sub = 'In progress now'; date = (L.length === 1 && cur.since) ? 'Since ' + fmt(new Date(cur.since + 'T12:00:00')) : ''; } else { sub = k > stage + 1 ? 'Planned' : 'Up next'; date = ''; } }
+        if (cls === 'done') { sub = 'Complete'; date = ''; } else if (cls === 'current') { sub = 'In progress now'; date = ''; }   /* no 'since' dates (Mariam 3 Oct) */ else { sub = k > stage + 1 ? 'Planned' : 'Up next'; date = ''; } }
       else if (cls === 'done') { sub = 'Complete'; date = fmt(addDays(sch.starts[k + 1], -1)); }
       else if (cls === 'current') { sub = 'In progress now'; date = 'Since ' + fmt(sch.starts[k]); }
       else { sub = 'Up next'; date = state.late ? '' : 'From ' + fmt(sch.starts[k]); if (k > stage + 1) sub = 'Planned'; }   /* late: no planned dates that contradict the revised window */
@@ -1257,7 +1257,7 @@ body{background:transparent}
       else if (booked) { const t = new Date(booked + ':00');
         $('windowLabel').textContent = 'Delivery booked'; $('windowDates').textContent = fmt(t, true) + ' · ' + t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         $('windowNote').textContent = 'Our team will call you before arrival.'; }
-      else if (stage === 11 && L.overdue) { $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = 'Being confirmed';   /* past the date: marked late behind the scenes, no delay message */
+      else if (stage === 11) {   /* stored: always 'being confirmed', never a date */ $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = 'Being confirmed';   /* past the date: marked late behind the scenes, no delay message */
         $('windowNote').textContent = 'Our team is contacting you to book a delivery time, or you’ve asked us for a later delivery date.'; }
       else if (late) { $('windowLabel').textContent = 'Delivery date'; $('windowDates').textContent = 'Being confirmed';
         $('windowNote').textContent = 'Our team will be in touch with your new delivery date.'; }
