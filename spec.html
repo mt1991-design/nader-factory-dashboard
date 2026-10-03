@@ -2646,6 +2646,22 @@ function itemSection(note,i,product){
   if(byNum&&(!name||words(byNum.split("\n")[0]).some(w=>nameSim(name,w,true))))return byNum.trim();
   return (byName||byNum||t).trim();
 }
+/* the sales form writes payment / CUSTOMER / ORDER / "Signed … Agent …" blocks into the Shopify note — the factory sheet
+   keeps only what the team typed (no customer name, phone, email or address). Mariam 3 Oct */
+function cleanFormNote(t){
+  const out=[];let skip=false;
+  String(t||"").split("\n").forEach(l=>{
+    const x=l.trim();
+    if(/^💳?\s*payment method:/i.test(x))return;
+    if(/^customer$/i.test(x)){skip=true;return;}
+    if(skip){if(!x){skip=false;}return;}
+    if(/^order$/i.test(x))return;
+    if(/^\s{2,}\S/.test(l)&&!/^\s*[-•]/.test(l))return;            // indented lines = the form's item list
+    if(/^signed\b.*(agent:|showroom:)/i.test(x)||/^(agent|showroom):/i.test(x))return;
+    out.push(l);
+  });
+  return out.join("\n");
+}
 async function fromOrder(o,i){
   const it=(o.items||[])[i]||{product:"Unknown product"};
   const O=blankOrder(it.product);O.orderedAs=it.product;
@@ -2655,7 +2671,7 @@ async function fromOrder(o,i){
   O.cust={name:o.customer||"",phone:o.phone||a.phone||"",email:o.email||"",addr:[a.address1,a.address2].filter(Boolean).join(", "),
     area:[a.city,a.zip].filter(Boolean).join(" "),emirate:a.province||"",agent:"",showroom:""};
   const itemNote=(o.items||[]).length>1?itemSection(o.note,i,it.product):String(o.note||"");
-  O.notes=itemNote.split("\n").filter(l=>!/\bAED\b|total|SIGNED PDF|https?:\/\//i.test(l)).join("\n").replace(/\n{3,}/g,"\n\n").trim();
+  O.notes=cleanFormNote(itemNote.split("\n").filter(l=>!/\bAED\b|total|SIGNED PDF|https?:\/\//i.test(l)).join("\n")).replace(/\n{3,}/g,"\n\n").trim();
   if(it.variant&&!/default title/i.test(it.variant))O.spec.unshift(["Variant",it.variant]);
   { const qr=O.spec.find(x=>x[0]==="Quantity"); if(qr)qr[1]=String(it.qty||1); }   /* e.g. 8 dining chairs */
   /* form orders: sizes ONLY from the form's dimension boxes (blank / "Standard" = the product's DWG standard size) */
