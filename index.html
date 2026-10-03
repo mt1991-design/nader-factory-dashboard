@@ -5508,7 +5508,7 @@ function renderFactoryProd(){
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return;
       const cur=stages[i]||0;
       /* the factory only sees lines whose drawing is complete — nothing else, even if its stage was moved on */
-      if(!lineDrawn(o,i)){ if(isFurnitureLine(it.product)) hidden++; return; }
+      if(!lineDrawn(o,i)&&cur<1){ if(isFurnitureLine(it.product)) hidden++; return; }   /* in production (Carpentry+) shows even without a drawing — the 3 Oct bulk move */
       if(factStages.size && !factStages.has(lineStageKey(o,i))) return;
       shown++;
       const first=firstShown, multi=o.items.length>1; firstShown=false;
