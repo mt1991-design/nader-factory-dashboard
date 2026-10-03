@@ -4963,6 +4963,14 @@ setInterval(function(){
     if(d.build){ if(!window.__BUILD) window.__BUILD=d.build; else if(d.build!==window.__BUILD){ const a=document.activeElement; if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))) location.reload(); } }
   }).catch(function(){});
 }, 60000);
+/* every minute: pull orders again from Shopify so tags the team still adds in Shopify show up here (transition period, Mariam 3 Oct).
+   Skipped while someone is typing, has a dropdown / box open, or the tab is hidden — nobody loses what they're doing. */
+setInterval(function(){
+  if(!USER||document.hidden||typeof loadShopify!=="function")return;
+  const a=document.activeElement; if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))return;
+  if(document.querySelector("#delConfirm,.odoverlay:not([hidden])"))return;
+  try{loadShopify(true);}catch(e){}
+},60000);
 function setProdStageServer(id,line,idx){
   fetch("/api/production",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id:id,line:line,stage:idx})})
     .then(r=>r.json()).then(function(d){ if(d&&d.ok){ const o=SHOPIFY.find(x=>String(x.id)===String(id)); if(o){ o.prod_stages=o.prod_stages||[]; o.prod_stages[d.line]=d.stage; o.prod_stage=Math.min.apply(null,o.prod_stages.length?o.prod_stages:[0]); } if(ROLE==="factory"){ renderFactoryProd(); } else { renderSalesDash(); } } else { alert("Couldn't update — factory login required."); } })
