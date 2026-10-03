@@ -131,7 +131,10 @@ body.custview .cust-box{max-width:210mm!important}
 .cb-ok b{display:block;font:600 20px Georgia,serif;color:#1e6b3a;margin-bottom:4px}
 .cb-ok p{margin:0}
 @media print{.cust-box{display:none}}
-.seg.seg4 button{font-size:10.5px;padding:6px 3px;white-space:nowrap}
+.row.shape-row{display:block}
+.row.shape-row label{display:block;margin-bottom:6px}
+.seg.seg4{display:grid!important;grid-template-columns:repeat(4,1fr);width:100%}
+.seg.seg4 button{font-size:11.5px;padding:8px 2px;white-space:nowrap;min-width:0}
 #histBox,#custInfo{margin:10px 0;padding:10px 12px;border:1px solid #e3d6bb;border-radius:10px;background:#fffdf8;font-size:12px;line-height:1.45;color:#2b2621}
 #histBox .hist-e{padding:6px 0;border-top:1px dashed #e8dcc4}#histBox .hist-e:first-of-type{border-top:0}
 #histBox ul{margin:4px 0 0 16px;padding:0}#histBox li{margin:1px 0}
@@ -2838,13 +2841,13 @@ function renderHistory(){
   let box=document.getElementById("histBox");const lb=document.getElementById("lockBox");if(!lb||document.body.classList.contains("custview"))return;
   if(!box){box=document.createElement("div");box.id="histBox";box.className="noprint";lb.parentNode.insertBefore(box,lb.nextSibling);}
   const L=(ORDER.log||[]).slice().reverse();
-  box.innerHTML=L.length?'<div class="hist-h">Change log</div>'+L.map(e=>'<div class="hist-e"><b>'+esc(e.by||"")+'</b> · '+new Date(e.t).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+'<div>'+esc(e.what||"")+'</div>'+(e.changes&&e.changes.length?'<ul>'+e.changes.map(c=>'<li>'+esc(c)+'</li>').join("")+'</ul>':(e.what==="Unlocked to edit"?'<div class="muted">no changes yet</div>':''))+'</div>').join(""):"";
+  box.hidden=!L.length;box.innerHTML=L.length?'<div class="hist-h">Change log</div>'+L.map(e=>'<div class="hist-e"><b>'+esc(e.by||"")+'</b> · '+new Date(e.t).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+'<div>'+esc(e.what||"")+'</div>'+(e.changes&&e.changes.length?'<ul>'+e.changes.map(c=>'<li>'+esc(c)+'</li>').join("")+'</ul>':(e.what==="Unlocked to edit"?'<div class="muted">no changes yet</div>':''))+'</div>').join(""):"";
 }
 /* the customer's name / phone / email — for the team while editing; never on the printed factory sheet */
 function renderCustInfo(){
   const lb=document.getElementById("lockBox");if(!lb||document.body.classList.contains("custview"))return;
   let box=document.getElementById("custInfo");if(!box){box=document.createElement("div");box.id="custInfo";box.className="noprint";lb.parentNode.insertBefore(box,lb);}
-  const c=ORDER.cust||{};if(!c.name&&!c.phone&&!c.email){box.innerHTML="";return;}
+  const c=ORDER.cust||{};if(!c.name&&!c.phone&&!c.email){box.innerHTML="";box.hidden=true;return;}box.hidden=false;
   box.innerHTML='<div class="hist-h">Customer <span class="muted">(not printed)</span></div>'+(c.name?'<div><b>'+esc(c.name)+'</b></div>':'')+(c.phone?'<div>'+esc(c.phone)+'</div>':'')+(c.email?'<div>'+esc(c.email)+'</div>':'');
 }
 /* not an admin: ask one to unlock (goes to the dashboard's "Edit requested" list) */
@@ -3006,17 +3009,18 @@ function buildDimFields(){
   /* every sofa: Standard / L (left) / L (right) / U — shapes the AutoCAD file doesn't have are drawn as an outline */
   if(isSofaModel(M)){
     const sh=curShape(), out=!!ORDER.outline;
-    if(out)h=h.replace(/<div class="row"><label>Chaise side<small>as you face the sofa<\/small><\/label><div class="seg" id="sideSeg">[\s\S]*?<\/div><\/div>/,"");
+    /* the Shape buttons replace the old "Chaise side" row (and the old Shape dropdown) for every sofa */
+    h=h.replace(/<div class="row"><label>Chaise side<small>as you face the sofa<\/small><\/label><div class="seg" id="sideSeg">[\s\S]*?<\/div><\/div>/,"");
     let extra="";
     if(out&&!M.seats)extra+=`<div class="row"><label for="f-n">Seats<small>seat cushions across</small></label><select id="f-n">${[1,2,3,4,5,6].map(x=>`<option>${x}</option>`).join("")}</select></div>`;
     if(out&&(sh==="CL"||sh==="U"))extra+=`<div class="row"><label for="ol-RL">Left chaise length<small>back to chaise front · as you face it</small></label><div class="num"><input id="ol-RL" type="number" step="0.5"><span>cm</span></div></div>`;
     if(out&&(sh==="CR"||sh==="U"))extra+=`<div class="row"><label for="ol-RR">Right chaise length<small>back to chaise front · as you face it</small></label><div class="num"><input id="ol-RR" type="number" step="0.5"><span>cm</span></div></div>`;
-    h=`<div class="row"><label>Shape<small>any sofa — standard, L or U</small></label><div class="seg seg4" id="shapeSeg">${[["S","Standard"],["CL","L · left"],["CR","L · right"],["U","U"]].map(x=>`<button type="button" data-v="${x[0]}">${x[1]}</button>`).join("")}</div></div>`+extra+h;
+    h=`<div class="row shape-row"><label>Shape<small>as you face the sofa</small></label><div class="seg seg4" id="shapeSeg">${[["S","Standard"],["CL","L left"],["CR","L right"],["U","U-shape"]].map(x=>`<button type="button" data-v="${x[0]}">${x[1]}</button>`).join("")}</div></div>`+extra+h;
   }
   box.innerHTML=h;
   document.querySelectorAll('#shapeSeg button').forEach(b=>b.addEventListener('click',()=>{if(isLocked())return;setShape(b.dataset.v);}));
   ["RL","RR"].forEach(k=>{const el=document.getElementById('ol-'+k);if(el)el.addEventListener('input',e=>{if(isLocked())return;const v=parseFloat(e.target.value);if(!isFinite(v)||v<=0)return;V['OL_'+k]=v;renderDrawings();save();});});
-  { const fs=document.getElementById('f-SHAPE'); if(fs&&ORDER.outline){const r=fs.closest('.row');if(r)r.hidden=true;} }
+  { const fs=document.getElementById('f-SHAPE'); if(fs&&isSofaModel(M)){const r=fs.closest('.row');if(r)r.hidden=true;} }
   fieldKeys().forEach(k=>document.getElementById('f-'+k).addEventListener(document.getElementById('f-'+k).tagName==="SELECT"?'change':'input',e=>{if(isLocked())return;if(k==="SHAPE"||k==="OTSH"){V[k]=e.target.value;syncInputs();renderDrawings();save();return;}const v=parseFloat(e.target.value);if(!isFinite(v)||(v<=0&&e.target.tagName!=="SELECT"))return;
     if(k==="SD")V.D=V.B+v;else V[k]=k==="n"?Math.max(3,Math.round(v)):v;
     if(/^OT[WDH]$/.test(k))V.OTS=1;   /* someone entered the ottoman's size */syncInputs();renderDrawings();save();}));
