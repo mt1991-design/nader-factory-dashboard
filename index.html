@@ -5011,7 +5011,7 @@ function deliveryRow(o,line,editable){
   const pdl=((o.prod_dates||{})[line])||{}, inStore=cur>=5&&pdl[5]&&!w;
   const storeHTML=pdl[5]?'<span class="stored">🏬 In the warehouse since '+esc(fmtDay(String(pdl[5]).slice(0,10)))+' · '+Math.max(0,Math.floor((Date.now()-Date.parse(String(pdl[5]).slice(0,10)+"T00:00:00+04:00"))/864e5))+' days</span>':'';
   const dv=((o.delivered||{})[line])||null;
-  const dvHTML=dv&&dv.d?'<span class="delivered">✓ Delivered '+esc(fmtDay(dv.d))+(dv.f?' · marked fulfilled in Shopify':' · <em title="Shopify still needs the fulfilment permission — the dashboard will update Shopify once it is added">Shopify not updated yet</em>')+'</span>':'';
+  const dvHTML=dv&&dv.d?'<span class="delivered">✓ Delivered <input type="date" class="dvdate" value="'+esc(dv.d)+'" max="'+new Date(Date.now()+4*3600e3).toISOString().slice(0,10)+'" title="Change the delivered date" onclick="event.stopPropagation()" onchange="setDeliveredDate(\''+oid+'\','+line+',this.value)">'+(dv.f?' · marked fulfilled in Shopify':' · <em title="Shopify still needs the fulfilment permission — the dashboard will update Shopify once it is added">Shopify not updated yet</em>')+'</span>':'';
   if(!editable) return '<div class="delrow'+(w?" booked":"")+'">'+storeHTML+'🚚 '+(w?'Delivery booked · <b>'+esc(fmtDelivery(w))+'</b>':'Delivery not booked yet')+dvHTML+'</div>';
   const date=w.slice(0,10), time=w.slice(11,16);
   return '<div class="delrow edit'+(w?" booked":"")+'" onclick="event.stopPropagation()">'+storeHTML+'<span>🚚 Delivery booked with customer</span>'
@@ -5021,14 +5021,23 @@ function deliveryRow(o,line,editable){
     +(w?(dv&&dv.d?dvHTML+(dv.f?'':'<button type="button" class="delclear" onclick="markDelivered(\''+oid+'\','+line+')" title="Try updating Shopify again">Retry Shopify</button>')
       :'<button type="button" class="delbtn" onclick="markDelivered(\''+oid+'\','+line+')" title="The piece has been handed over — marks this item fulfilled in Shopify">✓ Delivered</button>'):'')+'</div>';
 }
-function markDelivered(id,line,confirmed){
+function markDelivered(id,line,confirmed,date){
   const o=SHOPIFY.find(x=>String(x.id)===String(id)), it=o&&o.items[line];
   if(!confirmed){ openDeliveredConfirm(id,line,o,it); return; }
-  fetch("/api/delivered",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line})})
+  fetch("/api/delivered",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,date})})
     .then(r=>r.json()).then(d=>{ if(!d||!d.ok){alert("Couldn't save: "+((d&&d.error)||"error"));return;}
       if(o){o.delivered=o.delivered||{};o.delivered[line]={d:d.date,f:!!d.shopify};}
       if(!d.shopify)alert(d.shopErr==="needs-permission"?"Delivered is saved. Shopify wasn't updated yet: the app still needs the fulfilment permission. It will show 'Retry Shopify' until then.":"Delivered is saved, but Shopify said: "+d.shopErr);
       rerenderProd(); })
+    .catch(()=>alert("Network error."));
+}
+/* correct the delivered date afterwards (only the record — Shopify isn't touched again) */
+function setDeliveredDate(id,line,date){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||""))return;
+  const o=SHOPIFY.find(x=>String(x.id)===String(id));
+  fetch("/api/delivered",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({id,line,date,dateOnly:true})})
+    .then(r=>r.json()).then(d=>{ if(!d||!d.ok){alert("Couldn't change the date: "+((d&&d.error)||"error"));return;}
+      if(o){o.delivered=o.delivered||{};o.delivered[line]=Object.assign({},o.delivered[line]||{},{d:d.date});} rerenderProd(); })
     .catch(()=>alert("Network error."));
 }
 /* Delivered is two steps: open this box → tick "the customer has received it" → confirm. It updates Shopify. */
@@ -5038,13 +5047,14 @@ function openDeliveredConfirm(id,line,o,it){
   m.innerHTML='<div class="odcard dc-card"><div class="odhead"><div class="odtitle">Mark as delivered?</div></div><div class="odbody">'
     +'<p class="dc-what"><b>'+esc(o?o.order:"")+'</b> · '+esc(it?it.product:"")+'<br><span class="muted">'+esc(o&&o.customer||"")+'</span></p>'
     +'<p class="dc-warn">This marks the item as <b>fulfilled in Shopify</b>. Only do this once the piece has been handed over.</p>'
+    +'<label class="dc-date">Delivered on <input type="date" id="dcDate" value="'+new Date(Date.now()+4*3600e3).toISOString().slice(0,10)+'" max="'+new Date(Date.now()+4*3600e3).toISOString().slice(0,10)+'"></label>'
     +'<label class="dc-tick"><input type="checkbox" id="dcTick"> The customer has received this piece</label>'
     +'<div class="dc-btns"><button type="button" class="ghost small" id="dcCancel">Cancel</button><button type="button" class="dc-go" id="dcGo" disabled>Confirm delivered &amp; fulfil in Shopify</button></div></div></div>';
   document.body.appendChild(m);
   m.addEventListener("click",e=>{ if(e.target===m) m.remove(); });
   $("dcCancel").onclick=()=>m.remove();
   $("dcTick").onchange=e=>{ $("dcGo").disabled=!e.target.checked; };
-  $("dcGo").onclick=()=>{ $("dcGo").disabled=true; $("dcGo").textContent="Saving…"; m.remove(); markDelivered(id,line,true); };
+  $("dcGo").onclick=()=>{ const dt=$("dcDate")&&$("dcDate").value; $("dcGo").disabled=true; $("dcGo").textContent="Saving…"; m.remove(); markDelivered(id,line,true,dt); };
 }
 function saveDelivery(id,line,clear){
   const d=$("dd-"+id+"-"+line), t=$("dt-"+id+"-"+line);

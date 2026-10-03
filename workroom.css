@@ -414,3 +414,7 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .tagadd:focus-visible,.tt-x:focus-visible{outline:2px solid #1f4f8f;outline-offset:2px}
 
 .tagchip.sys{background:#f3f3f1;color:#55524c;border-color:#e2e0da;font-weight:500}
+
+.dc-date{display:flex;align-items:center;gap:10px;margin:8px 0 10px;font-weight:600}
+.dc-date input{padding:6px 8px;border:1px solid #d9cfbd;border-radius:6px;font:inherit}
+.dvdate{padding:2px 4px;border:1px solid #cfe3d4;border-radius:5px;font:inherit;font-size:12px;background:#f3fbf5;color:#1e6b3a}

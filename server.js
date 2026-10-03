@@ -919,12 +919,23 @@ app.post('/api/delivered', requireAuth, async (req, res) => {
   if (!hasRole(req, 'factory') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'factory only' });
   const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0), undo = !!b.undo;
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  const today = uaeNow().slice(0, 10), picked = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : '';
+  if (picked && picked > today) return res.status(400).json({ ok: false, error: 'the delivered date can\'t be in the future' });
   try {
     const r = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,tags`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
     if (!r.ok) throw new Error('Shopify ' + r.status);
     const cur = ((await r.json()).order || {}).tags || '';
     let tags = cur.split(',').map(t => t.trim()).filter(t => t && !t.startsWith('delivered:' + line + '@'));
-    const day = uaeNow().slice(0, 10);
+    const day = picked || today;   /* the date the team picked (calendar), else today */
+    if (b.dateOnly) {   /* just correcting the recorded date */
+      tags.push('delivered:' + line + '@' + day);
+      const up0 = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, { method: 'PUT',
+        headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ order: { id: Number(id), tags: tags.join(', ') } }) });
+      if (!up0.ok) throw new Error('Shopify PUT ' + up0.status);
+      if (CACHE.orders) delete CACHE.orders;
+      logEvent(req.session.username, 'delivered_date', { id, line, date: day, ip: clientIp(req) });
+      return res.json({ ok: true, line, date: day });
+    }
     if (!undo) tags.push('delivered:' + line + '@' + day);
     let shop = false, shopErr = '';
     if (!undo && !tags.includes('shopfulfilled:' + line)) {
