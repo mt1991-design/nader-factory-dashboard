@@ -111,7 +111,7 @@
   .is-locked .mdraw-acts,.is-locked .upbtn{display:none!important}
 
 /* ---- customer mode (/drawing?t=…): just the drawing + the approval box ---- */
-body.custview #sheet .notes,body.custview aside.ed,body.custview .foot,body.custview #backLink,body.custview #savedSel,body.custview #saveState,body.custview #lockBox,body.custview #statusBox{display:none!important}
+body.custview #sheet .notes:not(.cnotes),body.custview aside.ed,body.custview .foot,body.custview #backLink,body.custview #savedSel,body.custview #saveState,body.custview #lockBox,body.custview #statusBox{display:none!important}
 body.custview .wrap{display:block!important;max-width:1100px;margin:0 auto}
 body.custview .sheet-scroll{display:flex;justify-content:center}
 body.custview .cust-box{max-width:210mm!important}
@@ -159,6 +159,10 @@ body.custview .cust-box{max-width:210mm!important}
   body.custview .toolbar{padding:8px 12px}
   body.custview .toolbar .ttl{font-size:10.5px;letter-spacing:.08em}
 }
+.notes.cnotes{border-color:#c9a96a;background:#fbf6ec}
+.notes.cnotes .lab{color:#8a6a2f}
+.notes.cnotes [data-k=custNotes]:empty:before{content:attr(data-ph);color:#b8ab95;font-style:italic}
+@media print{.notes.cnotes [data-k=custNotes]:empty:before{content:none}#sheet:has(.cnotes [data-k=custNotes]:empty) :is(.cnotes,.cnotes-h){display:none}}
 </style>
 
 <div class="toolbar">
@@ -2795,6 +2799,8 @@ function renderSheet(){
   <div class="col"><div class="lab">Delivery Address</div><div class="row" contenteditable="true" data-c="addr">${esc(c.addr)}</div><div class="row" contenteditable="true" data-c="area">${esc(c.area)}</div><div class="row"><span class="k">Emirate</span> <span contenteditable="true" data-c="emirate">${esc(c.emirate)}</span></div></div>
   <div class="col"><div class="lab">Sales</div><div class="row"><span class="k">Agent</span> <span contenteditable="true" data-c="agent">${esc(c.agent)}</span></div><div class="row"><span class="k">Showroom</span> <span contenteditable="true" data-c="showroom">${esc(c.showroom)}</span></div></div>
 </div>
+<div class="section-h cnotes-h"><span class="t">Notes to Customer</span><span class="rule"></span></div>
+<div class="notes cnotes"><div class="lab">Shown to the customer with the drawing</div><div contenteditable="true" spellcheck="false" data-k="custNotes" data-ph="Anything the customer should know when checking this drawing…" style="white-space:pre-wrap">${esc(ORDER.custNotes||"")}</div></div>
 <div class="section-h"><span class="t">Workshop Notes</span><span class="rule"></span></div>
 <div class="notes"><div class="lab">Special Requests</div><div contenteditable="true" spellcheck="false" data-k="notes" style="white-space:pre-wrap">${esc(ORDER.notes)}</div></div>
 <div class="foot"><div><div class="section-h" style="margin:0 0 6px"><span class="t">Production</span></div><div class="stages">${STAGES.map(s=>`<div class="stage-chip"><div class="n">${s}</div><div class="box"></div></div>`).join("")}</div></div><div class="signoff">✔ QC __________<div class="line"></div>Checked &amp; approved</div></div>`;
@@ -2839,7 +2845,7 @@ function lockCells(){
   const L=isLocked()||document.body.classList.contains('custview');
   document.querySelectorAll('#sheet [contenteditable]').forEach(el=>{
     const s=el.dataset.s, key=s!=null&&ORDER.spec[+s]?ORDER.spec[+s][0]:'';
-    const free=(LOCK_FREE.test(key)||el.dataset.k==='deliveryDate')&&!document.body.classList.contains('custview');   /* delivery date: filled in later, even on a locked sheet */
+    const free=(LOCK_FREE.test(key)||(el.dataset.k==='deliveryDate'||el.dataset.k==='custNotes'))&&!document.body.classList.contains('custview');   /* delivery date: filled in later, even on a locked sheet */
     el.setAttribute('contenteditable', (!L||free)?'true':'false');
   });
 }
@@ -3169,7 +3175,10 @@ async function custBoot(){
   document.getElementById("tbTitle").textContent="Your drawing · Order "+d.order;document.title="Your drawing — Order "+d.order+" — Nader";
   const doc=document.querySelector('.mast .doc');if(doc)doc.textContent='Drawing for your approval';
   /* no workshop notes / internal sections for the customer */
-  document.querySelectorAll('#sheet .notes').forEach(n=>n.remove());
+  document.querySelectorAll('#sheet .notes:not(.cnotes)').forEach(n=>n.remove());
+  /* notes to customer: shown read-only, only when the team wrote something (Mariam 5 Oct) */
+  if(!String(ORDER.custNotes||"").trim())document.querySelectorAll('#sheet .cnotes,#sheet .cnotes-h').forEach(n=>n.remove());
+  else{const h=document.querySelector('#sheet .cnotes-h .t');if(h)h.textContent='Notes from our team';const l=document.querySelector('#sheet .cnotes .lab');if(l)l.remove();}
   document.querySelectorAll('#sheet .section-h').forEach(h=>{if(/workshop|production/i.test(h.textContent))h.remove();});
   const sheet=document.getElementById('sheet'),box=document.createElement('section');box.className='cust-box noprint';box.id='custBox';
   const scr=sheet.closest('.sheet-scroll')||sheet;scr.parentNode.insertBefore(box,scr);   /* above the sheet, not beside it */
