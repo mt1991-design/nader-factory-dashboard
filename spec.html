@@ -162,6 +162,15 @@ body.custview .cust-box{max-width:210mm!important}
 .notes.cnotes{border-color:#c9a96a;background:#fbf6ec}
 .notes.cnotes .lab{color:#8a6a2f}
 .notes.cnotes [data-k=custNotes]:empty:before{content:attr(data-ph);color:#b8ab95;font-style:italic}
+.notes [contenteditable] img{display:none}
+.refs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.refs .ref{position:relative;margin:0;width:118px;height:96px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+.refs .ref img{width:100%;height:100%;object-fit:cover;display:block}
+.refs .ref-rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(28,26,23,.75);color:#fff;font-size:15px;line-height:1;cursor:pointer}
+.refs .ref-add{width:118px;height:96px;border:1.5px dashed #c9a96a;border-radius:6px;background:#fbf6ec;color:#8a6a2f;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:600 11px/1.2 inherit}
+.refs .ref-add b{font-size:22px;font-weight:400}
+body.custview .refs .ref{width:160px;height:130px}
+@media print{.refs .ref{width:30mm;height:24mm}#sheet:has(.refs.empty) :is(.refs,.refs-h){display:none}}
 @media print{.notes.cnotes [data-k=custNotes]:empty:before{content:none}#sheet:has(.cnotes [data-k=custNotes]:empty) :is(.cnotes,.cnotes-h){display:none}}
 </style>
 
@@ -199,6 +208,7 @@ body.custview .cust-box{max-width:210mm!important}
       <button class="photo-btn" type="button" id="clearPhotoBtn" style="margin-top:6px">Remove photo</button>
       <input type="file" id="photoIn" accept="image/*" hidden>
       <input type="file" id="drawIn" accept="image/*" hidden>
+      <input type="file" id="refIn" accept="image/*" multiple hidden>
     </div>
     <p class="edit-tip">Tip: click any text on the sheet — specification, customer, notes, order details — to edit it. Values marked <b style="color:var(--gold-dk)">AUTO</b> follow the drawing. Changes save to this order automatically.</p>
   </aside>
@@ -2801,10 +2811,30 @@ function renderSheet(){
 </div>
 <div class="section-h cnotes-h"><span class="t">Notes to Customer</span><span class="rule"></span></div>
 <div class="notes cnotes"><div class="lab">Shown to the customer with the drawing</div><div contenteditable="true" spellcheck="false" data-k="custNotes" data-ph="Anything the customer should know when checking this drawing…" style="white-space:pre-wrap">${esc(ORDER.custNotes||"")}</div></div>
+<div class="section-h refs-h"><span class="t">Reference Photos</span><span class="rule"></span></div>
+<div class="refs" id="refs"></div>
 <div class="section-h"><span class="t">Workshop Notes</span><span class="rule"></span></div>
 <div class="notes"><div class="lab">Special Requests</div><div contenteditable="true" spellcheck="false" data-k="notes" style="white-space:pre-wrap">${esc(ORDER.notes)}</div></div>
 <div class="foot"><div><div class="section-h" style="margin:0 0 6px"><span class="t">Production</span></div><div class="stages">${STAGES.map(s=>`<div class="stage-chip"><div class="n">${s}</div><div class="box"></div></div>`).join("")}</div></div><div class="signoff">✔ QC __________<div class="line"></div>Checked &amp; approved</div></div>`;
-  renderSpec();
+  renderSpec();renderRefs();
+}
+/* extra reference photos (e.g. the arm style the customer wants) — factory sheet + customer drawing page; can be added
+   even on a locked sheet, never counts as a drawing change (Mariam 5 Oct) */
+const REF_MAX=6;
+function renderRefs(){
+  const box=document.getElementById('refs');if(!box)return;
+  const L=ORDER.refs||[],cv=document.body.classList.contains('custview');
+  box.innerHTML=L.map((u,i)=>`<figure class="ref"><a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Reference photo ${i+1}"></a>${cv?'':`<button type="button" class="ref-rm noprint" data-refrm="${i}" title="Remove">×</button>`}</figure>`).join("")
+    +(cv||L.length>=REF_MAX?'':`<button type="button" class="ref-add noprint" data-refadd="1"><b>+</b><span>Add reference photo</span></button>`);
+  box.classList.toggle('empty',!L.length);
+}
+function addRefFile(file){
+  if(!file||!/^image\//.test(file.type)||(ORDER.refs||[]).length>=REF_MAX)return;
+  const img=new Image(),url=URL.createObjectURL(file);
+  img.onload=()=>{const k=Math.min(1,1000/Math.max(img.width,img.height)),c=document.createElement('canvas');
+    c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);const g=c.getContext('2d');g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);
+    ORDER.refs=(ORDER.refs||[]).concat(c.toDataURL('image/jpeg',0.82)).slice(0,REF_MAX);URL.revokeObjectURL(url);renderRefs();save();};
+  img.src=url;
 }
 function renderSpec(){
   const auto=autoSpec();
@@ -3120,6 +3150,17 @@ function wire(){
     if(up)uploadDrawing(up.dataset.up);
     if(rm){if(ORDER.drawings)delete ORDER.drawings[rm.dataset.rm];renderDrawings();save();}
   });
+  document.getElementById('sheet').addEventListener('click',e=>{
+    if(document.body.classList.contains('custview'))return;
+    if(e.target.closest('[data-refadd]')){const i=document.getElementById('refIn');i.value="";i.click();}
+    const rm=e.target.closest('[data-refrm]');if(rm){ORDER.refs=(ORDER.refs||[]).filter((_,i)=>i!==+rm.dataset.refrm);renderRefs();save();}
+  });
+  document.getElementById('refIn').addEventListener('change',e=>{[...e.target.files].forEach(addRefFile);});
+  /* an image pasted into a notes box goes to Reference Photos instead of filling the box */
+  document.getElementById('sheet').addEventListener('paste',e=>{
+    const f=[...((e.clipboardData&&e.clipboardData.files)||[])].filter(x=>/^image\//.test(x.type));
+    if(!f.length)return;e.preventDefault();if(!document.body.classList.contains('custview'))f.forEach(addRefFile);
+  });
   document.getElementById('drawIn').addEventListener('change',e=>{
     const file=e.target.files[0],key=e.target.dataset.key;if(!file||!key)return;
     const img=new Image(),url=URL.createObjectURL(file);
@@ -3178,7 +3219,9 @@ async function custBoot(){
   document.querySelectorAll('#sheet .notes:not(.cnotes)').forEach(n=>n.remove());
   /* notes to customer: shown read-only, only when the team wrote something (Mariam 5 Oct) */
   if(!String(ORDER.custNotes||"").trim())document.querySelectorAll('#sheet .cnotes,#sheet .cnotes-h').forEach(n=>n.remove());
-  else{const h=document.querySelector('#sheet .cnotes-h .t');if(h)h.textContent='Notes from our team';const l=document.querySelector('#sheet .cnotes .lab');if(l)l.remove();}
+  if(!(ORDER.refs||[]).length)document.querySelectorAll('#sheet .refs,#sheet .refs-h').forEach(n=>n.remove());
+  else{const h=document.querySelector('#sheet .refs-h .t');if(h)h.textContent='Your reference photos';}
+  if(String(ORDER.custNotes||"").trim()){const h=document.querySelector('#sheet .cnotes-h .t');if(h)h.textContent='Notes from our team';const l=document.querySelector('#sheet .cnotes .lab');if(l)l.remove();}
   document.querySelectorAll('#sheet .section-h').forEach(h=>{if(/workshop|production/i.test(h.textContent))h.remove();});
   const sheet=document.getElementById('sheet'),box=document.createElement('section');box.className='cust-box noprint';box.id='custBox';
   const scr=sheet.closest('.sheet-scroll')||sheet;scr.parentNode.insertBefore(box,scr);   /* above the sheet, not beside it */
