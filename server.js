@@ -609,7 +609,7 @@ const TRACK_COLORS = ['#b09a80', '#cdbfa8', '#9c8f80', '#8a7766', '#b0875a', '#6
 const last9 = p => String(p || '').replace(/\D/g, '').slice(-9);
 /* which order lines are real pieces (old orders were typed straight into Shopify, so notes, fabrics, seat-depth upgrades,
    payments and cushion bundles often sit in their own lines). Checked against all 199 open orders, 1 Oct. */
-const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment|^\s*(extra\s+)?fabric\b|^\s*shipping|^\s*custom\s*(fee|charge)|visit\s*fee/i;
+const NOT_A_PIECE = /total\s*amount|deposit|balance|discount|already\s*paid|pending|delivery\s*(fee|charge)|installation|assembly\s*fee|^\s*aed\b|payment|^\s*(extra\s+)?fabric\b|^\s*shipping|^\s*custom\s*(fee|charge)|visit\s*fee|^\s*(extra\s*charge|change\s*to\s*order)\s*:/i;
 const NOTE_START = /^\s*(seat\s*(depth|filling|dimension|width|height)|back\s*(rest|cushion)s?|backrest|sofa\s*(filling|seats|softness|size|to\s*be)|filling|fabric|upholstery|uplostry|upholstry|mattress\s*size|all\s+back|small\s+cushions|make\s+the|corner\s*piece|chaise\s+needs|arm\s*rests?|armrest|base\s*height|left\s+seat|middle\s+seat|right\s+seat|colou?r|size|real\s+leather|linen|leather\s+for|totop|tabletop:)/i;
 const EARLY_NOTE = /^\s*(\S+\s+){0,3}(should|will|ready|please|needs?|must|make\s+sure|swatch\w*|samples?)\b/i;
 const CUSHIONS_ONLY = /^\s*(total\s+)?\d+\s*(x\s*)?(saqure|square|round|small|big|extra)?\s*cushions?\b/i;
@@ -1038,6 +1038,31 @@ app.post('/api/order/balance', requireAuth, async (req, res) => {
     }
     res.status(400).json({ ok: false, error: 'unknown action' });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+/* ＋ Extra charge on ANY paid order (website orders have no saved form to re-open) — added to the SAME Shopify order via
+   order editing, customer NOT notified by Shopify; the team then sends the payment request from the dashboard (Mariam 6 Oct) */
+app.post('/api/order/extra', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), amount = Math.round(+b.amount * 100) / 100, title = String(b.title || '').trim().slice(0, 200);
+  if (!id || !(amount > 0) || !title) return res.status(400).json({ ok: false, error: 'description and amount needed' });
+  try {
+    const who = req.session.name || req.session.username;
+    const gq = async (q, v) => { const d = await shopifyGql(q, v); if (d.errors) throw new Error((d.errors[0] && d.errors[0].message) || 'Shopify error'); return d.data; };
+    const ue = x => { if (x && x.userErrors && x.userErrors.length) throw new Error(x.userErrors[0].message); return x; };
+    const incl = !!((await gq('{ shop { taxesIncluded currencyCode } }')).shop || {}).taxesIncluded;
+    const begin = ue((await gq('mutation($id:ID!){ orderEditBegin(id:$id){ calculatedOrder{ id } userErrors{ message } } }', { id: 'gid://shopify/Order/' + id })).orderEditBegin);
+    const cid = begin.calculatedOrder.id;
+    ue((await gq('mutation($id:ID!,$t:String!,$p:MoneyInput!,$tx:Boolean){ orderEditAddCustomItem(id:$id,title:$t,price:$p,quantity:1,taxable:$tx,requiresShipping:false){ calculatedLineItem{ id } userErrors{ message } } }',
+      { id: cid, t: 'Extra charge: ' + title, p: { amount: amount.toFixed(2), currencyCode: 'AED' }, tx: incl })).orderEditAddCustomItem);
+    ue((await gq('mutation($id:ID!,$n:String){ orderEditCommit(id:$id,notifyCustomer:false,staffNote:$n){ order{ id } userErrors{ message } } }',
+      { id: cid, n: 'Extra charge by ' + who + ': ' + title + ' — AED ' + amount.toFixed(2) })).orderEditCommit);
+    if (CACHE.orders) delete CACHE.orders;
+    logEvent(req.session.username, 'order_extra', { id, amount, title, ip: clientIp(req) });
+    res.json({ ok: true });
+  } catch (e) {
+    const m = String(e.message || e);
+    res.status(500).json({ ok: false, error: /access|scope|denied|permission/i.test(m) ? 'Shopify hasn’t given the dashboard permission to edit orders' : m });
+  }
 });
 app.post('/api/mark_paid', requireAuth, async (req, res) => {
   if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });

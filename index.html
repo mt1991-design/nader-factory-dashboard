@@ -270,6 +270,7 @@
     .sheet{box-shadow:none;max-width:100%;width:100%;transform:none!important;page-break-inside:avoid;margin:0 auto}
     #sheetPhoto{page-break-after:always}
     @page{size:A3 landscape;margin:8mm}}
+.xtin{padding:6px 9px;border:1px solid #d9d2c4;border-radius:6px;font:13px var(--ui)}
 .balchip{display:inline-block;padding:4px 11px;border-radius:20px;background:#fdecea;color:#a3221b;font:700 11px var(--ui);letter-spacing:.02em}
 .balctl{flex-wrap:wrap;gap:6px;margin-top:6px}
 </style>
@@ -4845,7 +4846,7 @@ const dropSameAs=t=>String(t||"").replace(/\b(same|similar|like)\s+(as\s+)?(the\
 /* tables / chairs / stools: the name AND the right kind of piece ("Chios Dining Table" ≠ a Chios chair) */
 const AUTO_PIECE=[[/\b(chios|khios)\b/i,/\btable\b/i],[/\b(cheltenham|cheltenhan|cheltnam|cheltnham)\b/i,/\btable\b/i],[/\bbaku\b/i,/\bchairs?\b/i],[/\bsaga\b/i,/stool/i],[/\bsakai\b/i,/stool/i],[/\b(trevor|trever)\b/i,/\btable\b/i],[/\baura\b/i,/\bsofa\b/i],[/\bchesterfield\b/i,/^(?!.*\b(custom|bespoke)\b).*\b(sofa|seater)\b/i]];
 function autoDrawable(title){title=dropSameAs(title);const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")))||AUTO_PIECE.some(([r,k])=>r.test(t)&&k.test(String(title||"")));}
-function isFurnitureLine(title){return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
+function isFurnitureLine(title){if(/^\s*(extra charge|change to order)\s*:/i.test(title||""))return false;return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
 function lineCheck(o,i){const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="check");}   /* saved sheet says "Check dimensions" (e.g. ottoman size missing) */
 function lineDrawn(o,i){const it=o.items[i]||{};if(lineCheck(o,i))return false;if(autoDrawable(it.product))return true;const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="complete");}
@@ -5435,6 +5436,15 @@ function balBank(oi){const o=SHOPIFY[oi];if(!o)return;const ph=waNum(o.phone||(o
 async function balPaid(oi){const o=SHOPIFY[oi];if(!o)return;
   if(!confirm("Has the customer paid the extra "+AED2(o.outstanding)+" on "+o.order+" (cash, bank transfer or Ziina)?\n\nOnly confirm once the money has arrived — this marks the order fully paid in Shopify."))return;
   try{balMsg(oi,"Saving…");await balApi(o,"paid");o.outstanding=0;balMsg(oi,"✓ Marked paid");setTimeout(()=>loadShopify(true),800);}catch(e){balMsg(oi,"Couldn’t mark paid: "+e.message);}}
+function xtraOpen(oi){const b=document.getElementById("xtra-"+oi);if(b){b.hidden=!b.hidden;if(!b.hidden)document.getElementById("xt-t-"+oi).focus();}}
+async function xtraAdd(oi){const o=SHOPIFY[oi];if(!o)return;
+  const t=document.getElementById("xt-t-"+oi).value.trim(),a=+document.getElementById("xt-a-"+oi).value,m=document.getElementById("xt-m-"+oi);
+  if(!t){m.textContent="Say what the charge is for";return;}if(!(a>0)){m.textContent="Enter the amount";return;}
+  if(!confirm("Add "+AED2(a)+" to order "+o.order+"?\n\n“"+t+"”\n\nThe customer is NOT emailed by Shopify — send the payment request from the buttons that appear next."))return;
+  m.textContent="Adding…";
+  try{const r=await fetch("/api/order/extra",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,title:t,amount:a})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");m.textContent="✓ Added — loading the payment buttons…";setTimeout(()=>loadShopify(true),1200);}
+  catch(e){m.textContent="Couldn’t add it: "+e.message;}}
 function payFirst(o){return String(o.customer||"").split(" ")[0]||"there";}
 function payLink(oi){const o=SHOPIFY[oi];if(!o)return;if(!o.invoice_url){alert("No payment link on this draft yet — open it in Shopify and press Send invoice.");return;}
   const ph=waNum(o.phone||(o.shipping_address||{}).phone);
@@ -5482,7 +5492,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     /* signed draft: the team can change the payment method too (customers can also do it from their link) */
     const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed")?payControls(o,oi):"";
     const balCtrl=(i===0&&!o.isDraft&&ROLE!=="factory"&&+o.outstanding>0.5)?balControls(o,oi):"";
-    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl):"";
+    const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="xtraOpen('+oi+')">＋ Extra charge</button><div id="xtra-'+oi+'" hidden class="payctl"><input id="xt-t-'+oi+'" class="xtin" placeholder="What for — e.g. seat depth 90 → 100 cm" style="flex:1 1 220px"><input id="xt-a-'+oi+'" class="xtin" type="number" min="1" step="0.01" placeholder="AED (incl. VAT)" style="width:130px"><button type="button" class="dbtn main" onclick="xtraAdd('+oi+')">Add to order</button><span class="dmsg" id="xt-m-'+oi+'"></span></div></div>':"";
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl+xtra):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi));
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
