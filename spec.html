@@ -2718,8 +2718,10 @@ async function fromOrder(o,i){
 function applyFormSpec(O,spec){
   const m=O.model, v=O.V, rows=[], notes=[];
   const set=(k,val)=>{const r=O.spec.find(x=>x[0].toLowerCase()===k.toLowerCase());if(r)r[1]=val;else rows.push([k,val]);};
-  Object.keys(spec).forEach(label=>{
-    const val=String(spec[label]||"").trim(), L=label.toLowerCase();if(!val)return;
+  Object.keys(spec).forEach(label0=>{
+    /* the form's required-field star ("Configuration *") must not change the label — it stopped the facing / size
+       being read and doubled the spec rows (Mariam 6 Oct) */
+    const label=label0.replace(/\s*\*+\s*$/,""), val=String(spec[label0]||"").trim(), L=label.toLowerCase();if(!val)return;
     if(/^product|quantity|price|aed|total|unit/.test(L))return;
     if(/customisation notes|special requests|cushion notes|^customisations?$/.test(L)){notes.push(L.startsWith('customisations')?'Customisations: '+val:val);return;}
     if(m&&MODELS[m].bed){
@@ -2735,10 +2737,16 @@ function applyFormSpec(O,spec){
       if(/seat height/.test(L)){const n=num(val);if(n>0){v.H+=n-v.SH;v.SH=n;}return;}
     }
     else if(m){
-      if(L==="size"){const x=val.match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)/);if(x){v.W=+x[1];if(v.side!=="N")v.RL=+x[2];}return;}
+      if(L==="size"){const x=/[×x]/.test(val)?(val.split(":").pop().match(/\d+(?:\.\d+)?/g)||[]).map(Number):[];   /* "4 seater: 300cm x 180cm x 150cm" */
+        if(x.length>=2){v.W=x[0];if(v.side!=="N")v.RL=x[1];if(x.length>=3&&"RR" in v)v.RR=x[2];}return;}
       if(/total sofa width/.test(L)){const n=num(val);if(n>0)v.W=n;return;}
       if(/left chaise/.test(L)){const n=num(val);if(n>0){v.RL=n;}return;}
       if(L==="configuration"){const r=/right/i.test(val)?"R":/left/i.test(val)?"L":null;if(r){if(v.side==="U"||v.side==="N")O._cfgSide=r;else v.side=r;}return;}
+      if(L==="shape"){   /* the form's required Shape pick: Standard / L-shape / U-shape */
+        if(/^u/i.test(val)){if("SHAPE" in v)v.SHAPE="U";else if(MODELS[m].sides.includes("U"))v.side="U";else set(label,val);return;}
+        if(/^l/i.test(val)){O._lflag=true;return;}
+        if(/standard|straight/i.test(val)){O._straight=true;return;}
+        set(label,val);return;}
       if(/configure as l-?shape/.test(L)){O._lflag=/yes|true|on/i.test(val)||val==="Yes";return;}
       if(/configure as u-?shape/.test(L)){return;}
       if(/configure as standard|no chaise/.test(L)){if(/yes|true/i.test(val))O._straight=true;return;}
@@ -2756,6 +2764,9 @@ function applyFormSpec(O,spec){
     set(label,val);
   });
   if("SHAPE" in v&&O._lflag)v.SHAPE=O._cfgSide==="R"?"CR":"CL";
+  /* U-shape with one longer return: Left / Right Hand Facing = which side the LONGER return is on */
+  if(m&&O._cfgSide&&(("SHAPE" in v)?v.SHAPE==="U":v.side==="U")&&v.RL!=null&&v.RR!=null){const a=Math.max(+v.RL,+v.RR),b=Math.min(+v.RL,+v.RR);
+    if(O._cfgSide==="R"){v.RR=a;v.RL=b;}else{v.RL=a;v.RR=b;}}
   if(O._straight){if("SHAPE" in v)v.SHAPE="S";else if(m&&MODELS[m].sides.includes("N"))v.side="N";}
   O.spec=O.spec.concat(rows).filter(r=>r[1]!==""||SPEC_FIELDS.includes(r[0]));
   if(notes.length)O.notes=[notes.join("\n"),O.notes].filter(Boolean).join("\n");
