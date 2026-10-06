@@ -3305,7 +3305,50 @@ async function boot(){
     if(Q.o){try{const r=await fetch(Q.k==="draft"?"/api/draft_orders":"/api/orders",{credentials:"same-origin"});const d=await r.json();
       const o=(d.orders||d.drafts||[]).find(x=>x.order===Q.o);const it=o&&(o.items||[])[Q.i|0];if(it&&it.qty)q=String(it.qty);}catch(e){}}
     const ci=ORDER.spec.findIndex(r=>r[0]==="Category");ORDER.spec.splice(ci+1,0,["Quantity",q]);}
-  start();loadSavedList();
+  start();await applyOrderChanges();loadSavedList();
+}
+/* ✎ Change order (from the dashboard, Mariam 6 Oct): apply the queued changes to this sheet → the drawing redraws, the
+   change log records exactly what moved, workshop notes get a dated line, and saving tells the server the drawing changed
+   (customer-approved drawings go to "Needs re-signing"). Applied once, then marked done. */
+async function applyOrderChanges(){
+  if(!LIVE||!SPEC_ID)return;
+  let L=[];try{const r=await fetch("/api/order/changes?spec="+encodeURIComponent(SPEC_ID),{credentials:"same-origin"});const d=await r.json();L=(d.ok&&d.items)||[];}catch(e){}
+  if(!L.length)return;
+  const lk=ORDER.locked;ORDER.locked=null;ORDER.log=ORDER.log||[];
+  const lid="e"+Date.now().toString(36);
+  ORDER.log.push({id:lid,t:Date.now(),by:L.map(c=>c.by).filter(Boolean).join(", ")||ME,what:"Order changed from the dashboard",changes:[]});ORDER._edit={id:lid,snap:snapOf()};
+  const day=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short"}),lines=[];
+  const setRow=(k,val)=>{const r=ORDER.spec.find(x=>x[0].toLowerCase()===k.toLowerCase());if(r)r[1]=val;else ORDER.spec.push([k,val]);};
+  L.forEach(ch=>(ch.changes||[]).forEach(c=>{
+    const val=String(c.value||"").trim(),n=parseFloat(val);if(!val)return;
+    const sp={};
+    if(c.type==="depth")sp["Seat Depth"]=val;
+    else if(c.type==="width")sp[ORDER.model?"Total Sofa Width":"Width"]=val;
+    else if(c.type==="chaise")sp[ORDER.model?"Left Chaise Length":"Chaise Length"]=val;
+    else if(c.type==="seatheight")sp["Seat Height"]=val;
+    else if(c.type==="backheight")sp["Back Height"]=val;
+    else if(c.type==="armwidth")sp["Arm Width"]=val;
+    else if(c.type==="armrests")sp["Armrests"]=val;
+    else if(c.type==="shape"){const code={"Standard":"S","L left":"CL","L right":"CR","U-shape":"U"}[val]||"S";
+      if(ORDER.model&&"SHAPE" in V)V.SHAPE=code;
+      else if(ORDER.model){const M=MODELS[ORDER.model],sd={S:"N",CL:"L",CR:"R",U:"U"}[code];if(M.sides.includes(sd))V.side=sd;else setRow("Shape",val);}
+      else setRow("Shape",val);}
+    else if(c.type==="fabric")setRow("Upholstery Material",val);
+    else if(c.type==="fabriccode")setRow("Fabric Catalogue Code",val);
+    else if(c.type==="legs")setRow("Leg / Base Material",val);
+    else if(c.type==="finish")setRow("Finish Colour / Details",val);
+    else if(c.type==="foam")setRow("Foam Firmness",val);
+    if(Object.keys(sp).length){if(ORDER.model)applyFormSpec(ORDER,sp);else Object.keys(sp).forEach(k=>setRow(k,/^\d+(\.\d+)?$/.test(val)?val+" cm":val));}
+    lines.push((c.label||c.type)+" → "+val+(/depth|width|chaise|height/.test(c.type)&&!isNaN(n)&&/^\d+(\.\d+)?$/.test(val)?" cm":""));
+  }));
+  if(lines.length)ORDER.notes=[String(ORDER.notes||"").trim(),"CHANGED "+day+": "+lines.join("; ")].filter(Boolean).join("\n");
+  recordEdits();delete ORDER._edit;
+  if(lk)ORDER.locked={by:lk.by||"",at:Date.now()};
+  renderSheet();buildDimFields();syncInputs();renderDrawings();save();
+  try{await fetch("/api/order/changes/applied",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({spec:SPEC_ID,ids:L.map(c=>c.id)})});}catch(e){}
+  const bn=document.createElement("div");bn.className="noprint";bn.style.cssText="max-width:900px;margin:12px auto 0;padding:10px 14px;border-radius:10px;background:#fdf0d5;color:#8a5a00;font:600 13px/1.45 -apple-system,Helvetica,Arial,sans-serif";
+  bn.textContent="Changes applied: "+lines.join("; ")+". Check the drawing — if the customer had been sent it, press Send again on the dashboard so they approve the new one.";
+  const wr=document.querySelector(".wrap");if(wr&&wr.parentNode){bn.style.width="calc(100% - 24px)";bn.style.boxSizing="border-box";wr.parentNode.insertBefore(bn,wr);}
 }
 boot();
 

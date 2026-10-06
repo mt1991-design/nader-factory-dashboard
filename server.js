@@ -1039,30 +1039,60 @@ app.post('/api/order/balance', requireAuth, async (req, res) => {
     res.status(400).json({ ok: false, error: 'unknown action' });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
-/* ＋ Extra charge on ANY paid order (website orders have no saved form to re-open) — added to the SAME Shopify order via
-   order editing, customer NOT notified by Shopify; the team then sends the payment request from the dashboard (Mariam 6 Oct) */
-app.post('/api/order/extra', requireAuth, async (req, res) => {
+/* ✎ Change order on ANY paid order (website orders too — they have no saved form to re-open). Mariam 6 Oct:
+   - the changes (seat depth, fabric, shape, other…) are queued for the order line's SPEC SHEET, which applies them the next
+     time it opens (the dashboard opens it straight away) → the drawing redraws, the change is logged, and if the customer
+     had already been sent / approved the drawing it goes to "Needs re-signing";
+   - ONE total for the extra (incl. VAT, 0 = no charge) is added to the SAME Shopify order — Shopify does NOT email the
+     customer; the team sends the payment request from the dashboard. */
+app.post('/api/order/change', requireAuth, async (req, res) => {
   if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
-  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), amount = Math.round(+b.amount * 100) / 100, title = String(b.title || '').trim().slice(0, 200);
-  if (!id || !(amount > 0) || !title) return res.status(400).json({ ok: false, error: 'description and amount needed' });
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), spec = String(b.spec || '').replace(/[^A-Za-z0-9-]/g, '');
+  const amount = Math.max(0, Math.round((+b.amount || 0) * 100) / 100);
+  const changes = (Array.isArray(b.changes) ? b.changes : []).slice(0, 20).map(c => ({ type: String(c.type || 'other').slice(0, 20), label: String(c.label || '').slice(0, 60), value: String(c.value || '').trim().slice(0, 300) })).filter(c => c.value);
+  if (!id || !spec || !changes.length) return res.status(400).json({ ok: false, error: 'add at least one change' });
   try {
-    const who = req.session.name || req.session.username;
-    const gq = async (q, v) => { const d = await shopifyGql(q, v); if (d.errors) throw new Error((d.errors[0] && d.errors[0].message) || 'Shopify error'); return d.data; };
-    const ue = x => { if (x && x.userErrors && x.userErrors.length) throw new Error(x.userErrors[0].message); return x; };
-    const incl = !!((await gq('{ shop { taxesIncluded currencyCode } }')).shop || {}).taxesIncluded;
-    const begin = ue((await gq('mutation($id:ID!){ orderEditBegin(id:$id){ calculatedOrder{ id } userErrors{ message } } }', { id: 'gid://shopify/Order/' + id })).orderEditBegin);
-    const cid = begin.calculatedOrder.id;
-    ue((await gq('mutation($id:ID!,$t:String!,$p:MoneyInput!,$tx:Boolean){ orderEditAddCustomItem(id:$id,title:$t,price:$p,quantity:1,taxable:$tx,requiresShipping:false){ calculatedLineItem{ id } userErrors{ message } } }',
-      { id: cid, t: 'Extra charge: ' + title, p: { amount: amount.toFixed(2), currencyCode: 'AED' }, tx: incl })).orderEditAddCustomItem);
-    ue((await gq('mutation($id:ID!,$n:String){ orderEditCommit(id:$id,notifyCustomer:false,staffNote:$n){ order{ id } userErrors{ message } } }',
-      { id: cid, n: 'Extra charge by ' + who + ': ' + title + ' — AED ' + amount.toFixed(2) })).orderEditCommit);
+    const who = req.session.name || req.session.username, summary = changes.map(c => c.label + ' → ' + c.value).join('; ').slice(0, 240);
+    if (amount > 0) {
+      const gq = async (q, v) => { const d = await shopifyGql(q, v); if (d.errors) throw new Error((d.errors[0] && d.errors[0].message) || 'Shopify error'); return d.data; };
+      const ue = x => { if (x && x.userErrors && x.userErrors.length) throw new Error(x.userErrors[0].message); return x; };
+      const incl = !!((await gq('{ shop { taxesIncluded } }')).shop || {}).taxesIncluded;
+      const cid = ue((await gq('mutation($id:ID!){ orderEditBegin(id:$id){ calculatedOrder{ id } userErrors{ message } } }', { id: 'gid://shopify/Order/' + id })).orderEditBegin).calculatedOrder.id;
+      ue((await gq('mutation($id:ID!,$t:String!,$p:MoneyInput!,$tx:Boolean){ orderEditAddCustomItem(id:$id,title:$t,price:$p,quantity:1,taxable:$tx,requiresShipping:false){ calculatedLineItem{ id } userErrors{ message } } }',
+        { id: cid, t: 'Change to order: ' + summary, p: { amount: amount.toFixed(2), currencyCode: 'AED' }, tx: incl })).orderEditAddCustomItem);
+      ue((await gq('mutation($id:ID!,$n:String){ orderEditCommit(id:$id,notifyCustomer:false,staffNote:$n){ order{ id } userErrors{ message } } }',
+        { id: cid, n: 'Change by ' + who + ' — extra AED ' + amount.toFixed(2) })).orderEditCommit);
+    }
+    /* record it on the order note (sales + admin see it; the factory view strips AED lines) */
+    try {
+      const g = await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json?fields=id,note`, { headers: { 'X-Shopify-Access-Token': TOKEN } });
+      const note = (((await g.json()).order || {}).note) || '';
+      const line = `✎ Changed ${uaeNow().replace('T', ' ')} by ${who} (item ${spec.split('-')[1] || 1}): ${summary}` + (amount > 0 ? ` · extra AED ${amount.toFixed(2)}` : ' · no extra charge');
+      await fetch(`https://${STORE}/admin/api/${APIVER}/orders/${id}.json`, { method: 'PUT', headers: { 'X-Shopify-Access-Token': TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: { id: Number(id), note: (note + '\n' + line).trim().slice(-5000) } }) });
+    } catch (e) {}
+    const doc = (await docGet('ochanges')) || {};
+    (doc[spec] = doc[spec] || []).push({ id: 'c' + Date.now().toString(36), t: uaeNow(), by: who, changes, amount });
+    await docSet('ochanges', doc);
     if (CACHE.orders) delete CACHE.orders;
-    logEvent(req.session.username, 'order_extra', { id, amount, title, ip: clientIp(req) });
+    logEvent(req.session.username, 'order_change', { id, spec, amount, summary, ip: clientIp(req) });
     res.json({ ok: true });
   } catch (e) {
     const m = String(e.message || e);
     res.status(500).json({ ok: false, error: /access|scope|denied|permission/i.test(m) ? 'Shopify hasn’t given the dashboard permission to edit orders' : m });
   }
+});
+/* the spec sheet asks for changes waiting for it, applies them, then marks them done */
+app.get('/api/order/changes', requireAuth, async (req, res) => {
+  const spec = String(req.query.spec || '').replace(/[^A-Za-z0-9-]/g, '');
+  try { const doc = (await docGet('ochanges')) || {}; res.json({ ok: true, items: (doc[spec] || []).filter(c => !c.applied) }); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.post('/api/order/changes/applied', requireAuth, async (req, res) => {
+  const b = req.body || {}, spec = String(b.spec || '').replace(/[^A-Za-z0-9-]/g, ''), ids = new Set(b.ids || []);
+  try { const doc = (await docGet('ochanges')) || {}; (doc[spec] || []).forEach(c => { if (ids.has(c.id)) c.applied = { t: uaeNow(), by: req.session.name || req.session.username }; });
+    await docSet('ochanges', doc); res.json({ ok: true }); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 app.post('/api/mark_paid', requireAuth, async (req, res) => {
   if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });

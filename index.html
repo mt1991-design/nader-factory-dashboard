@@ -270,6 +270,9 @@
     .sheet{box-shadow:none;max-width:100%;width:100%;transform:none!important;page-break-inside:avoid;margin:0 auto}
     #sheetPhoto{page-break-after:always}
     @page{size:A3 landscape;margin:8mm}}
+.chgbox{margin-top:8px;padding:12px;border:1px solid #e3ddd1;border-radius:10px;background:#fdfbf7;display:flex;flex-direction:column;gap:8px;max-width:640px}
+.chgrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chgl{font:600 12px var(--ui);color:#6b655c;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .xtin{padding:6px 9px;border:1px solid #d9d2c4;border-radius:6px;font:13px var(--ui)}
 .balchip{display:inline-block;padding:4px 11px;border-radius:20px;background:#fdecea;color:#a3221b;font:700 11px var(--ui);letter-spacing:.02em}
 .balctl{flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -5436,15 +5439,37 @@ function balBank(oi){const o=SHOPIFY[oi];if(!o)return;const ph=waNum(o.phone||(o
 async function balPaid(oi){const o=SHOPIFY[oi];if(!o)return;
   if(!confirm("Has the customer paid the extra "+AED2(o.outstanding)+" on "+o.order+" (cash, bank transfer or Ziina)?\n\nOnly confirm once the money has arrived — this marks the order fully paid in Shopify."))return;
   try{balMsg(oi,"Saving…");await balApi(o,"paid");o.outstanding=0;balMsg(oi,"✓ Marked paid");setTimeout(()=>loadShopify(true),800);}catch(e){balMsg(oi,"Couldn’t mark paid: "+e.message);}}
-function xtraOpen(oi){const b=document.getElementById("xtra-"+oi);if(b){b.hidden=!b.hidden;if(!b.hidden)document.getElementById("xt-t-"+oi).focus();}}
-async function xtraAdd(oi){const o=SHOPIFY[oi];if(!o)return;
-  const t=document.getElementById("xt-t-"+oi).value.trim(),a=+document.getElementById("xt-a-"+oi).value,m=document.getElementById("xt-m-"+oi);
-  if(!t){m.textContent="Say what the charge is for";return;}if(!(a>0)){m.textContent="Enter the amount";return;}
-  if(!confirm("Add "+AED2(a)+" to order "+o.order+"?\n\n“"+t+"”\n\nThe customer is NOT emailed by Shopify — send the payment request from the buttons that appear next."))return;
-  m.textContent="Adding…";
-  try{const r=await fetch("/api/order/extra",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,title:t,amount:a})});const d=await r.json();
-    if(!d.ok)throw new Error(d.error||"error");m.textContent="✓ Added — loading the payment buttons…";setTimeout(()=>loadShopify(true),1200);}
-  catch(e){m.textContent="Couldn’t add it: "+e.message;}}
+/* ✎ Change order (any paid order): pick what changes (+ add more), ONE total → the spec sheet applies the changes and the
+   drawing redraws; the extra goes on the same Shopify order (no Shopify email). Mariam 6 Oct */
+const CHG_TYPES=[["depth","Seat depth","new seat depth in cm, e.g. 100"],["width","Overall width","new width in cm, e.g. 320"],["chaise","Chaise length","new chaise length in cm"],
+  ["shape","Shape",""],["seatheight","Seat height","in cm"],["backheight","Back height","in cm"],["armwidth","Arm width","in cm"],["armrests","Armrests","e.g. no left arm"],
+  ["fabric","Fabric","e.g. Cocoa Polycotton"],["fabriccode","Fabric code","e.g. 5501-26"],["legs","Legs / base","e.g. Black metal"],["finish","Finish colour","e.g. Walnut"],["foam","Foam firmness","e.g. Firm"],["other","Other","describe the change"]];
+function chgRow(oi){const t=CHG_TYPES;return '<div class="chgrow"><select class="xtin chgt" onchange="chgType(this)">'+t.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join("")+'</select>'
+  +'<input class="xtin chgv" placeholder="'+t[0][2]+'" style="flex:1 1 200px"><select class="xtin chgs" hidden><option>Standard</option><option>L left</option><option>L right</option><option>U-shape</option></select>'
+  +'<button type="button" class="dbtn" title="Remove" onclick="this.parentNode.remove()">×</button></div>';}
+function chgType(sel){const r=sel.parentNode,t=CHG_TYPES.find(x=>x[0]===sel.value)||[];const v=r.querySelector('.chgv'),sh=r.querySelector('.chgs');
+  v.hidden=sel.value==="shape";sh.hidden=sel.value!=="shape";v.placeholder=t[2]||"";}
+function chgOpen(oi){const o=SHOPIFY[oi],b=document.getElementById("chg-"+oi);if(!o||!b)return;if(!b.hidden){b.hidden=true;return;}
+  const lines=o.items.map((it,i)=>[i,it.product]).filter(x=>isFurnitureLine(x[1]));const L=lines.length?lines:o.items.map((it,i)=>[i,it.product]);
+  b.innerHTML='<div class="chgbox">'+(L.length>1?'<label class="chgl">Item <select class="xtin" id="chg-line-'+oi+'">'+L.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'</option>').join("")+'</select></label>':'<input type="hidden" id="chg-line-'+oi+'" value="'+L[0][0]+'"><div class="chgl">'+esc(L[0][1])+'</div>')
+    +'<div id="chg-rows-'+oi+'">'+chgRow(oi)+'</div><button type="button" class="dbtn" onclick="document.getElementById(\'chg-rows-'+oi+'\').insertAdjacentHTML(\'beforeend\',chgRow('+oi+'))">＋ Add another change</button>'
+    +'<div class="chgrow" style="margin-top:8px"><label class="chgl">Total extra to charge <input class="xtin" id="chg-amt-'+oi+'" type="number" min="0" step="0.01" placeholder="AED incl. VAT — 0 if no charge" style="width:230px"></label></div>'
+    +'<div class="chgrow"><button type="button" class="dbtn main" onclick="chgSave('+oi+')">Save change &amp; open spec sheet</button><span class="dmsg" id="chg-m-'+oi+'"></span></div></div>';
+  b.hidden=false;}
+async function chgSave(oi){const o=SHOPIFY[oi];if(!o)return;const m=document.getElementById("chg-m-"+oi);
+  const line=+document.getElementById("chg-line-"+oi).value||0,amt=+document.getElementById("chg-amt-"+oi).value||0;
+  const changes=[...document.querySelectorAll("#chg-rows-"+oi+" .chgrow")].map(r=>{const t=r.querySelector(".chgt").value,lab=(CHG_TYPES.find(x=>x[0]===t)||[])[1]||t;
+    return {type:t,label:lab,value:t==="shape"?r.querySelector(".chgs").value:r.querySelector(".chgv").value.trim()};}).filter(c=>c.value);
+  if(!changes.length){m.textContent="Add at least one change";return;}
+  if(amt<0){m.textContent="The total can’t be negative";return;}
+  if(!confirm("Save these changes to "+o.order+"?\n\n"+changes.map(c=>"• "+c.label+" → "+c.value).join("\n")+"\n\n"+(amt>0?"Extra to charge: "+AED2(amt)+" (added to the order — Shopify won’t email the customer)":"No extra charge")+"\n\nThe spec sheet opens next so you can check the new drawing."))return;
+  const spec=specKey(lineId(o,line)),w=window.open("about:blank","_blank");m.textContent="Saving…";
+  try{const r=await fetch("/api/order/change",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,spec,amount:amt,changes})});const d=await r.json();
+    if(!d.ok)throw new Error(d.error||"error");
+    const url="/spec.html?"+new URLSearchParams({o:o.order,i:String(line),k:"order",id:spec}).toString();
+    if(w)w.location=url;else window.open(url,"_blank");
+    m.textContent="✓ Saved — check the drawing in the spec sheet, then press Send again";setTimeout(()=>loadShopify(true),1500);}
+  catch(e){if(w)w.close();m.textContent="Couldn’t save: "+e.message;}}
 function payFirst(o){return String(o.customer||"").split(" ")[0]||"there";}
 function payLink(oi){const o=SHOPIFY[oi];if(!o)return;if(!o.invoice_url){alert("No payment link on this draft yet — open it in Shopify and press Send invoice.");return;}
   const ph=waNum(o.phone||(o.shipping_address||{}).phone);
@@ -5492,7 +5517,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     /* signed draft: the team can change the payment method too (customers can also do it from their link) */
     const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed")?payControls(o,oi):"";
     const balCtrl=(i===0&&!o.isDraft&&ROLE!=="factory"&&+o.outstanding>0.5)?balControls(o,oi):"";
-    const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="xtraOpen('+oi+')">＋ Extra charge</button><div id="xtra-'+oi+'" hidden class="payctl"><input id="xt-t-'+oi+'" class="xtin" placeholder="What for — e.g. seat depth 90 → 100 cm" style="flex:1 1 220px"><input id="xt-a-'+oi+'" class="xtin" type="number" min="1" step="0.01" placeholder="AED (incl. VAT)" style="width:130px"><button type="button" class="dbtn main" onclick="xtraAdd('+oi+')">Add to order</button><span class="dmsg" id="xt-m-'+oi+'"></span></div></div>':"";
+    const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="chgOpen('+oi+')">✎ Change order</button><div id="chg-'+oi+'" hidden></div></div>':"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl+xtra):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi));
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
