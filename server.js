@@ -274,7 +274,7 @@ async function cached(name, fetcher, fresh) {
 }
 const byNewest = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''));
 const dedupe = arr => { const seen = new Set(); return arr.filter(o => !seen.has(o.id) && seen.add(o.id)); };
-const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at';
+const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at,total_outstanding';
 /* Only what the dashboard shows: orders not yet shipped + orders shipped in the last few days
    (was: every order ever placed, ~1,800, then filtered). */
 const FETCH = {
@@ -434,7 +434,7 @@ function prodStagesFromTags(tags, nLines) {
 // Strip all pricing from an order/draft before sending to the factory role.
 function stripPrice(o) {
   const c = Object.assign({}, o);
-  delete c.total; delete c.subtotal; delete c.tax; delete c.currency; delete c.financial_status;
+  delete c.total; delete c.subtotal; delete c.tax; delete c.currency; delete c.financial_status; delete c.outstanding;
   c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; return x; });
   if (c.note) c.note = c.note.split('\n').filter(l => !/\bAED\b|total/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n');
   return c;
@@ -497,13 +497,13 @@ async function tagOrder(id, add, dropPrefix) {
 /* the drawing email goes out from the SERVER (EmailJS template_w9lhq6v, BCC contact@nader.ae set in the template) —
    an old dashboard tab can't skip it any more, and the result is recorded (emailed / error) */
 const EMAILJS = { service: 'service_itfuapy', template: 'template_w9lhq6v', key: '0i4e9U2tktd_FGAT_' };
-async function sendDrawingEmail(req, to, params) {
+async function sendDrawingEmail(req, to, params, template) {
   if (!to || !/@/.test(to)) return { emailed: false, error: 'no email address on the order' };
   try {
     const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', { method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Origin': `https://${req.headers.host}`,
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36' },
-      body: JSON.stringify({ service_id: EMAILJS.service, template_id: EMAILJS.template, user_id: EMAILJS.key, template_params: Object.assign({ to_email: to }, params) }) });
+      body: JSON.stringify({ service_id: EMAILJS.service, template_id: template || EMAILJS.template, user_id: EMAILJS.key, template_params: Object.assign({ to_email: to }, params) }) });
     const txt = (await r.text()).slice(0, 200);
     return r.ok ? { emailed: true, to } : { emailed: false, to, error: 'EmailJS ' + r.status + ': ' + txt };
   } catch (e) { return { emailed: false, to, error: e.message }; }
@@ -737,6 +737,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       fulfillment_status: o.fulfillment_status || 'unfulfilled',
       currency: o.currency || '',
       total: o.total_price || '',
+      outstanding: Math.round((+o.total_outstanding || 0) * 100) / 100,   /* extra still to pay after a change */
       subtotal: o.subtotal_price || '',
       tax: o.total_tax || '',
       tags: o.tags || '',
@@ -998,6 +999,46 @@ app.post('/api/draft/payment', requireAuth, async (req, res) => {
 
 // Mark a cash / bank-transfer draft as PAID → completes the draft into a real (paid) order,
 // which moves it out of Drafts and into Orders. (Card orders convert via the checkout link.)
+/* ---------- extra to pay after a change to a PAID order (Mariam 6 Oct): the agent sends the payment request from the
+   dashboard — Shopify never emails the customer. The link is Shopify's own "pay the balance" page for the SAME order. ---------- */
+const BALANCE_TEMPLATE = process.env.BALANCE_TEMPLATE || '';   /* EmailJS template id for the "extra to pay" email */
+app.post('/api/order/balance', requireAuth, async (req, res) => {
+  if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
+  const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), action = String(b.action || 'link');
+  if (!id) return res.status(400).json({ ok: false, error: 'no id' });
+  try {
+    const d = await shopifyGql(`query($id:ID!){ order(id:$id){ name email totalOutstandingSet{ shopMoney{ amount } } paymentCollectionDetails{ additionalPaymentCollectionUrl } customer{ firstName lastName email } } }`, { id: 'gid://shopify/Order/' + id });
+    if (d.errors) throw new Error((d.errors[0] && d.errors[0].message) || 'Shopify error');
+    const o = d.data && d.data.order; if (!o) throw new Error('order not found');
+    const due = Math.round(+((o.totalOutstandingSet || {}).shopMoney || {}).amount * 100) / 100 || 0;
+    const url = (o.paymentCollectionDetails || {}).additionalPaymentCollectionUrl || '';
+    const who = req.session.name || req.session.username, day = uaeNow().slice(0, 10);
+    if (action === 'link') return res.json({ ok: true, due, url });
+    if (due <= 0.5) return res.json({ ok: false, error: 'Nothing left to pay on this order' });
+    if (action === 'email') {
+      if (!BALANCE_TEMPLATE) return res.json({ ok: true, emailed: false, error: 'no-template', due, url });
+      const c = o.customer || {}, to = o.email || c.email || '';
+      const mail = await sendDrawingEmail(req, to, { customer_name: [c.firstName, c.lastName].filter(Boolean).join(' ') || 'there', order_no: o.name, amount: due.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), pay_link: url }, BALANCE_TEMPLATE);
+      if (mail.emailed) tagOrder(id, 'balsent:' + day, 'balsent:').catch(() => {});
+      logEvent(req.session.username, 'balance_email', { id, due, emailed: mail.emailed, ip: clientIp(req) });
+      return res.json({ ok: true, emailed: mail.emailed, to: mail.to || '', error: mail.error || '', due, url });
+    }
+    if (action === 'sent') {   /* sent by WhatsApp / copied — just remember it was sent */
+      tagOrder(id, 'balsent:' + day, 'balsent:').catch(() => {});
+      return res.json({ ok: true });
+    }
+    if (action === 'paid') {   /* paid by cash / bank transfer / Ziina — record it on the same order */
+      const m = await shopifyGql(`mutation($input:OrderMarkAsPaidInput!){ orderMarkAsPaid(input:$input){ order{ id displayFinancialStatus } userErrors{ message } } }`, { input: { id: 'gid://shopify/Order/' + id } });
+      if (m.errors) throw new Error((m.errors[0] && m.errors[0].message) || 'Shopify error');
+      const ue = m.data.orderMarkAsPaid.userErrors; if (ue && ue.length) throw new Error(ue[0].message);
+      tagOrder(id, 'balpaid:' + day + '@' + String(who).replace(/[,]/g, ' '), 'balsent:').catch(() => {});
+      if (CACHE.orders) delete CACHE.orders;
+      logEvent(req.session.username, 'balance_paid', { id, due, ip: clientIp(req) });
+      return res.json({ ok: true, paid: due });
+    }
+    res.status(400).json({ ok: false, error: 'unknown action' });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 app.post('/api/mark_paid', requireAuth, async (req, res) => {
   if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
   const { id } = req.body || {};

@@ -270,6 +270,8 @@
     .sheet{box-shadow:none;max-width:100%;width:100%;transform:none!important;page-break-inside:avoid;margin:0 auto}
     #sheetPhoto{page-break-after:always}
     @page{size:A3 landscape;margin:8mm}}
+.balchip{display:inline-block;padding:4px 11px;border-radius:20px;background:#fdecea;color:#a3221b;font:700 11px var(--ui);letter-spacing:.02em}
+.balctl{flex-wrap:wrap;gap:6px;margin-top:6px}
 </style>
 <!-- ================= LOGIN ================= -->
 <section id="screen-login" class="screen">
@@ -5396,6 +5398,43 @@ async function changePayment(sel,oi){
     const el=document.getElementById("pmsg-"+oi);if(el)el.textContent="✓ Changed to "+PAY_LBL[m].replace(/^\S+\s/,"")+(m==="card"?" — now send the payment link":m==="transfer"?" — now send the bank details":"");}
   catch(e){alert("Couldn't change it: "+e.message);sel.value=o.payment_method||"";sel.disabled=false;}
 }
+/* ---------- extra to pay after a change to a PAID order: sent from here, never by Shopify (Mariam 6 Oct) ---------- */
+const AED2=n=>"AED "+(+n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+function balControls(o,oi){
+  const sent=(String(o.tags||"").match(/balsent:(\d{4}-\d\d-\d\d)/)||[])[1];
+  return '<div class="payctl balctl" onclick="event.stopPropagation()"><span class="balchip">Extra to pay · '+AED2(o.outstanding)+'</span>'
+    +(sent?'<span class="muted" style="font-size:11px">Sent '+esc(sent)+'</span>':'')
+    +'<button type="button" class="dbtn main" onclick="balSend('+oi+',\'email\')">Email payment request</button>'
+    +'<button type="button" class="dbtn" onclick="balSend('+oi+',\'wa\')">WhatsApp link</button>'
+    +'<button type="button" class="dbtn" onclick="balSend('+oi+',\'copy\')">Copy link</button>'
+    +'<button type="button" class="dbtn" onclick="balBank('+oi+')">Send bank details</button>'
+    +'<button type="button" class="dbtn" onclick="balPaid('+oi+')">✓ Mark extra paid</button>'
+    +'<span class="dmsg" id="bmsg-'+oi+'"></span></div>';
+}
+async function balApi(o,action){const r=await fetch("/api/order/balance",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,action})});const d=await r.json();if(!d.ok)throw new Error(d.error||"error");return d;}
+function balMsg(oi,t){const el=document.getElementById("bmsg-"+oi);if(el)el.textContent=t;}
+function balText(o,url,due){return "Hello "+payFirst(o)+",\n\nFollowing the change to your Nader order "+o.order+", the extra amount to pay is "+AED2(due)+".\n\nYou can pay securely by card here:\n"+url+"\n\nThank you!\n— Nader.ae";}
+async function balSend(oi,how){const o=SHOPIFY[oi];if(!o)return;
+  try{
+    if(how==="email"){
+      if(!confirm("Email "+(o.email||"the customer")+" a payment request for "+AED2(o.outstanding)+" on order "+o.order+"?"))return;
+      balMsg(oi,"Sending…");const d=await balApi(o,"email");
+      if(d.emailed){balMsg(oi,"✓ Emailed to "+d.to);o.tags=(o.tags||"")+", balsent:"+new Date().toISOString().slice(0,10);return;}
+      if(d.error==="no-template"){balMsg(oi,"Email isn’t set up yet — use WhatsApp or Copy link");return;}
+      balMsg(oi,"Email failed: "+d.error);return;}
+    balMsg(oi,"…");const d=await balApi(o,"link");if(!d.url){balMsg(oi,"No payment link from Shopify");return;}
+    if(how==="copy"){try{await navigator.clipboard.writeText(d.url);balMsg(oi,"✓ Link copied");}catch(e){prompt("Copy this link:",d.url);balMsg(oi,"");}}
+    else{const ph=waNum(o.phone||(o.shipping_address||{}).phone),msg=balText(o,d.url,d.due);
+      if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(msg),"_blank");else prompt("No phone number — copy and send:",msg);balMsg(oi,"");}
+    balApi(o,"sent").catch(()=>{});
+  }catch(e){balMsg(oi,"Couldn’t do it: "+e.message);}
+}
+function balBank(oi){const o=SHOPIFY[oi];if(!o)return;const ph=waNum(o.phone||(o.shipping_address||{}).phone);
+  const msg="Hello "+payFirst(o)+",\n\nFollowing the change to your Nader order "+o.order+", the extra amount to pay is "+AED2(o.outstanding)+".\n\nHere are our bank details:\n\n"+BANK_TXT+"\n\nPlease use "+o.order+" as the payment reference so we can match your payment.\n\nThank you!\n— Nader.ae";
+  if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(msg),"_blank");else prompt("Copy and send:",msg);balApi(o,"sent").catch(()=>{});}
+async function balPaid(oi){const o=SHOPIFY[oi];if(!o)return;
+  if(!confirm("Has the customer paid the extra "+AED2(o.outstanding)+" on "+o.order+" (cash, bank transfer or Ziina)?\n\nOnly confirm once the money has arrived — this marks the order fully paid in Shopify."))return;
+  try{balMsg(oi,"Saving…");await balApi(o,"paid");o.outstanding=0;balMsg(oi,"✓ Marked paid");setTimeout(()=>loadShopify(true),800);}catch(e){balMsg(oi,"Couldn’t mark paid: "+e.message);}}
 function payFirst(o){return String(o.customer||"").split(" ")[0]||"there";}
 function payLink(oi){const o=SHOPIFY[oi];if(!o)return;if(!o.invoice_url){alert("No payment link on this draft yet — open it in Shopify and press Send invoice.");return;}
   const ph=waNum(o.phone||(o.shipping_address||{}).phone);
@@ -5442,7 +5481,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     /* signed draft: payment method can be changed by the team (no re-signing), + what to send for it, + Mark Paid */
     /* signed draft: the team can change the payment method too (customers can also do it from their link) */
     const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed")?payControls(o,oi):"";
-    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl):"";
+    const balCtrl=(i===0&&!o.isDraft&&ROLE!=="factory"&&+o.outstanding>0.5)?balControls(o,oi):"";
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl):"";
     const prod=esc(it.product)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi));
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
