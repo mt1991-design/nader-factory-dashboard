@@ -172,6 +172,9 @@ body.custview .cust-box{max-width:210mm!important}
 body.custview .refs .ref{width:160px;height:130px}
 @media print{.refs .ref{width:30mm;height:24mm}#sheet:has(.refs.empty) :is(.refs,.refs-h){display:none}}
 @media print{.notes.cnotes [data-k=custNotes]:empty:before{content:none}#sheet:has(.cnotes [data-k=custNotes]:empty) :is(.cnotes,.cnotes-h){display:none}}
+.dimsok-btn{margin-top:4px;padding:5px 10px;border-radius:6px;border:1px solid #1e7d43;background:#e6f4ea;color:#1e7d43;font:700 11px/1.2 -apple-system,Helvetica,Arial,sans-serif;cursor:pointer}
+.dimsok-note{margin-top:3px;font:11px/1.3 -apple-system,Helvetica,Arial,sans-serif;color:#6b655c}
+#warn.ok{background:#eef6f0!important;color:#2f5d3a!important;border-color:#bfdcc8!important}
 </style>
 
 <div class="toolbar">
@@ -2860,8 +2863,12 @@ function photoFlip(){
   img.style.transform=(auto!==!!ORDER.mirror)?"scaleX(-1)":"";
 }
 /* overall drawing status: auto template → complete (unless sizes don't work); manual → whatever the team picked */
+/* "Check dimensions" can be cleared by the team when they've checked the sizes and they're right (the template drawing
+   can't always draw an unusual size). Only for the exact warnings they checked — change the sizes and it asks again. Mariam 7 Oct */
+const dimsSig=()=>JSON.stringify([allErrors(),Object.keys(V||{}).sort().map(k=>k+"="+V[k])]);   /* the warnings AND the sizes that were checked */
+const dimsOk=()=>!!(ORDER.dimsOk&&ORDER.dimsOk.sig===dimsSig());
 function drawStatus(){
-  if(ORDER.model)return allErrors().length?"check":"complete";
+  if(ORDER.model)return allErrors().length&&!dimsOk()?"check":"complete";
   return ORDER.drawStatus==="complete"?"complete":"manual";
 }
 /* "Custom drawing": keep the template's sizes + spec, but show the team's own uploaded drawing instead (Mariam 3 Oct) */
@@ -2954,7 +2961,19 @@ function renderStatus(){
   const box=document.getElementById('statusBox'); if(!box)return;
   const st=drawStatus();
   if(ORDER.model){
-    box.innerHTML=`<div class="v ${st==="check"?"warn":"done"}">${st==="check"?"Check dimensions":"Drawing complete"}</div>`;
+    const cv=document.body.classList.contains('custview');
+    box.innerHTML=`<div class="v ${st==="check"?"warn":"done"}">${st==="check"?"Check dimensions":"Drawing complete"}</div>`
+      +(cv?"":st==="check"?`<button type="button" id="dimsOkBtn" class="noprint dimsok-btn">✓ Sizes checked — they’re fine</button>`
+        :dimsOk()?`<div class="noprint dimsok-note">Sizes checked by ${esc(ORDER.dimsOk.by||"")} · <a href="#" id="dimsUndo">undo</a></div>`:"");
+    const ob=document.getElementById('dimsOkBtn');
+    if(ob)ob.addEventListener('click',()=>{
+      const errs=allErrors();
+      if(!confirm("Mark the sizes as checked and correct?\n\nThe sheet flagged:\n• "+errs.join("\n• ")+"\n\nOnly do this if you've checked the measurements with the order. The status changes to Drawing complete.\nIf any size changes later, it will ask again."))return;
+      ORDER.dimsOk={by:ME||"team",at:Date.now(),sig:dimsSig(),errs};
+      ORDER.log=ORDER.log||[];ORDER.log.push({id:"e"+Date.now().toString(36),t:Date.now(),by:ME||"team",what:"Sizes checked — marked as fine",changes:errs.map(e=>"Flag cleared: "+e)});
+      renderHistory();renderDrawings();save();});
+    const ub=document.getElementById('dimsUndo');
+    if(ub)ub.addEventListener('click',e=>{e.preventDefault();if(isLocked())return;delete ORDER.dimsOk;renderDrawings();save();});
   }else{
     box.innerHTML=`<select id="statusSel" class="stsel ${st==="complete"?"done":"warn"}" aria-label="Drawing status">
       <option value="manual"${st!=="complete"?" selected":""}>Needs manual drawing</option>
@@ -3058,7 +3077,7 @@ function renderDrawings(){
     const fl=M.draw.frontLabel||"Front Elevation";document.body.classList.toggle('is-stool',!!(M.stool||M.kind==='chair'));document.querySelectorAll('.bigfront .cap span').forEach(e=>{e.textContent=fl;});
     const errs=allErrors();
     const ow=document.getElementById('ottWrap'),on=hasOtt(M)&&+V.OTT;ow.hidden=!on;if(on)document.getElementById('ottBody').innerHTML=ottSVG(V);
-    w.innerHTML=errs.map(e=>"• "+esc(e)).join("<br>");w.classList.toggle('show',errs.length>0);
+    w.innerHTML=errs.map(e=>"• "+esc(e)).join("<br>")+(errs.length&&dimsOk()?'<br><b>✓ Checked by '+esc(ORDER.dimsOk.by||'')+' — marked as fine.</b>':'');w.classList.toggle('show',errs.length>0);w.classList.toggle('ok',errs.length>0&&dimsOk());
   }
   renderStatus();photoFlip();renderSpec();applyLock();
 }
