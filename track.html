@@ -1241,14 +1241,14 @@ body{background:transparent}
         if (cls === 'done') { sub = 'Complete'; date = ''; } else if (cls === 'current') { sub = 'In progress now'; date = ''; }   /* no 'since' dates (Mariam 3 Oct) */ else { sub = k > stage + 1 ? 'Planned' : 'Up next'; date = ''; } }
       else if (cls === 'done') { sub = 'Complete'; date = fmt(addDays(sch.starts[k + 1], -1)); }
       else if (cls === 'current') { sub = 'In progress now'; date = 'Since ' + fmt(sch.starts[k]); }
-      else { sub = 'Up next'; date = state.late ? '' : 'From ' + fmt(sch.starts[k]); if (k > stage + 1) sub = 'Planned'; }   /* late: no planned dates that contradict the revised window */
+      else { sub = 'Up next'; date = (state.late || (state.live && state.live.confirm)) ? '' : 'From ' + fmt(sch.starts[k]); if (k > stage + 1) sub = 'Planned'; }   /* late: no planned dates that contradict the revised window */
       li.innerHTML = `<span class="tl-mark">${cls === 'done' ? '<svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true"><path d="M2 5.8 L4.5 8.2 L9 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</span>
         <div><div class="tl-name">${st.name}</div><div class="tl-sub">${sub}</div></div>
         <span class="tl-date">${date}</span>`;
       tl.appendChild(li);
     });
 
-    const late = !!state.late && stage < 11;   /* once it's stored in the warehouse there's no delay message (Mariam 2 Oct) */
+    const late = !!state.late && stage < 11 && !(state.live && state.live.confirm);   /* once it's stored in the warehouse there's no delay message (Mariam 2 Oct) */
     $('delayNote').hidden = !late;
     if (state.live) {
       const L = state.live, D = x => new Date(x + 'T12:00:00'), booked = (L.items.find(x => x.booked) || {}).booked;
@@ -1260,6 +1260,8 @@ body{background:transparent}
         $('windowNote').textContent = 'Our team will call you before arrival.'; }
       else if (stage === 11) {   /* stored: always 'being confirmed', never a date */ $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = 'Being confirmed';   /* past the date: marked late behind the scenes, no delay message */
         $('windowNote').textContent = 'Our team is contacting you to book a delivery time, or you’ve asked us for a later delivery date.'; }
+      else if (L.confirm) { $('windowLabel').textContent = 'Delivery date'; $('windowDates').textContent = 'Being confirmed';
+        $('windowNote').textContent = 'Our team will be in touch to confirm your delivery date.'; }
       else if (late) { $('windowLabel').textContent = 'Delivery date'; $('windowDates').textContent = 'Being confirmed';
         $('windowNote').textContent = 'Our team will be in touch with your new delivery date.'; }
       else { $('windowLabel').textContent = 'Estimated delivery window'; $('windowDates').textContent = L.window.from === L.window.to ? fmt(D(L.window.to), true) : `${fmt(D(L.window.from))} – ${fmt(D(L.window.to), true)}`;
