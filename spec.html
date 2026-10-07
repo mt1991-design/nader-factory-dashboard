@@ -2947,13 +2947,13 @@ function applyLock(){
   const ss=document.getElementById('statusSel'); if(ss)ss.disabled=L;
   if(L){const k=ORDER.locked,when=k.at?new Date(k.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
     box.className="lockbox on noprint";
-    box.innerHTML=`<b>🔒 Drawing locked</b>Drawing complete${when?" · "+esc(when):""}${k.by?" · "+esc(k.by):""}. The template, sizes, photo and drawings can't be changed. Anyone can unlock it to make a change — it's logged with your name.`+(LIVE?`<button type="button" class="unlock" id="unlockBtn">Unlock to edit</button>`:"");
+    box.innerHTML=`<b>🔒 Drawing locked</b>${drawStatus()==="complete"?"Drawing complete":"Locked"}${when?" · "+esc(when):""}${k.by?" · "+esc(k.by):""}. The template, sizes, photo and drawings can't be changed. Anyone can unlock it to make a change — it's logged with your name.`+(LIVE?`<button type="button" class="unlock" id="unlockBtn">Unlock to edit</button>`:"");
     if(false)box.innerHTML+=`<div id="unlockReq" style="margin-top:8px"><textarea id="unlockWhy" rows="2" placeholder="What needs changing?" style="width:100%;box-sizing:border-box;font:inherit;font-size:12px;padding:6px;border:1px solid #cfc3a8;border-radius:6px"></textarea><button type="button" class="unlock" id="unlockAsk">Request admin to unlock</button><div id="unlockMsg" style="font-size:11.5px;margin-top:4px"></div></div>`;
     const ask=document.getElementById('unlockAsk'); if(ask)ask.onclick=requestUnlock;
     const b=document.getElementById('unlockBtn'); if(b)b.onclick=()=>{ORDER.locked=null;ORDER.unlockedBy=ME;startEditLog();applyLock();save();};
-  }else if(LIVE&&drawStatus()==="complete"){
+  }else if(LIVE){   /* every sheet can be locked — custom / manual / "check" ones too (Mariam 7 Oct) */
     box.className="lockbox off noprint";
-    box.innerHTML=`New drawing — you can edit it now; it locks as soon as it's closed and reopened.<button type="button" id="lockBtn">🔒 Lock now</button>`;
+    box.innerHTML=(drawStatus()==="complete"?`New drawing — you can edit it now; it locks as soon as it's closed and reopened.`:`Not locked — you can edit it. Lock it once the drawing is final.`)+`<button type="button" id="lockBtn">🔒 Lock now</button>`;
     document.getElementById('lockBtn').onclick=()=>{recordEdits();delete ORDER._edit;ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
   }else{box.className="";box.innerHTML="";}
   lockCells();renderHistory();renderCustInfo();
