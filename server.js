@@ -1003,7 +1003,7 @@ app.post('/api/draft/payment', requireAuth, async (req, res) => {
 // which moves it out of Drafts and into Orders. (Card orders convert via the checkout link.)
 /* ---------- extra to pay after a change to a PAID order (Mariam 6 Oct): the agent sends the payment request from the
    dashboard — Shopify never emails the customer. The link is Shopify's own "pay the balance" page for the SAME order. ---------- */
-const BALANCE_TEMPLATE = process.env.BALANCE_TEMPLATE || '';   /* EmailJS template id for the "extra to pay" email */
+const BALANCE_TEMPLATE = process.env.BALANCE_TEMPLATE || 'template_yytt6ol';   /* EmailJS "extra payment" template (Mariam 8 Oct) */   /* EmailJS template id for the "extra to pay" email */
 app.post('/api/order/balance', requireAuth, async (req, res) => {
   if (!hasRole(req, 'sales') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'not allowed' });
   const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), action = String(b.action || 'link');
