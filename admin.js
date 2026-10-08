@@ -146,11 +146,14 @@ function renderSales(){
     <div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Order total</th><th>Refunded</th><th>What happened</th></tr></thead><tbody>
     ${refRows.sort((a,b)=>b.d.localeCompare(a.d)).map(r=>{const amt=r.st==="x"?(r.rf>0.5?r.rf:r.t):r.rf;const what=r.cx?("Cancelled "+r.cx+(r.why?" · "+r.why:"")):r.fin==="refunded"?"Fully refunded":r.fin==="voided"?"Voided":"Partly refunded";
       return `<tr><td><b>${esc(r.n)}</b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}</td><td>${aed(r.t)}</td><td><b>${aed(amt)}</b></td><td class="ad-m">${esc(what)}</td></tr>`;}).join("")||'<tr><td colspan="7" class="ad-m">No refunds or cancellations this month.</td></tr>'}</tbody></table></div></div>`;
-  /* overdue list */
-  const lateL=late.slice().sort((a,b)=>b.p.over-a.p.over).slice(0,10);
-  h+=`<div class="ad-card"><div class="ad-h">Most overdue open orders <span>working days past what the customer was promised</span></div>
-    <div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Promised</th><th>Over</th></tr></thead><tbody>
-    ${lateL.map(r=>`<tr><td><b>${esc(r.n)}</b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}</td><td>${r.p.lo}–${r.p.hi} days</td><td><span class="promise late">−${r.p.over}</span></td></tr>`).join("")||'<tr><td colspan="6" class="ad-m">Nothing overdue. 🎉</td></tr>'}</tbody></table></div></div>`;
+  /* overdue list — ALL overdue open orders, most overdue first, scrolls; stage from the live orders list (Mariam 8 Oct) */
+  const lateL=late.slice().sort((a,b)=>b.p.over-a.p.over);
+  const SO=(typeof SHOPIFY!=="undefined"&&Array.isArray(SHOPIFY))?SHOPIFY:[];
+  const stageOf=r=>{const o=SO.find(x=>x.order===r.n);if(!o)return "—";const st=Math.min.apply(null,(o.prod_stages&&o.prod_stages.length?o.prod_stages:[o.prod_stage||0]));
+    return (typeof PROD_STAGES!=="undefined"&&PROD_STAGES[st])||"—";};
+  h+=`<div class="ad-card"><div class="ad-h">Overdue open orders · ${lateL.length} <span>every open order past what the customer was promised, most overdue first — working days over</span></div>
+    <div class="ad-tablewrap ad-scroll"><table class="ad-table"><thead><tr><th>#</th><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Stage now</th><th>Promised</th><th>Over</th></tr></thead><tbody>
+    ${lateL.map((r,k)=>`<tr><td class="ad-m">${k+1}</td><td><b><a href="https://admin.shopify.com/store/91fb05/orders/${r.id}" target="_blank" rel="noopener">${esc(r.n)}</a></b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}${r.it.length>1?` <span class="ad-m">+${r.it.length-1}</span>`:""}</td><td>${esc(stageOf(r))}</td><td>${r.p.lo}–${r.p.hi} days</td><td><span class="promise late">−${r.p.over}</span></td></tr>`).join("")||'<tr><td colspan="8" class="ad-m">Nothing overdue. 🎉</td></tr>'}</tbody></table></div></div>`;
   /* name the Shopify staff accounts */
   const acc=Object.entries(DATA.accounts||{}).sort((a,b)=>b[1].n-a[1].n);
   const ex=uid=>rows().filter(r=>String(r.u)===uid).sort((a,b)=>b.d.localeCompare(a.d)).slice(0,2);
