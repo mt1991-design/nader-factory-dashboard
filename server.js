@@ -1009,7 +1009,7 @@ app.post('/api/order/balance', requireAuth, async (req, res) => {
   const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), action = String(b.action || 'link');
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
   try {
-    const d = await shopifyGql(`query($id:ID!){ order(id:$id){ name email totalOutstandingSet{ shopMoney{ amount } } paymentCollectionDetails{ additionalPaymentCollectionUrl } customer{ firstName lastName email } } }`, { id: 'gid://shopify/Order/' + id });
+    const d = await shopifyGql(`query($id:ID!){ order(id:$id){ name email totalOutstandingSet{ shopMoney{ amount } } paymentCollectionDetails{ additionalPaymentCollectionUrl } } }`   /* no customer{} — the token has no read_customers (it made Shopify refuse the whole request, 8 Oct) */, { id: 'gid://shopify/Order/' + id });
     if (d.errors) throw new Error((d.errors[0] && d.errors[0].message) || 'Shopify error');
     const o = d.data && d.data.order; if (!o) throw new Error('order not found');
     const due = Math.round(+((o.totalOutstandingSet || {}).shopMoney || {}).amount * 100) / 100 || 0;
@@ -1019,8 +1019,10 @@ app.post('/api/order/balance', requireAuth, async (req, res) => {
     if (due <= 0.5) return res.json({ ok: false, error: 'Nothing left to pay on this order' });
     if (action === 'email') {
       if (!BALANCE_TEMPLATE) return res.json({ ok: true, emailed: false, error: 'no-template', due, url });
-      const c = o.customer || {}, to = o.email || c.email || '';
-      const mail = await sendDrawingEmail(req, to, { customer_name: [c.firstName, c.lastName].filter(Boolean).join(' ') || 'there', order_no: o.name, amount: due.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), pay_link: url }, BALANCE_TEMPLATE);
+      const ro = (await cached('orders', FETCH.orders, false)).find(x => String(x.id) === id) || {};
+      const to = o.email || ro.email || ((ro.customer || {}).email) || '';
+      const nm = String(bestName(ro.customer, ro.note, ro.email) || '').trim();
+      const mail = await sendDrawingEmail(req, to, { customer_name: nm && !/@/.test(nm) ? nm : 'there', order_no: o.name, amount: due.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), pay_link: url }, BALANCE_TEMPLATE);
       if (mail.emailed) tagOrder(id, 'balsent:' + day, 'balsent:').catch(() => {});
       logEvent(req.session.username, 'balance_email', { id, due, emailed: mail.emailed, ip: clientIp(req) });
       return res.json({ ok: true, emailed: mail.emailed, to: mail.to || '', error: mail.error || '', due, url });
