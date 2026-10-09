@@ -347,7 +347,7 @@ openOrderDetail=function(o){
   const html=lines.map(i=>{const L=lineInfo(o,i),shipped=o.state==="shipped";
     const steps=STG.map((s,k)=>{const done=shipped||k<L.cur,cur=!shipped&&k===L.cur;const who=crewList(o,i,k).map(a=>a.n).join(", ");const when=k===0?(lineDrawn(o,i)?"Drawing complete":"Awaiting drawing"):k===6?((o.delivery||{})[i]?fmtDelivery(o.delivery[i]):""):(L.pd[k]?"Started "+L.pd[k].slice(8,10)+"/"+L.pd[k].slice(5,7)+" "+L.pd[k].slice(11,16):"");
       return `<div class="s${done?" d":cur?" c":""}"><span class="b">${done?"✓":k+1}</span><div><div class="n">${s}${cur?' <span class="wr-age'+(L.days>=LATE[k]?" late":"")+'">'+L.days+"d</span>":""}</div><div class="m">${esc([who,when].filter(Boolean).join(" · "))||(done||cur?"":"Not started")}</div></div><span></span></div>`;}).join("");
-    return ((lines.length>1||(+o.items[i].qty||1)>1)?`<div class="wr-line">${esc(o.items[i].product)}${(+o.items[i].qty||1)>1?` <b style="color:#6B1A22">×${o.items[i].qty} pieces</b>`:""}</div>`:"")+`<div class="wr-vt">${steps}</div>`;}).join("");
+    return ((lines.length>1||(+o.items[i].qty||1)>1)?`<div class="wr-line">${esc(o.items[i].product)}${(+o.items[i].qty||1)>1?` <b style="display:inline-block;margin-left:6px;padding:2px 9px;border-radius:20px;background:#6D28D9;color:#fff;font-size:11.5px;letter-spacing:.05em">×${o.items[i].qty} PIECES</b>`:""}</div>`:"")+`<div class="wr-vt">${steps}</div>`;}).join("");
   if(notesEl) notesEl.insertAdjacentHTML("afterend",`<div class="odsec"><h4>Production</h4>${html}</div>`); else $("od-body").insertAdjacentHTML("afterbegin",`<div class="odsec"><h4>Production</h4>${html}</div>`);
 };
 
