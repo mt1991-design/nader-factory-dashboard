@@ -113,7 +113,8 @@
 /* ---- customer mode (/drawing?t=…): just the drawing + the approval box ---- */
 body.custview #sheet .notes:not(.cnotes),body.custview aside.ed,body.custview .foot,body.custview #backLink,body.custview #savedSel,body.custview #saveState,body.custview #lockBox,body.custview #statusBox{display:none!important}
 body.custview .wrap{display:block!important;max-width:1100px;margin:0 auto}
-body.custview .sheet-scroll{display:flex;justify-content:center}
+body.custview .sheet-scroll{display:flex;justify-content:safe center}
+body.custview .mdraw-acts,body.custview .upbtn,body.custview [data-up],body.custview [data-rm],body.custview .ref-add,body.custview .ref-rm{display:none!important}   /* customers never see Replace / Remove / upload */
 body.custview .cust-box{max-width:210mm!important}
 .cust-box{max-width:820px;margin:18px auto 14px;box-sizing:border-box;width:calc(100% - 24px);padding:20px 22px;border-radius:12px;background:#fffdf8;border:1px solid #e3d6bb;box-shadow:0 2px 10px rgba(40,30,20,.06);font-size:14.5px;line-height:1.55;color:#2b2621}
 .cust-box h2{margin:0 0 6px;font:600 21px/1.25 Georgia,'Times New Roman',serif;color:#6B1A22}
@@ -144,8 +145,10 @@ body.custview .cust-box{max-width:210mm!important}
 #histBox .muted,#custInfo .muted{color:#9a907f;font-weight:400;text-transform:none;letter-spacing:0}
 /* phones: a real mobile layout (not a shrunken A4) — drawings full width, details stacked */
 @media (max-width:760px){
-  body.custview .sheet{width:auto!important;min-height:0!important;padding:12px 10px!important;box-shadow:none!important}
-  body.custview .sheet-scroll{overflow:visible}
+  body.custview .sheet{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box;min-height:0!important;padding:12px 10px!important;box-shadow:none!important}
+  body.custview .sheet-scroll{display:block!important;overflow:visible}   /* phones: the sheet fits the screen (was cut off on the left, 9 Oct) */
+  body.custview #sheet *{min-width:0}
+  body.custview .mdraw img,body.custview .panel .body img,body.custview #photo{max-width:100%!important;height:auto!important}
   body.custview .wrap{padding:0 0 30px!important}
   body.custview .grid2c{grid-template-columns:1fr!important}
   body.custview .spec{grid-template-columns:1fr 1fr!important}

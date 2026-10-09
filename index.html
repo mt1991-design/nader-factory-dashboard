@@ -5194,13 +5194,9 @@ function dMsg(oi,i,t){const el=document.getElementById("dmsg-"+oi+"-"+i);if(el)e
 function waNum(p){let d=String(p||"").replace(/\D/g,"");if(d.startsWith("00"))d=d.slice(2);if(d.startsWith("05")&&d.length===10)d="971"+d.slice(1);return d;}
 /* the customer's drawing page shows the SAVED sheet — an auto-drawn line nobody has opened yet has none, so its link
    said "This link isn't available" (test on #29292855, 9 Oct). Before sending, open the sheet invisibly once so it saves. */
-async function ensureSheet(o,i){
-  const key=specKey(lineId(o,i)),has=async()=>{try{const r=await fetch("/api/spec?id="+encodeURIComponent(key),{credentials:"same-origin"});const d=await r.json();return !!(d&&d.ok&&d.data);}catch(e){return false;}};
-  if(await has())return true;
-  const f=document.createElement("iframe");f.style.cssText="position:fixed;width:1200px;height:900px;left:-3000px;top:0;opacity:0;pointer-events:none";f.setAttribute("aria-hidden","true");
-  f.src="/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:key}).toString();document.body.appendChild(f);
-  let ok=false;for(let k=0;k<12&&!ok;k++){await new Promise(r=>setTimeout(r,1500));ok=await has();}
-  f.remove();if(ok&&!SAVED_SPECS.has(key))SAVED_SPECS.set(key,{});return ok;
+async function ensureSheet(o,i){   /* never send a drawing nobody has opened and checked (Mariam 9 Oct) — the customer page needs the saved sheet */
+  const key=specKey(lineId(o,i));
+  try{const r=await fetch("/api/spec?id="+encodeURIComponent(key),{credentials:"same-origin"});const d=await r.json();return !!(d&&d.ok&&d.data);}catch(e){return false;}
 }
 async function drawSend(oi,i){
   const o=SHOPIFY[oi];if(!o)return;
@@ -5208,7 +5204,7 @@ async function drawSend(oi,i){
   const ph0=waNum(o.phone||(o.shipping_address||{}).phone),win=ph0?window.open("about:blank","_blank"):null;   /* open inside the click — or it's blocked as a pop-up */
   dMsg(oi,i,"Preparing the drawing…");
   try{
-    if(!(await ensureSheet(o,i)))throw new Error("the spec sheet couldn’t be saved — open it once with 📄 Check drawing, then send again");
+    if(!(await ensureSheet(o,i)))throw new Error("open and check the drawing first (📄 Check drawing), then send");
     dMsg(oi,i,"Sending…");
     const r=await fetch("/api/drawing/send",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i})});const d=await r.json();
     if(!d.ok)throw new Error(d.error||"error");
@@ -5226,7 +5222,7 @@ async function drawTest(oi,i){
   const o=SHOPIFY[oi];if(!o)return;
   const to=prompt("Send a TEST drawing email to (nothing is saved, the customer gets nothing):",(USER&&USER.email)||"contact@nader.ae");if(!to||!/@/.test(to))return;
   dMsg(oi,i,"Preparing the drawing…");
-  try{if(!(await ensureSheet(o,i)))throw new Error("the spec sheet couldn’t be saved — open it once with 📄 Check drawing, then try again");
+  try{if(!(await ensureSheet(o,i)))throw new Error("open and check the drawing first (📄 Check drawing), then try again");
     dMsg(oi,i,"Sending test…");
     const r=await fetch("/api/drawing/test-link",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:o.id,line:i,to:to.trim(),name:o.customer||"",order:o.order,product:(o.items[i]||{}).product||""})});const d=await r.json();
     if(!d.ok)throw new Error(d.error||"error");
