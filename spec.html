@@ -176,6 +176,8 @@ body.custview .refs .ref{width:160px;height:130px}
 .dimsok-note{margin-top:3px;font:11px/1.3 -apple-system,Helvetica,Arial,sans-serif;color:#6b655c}
 #warn.ok{background:#eef6f0!important;color:#2f5d3a!important;border-color:#bfdcc8!important}
 .draw-hint{margin:6px 0 10px;padding:8px 10px;border-radius:8px;background:#fdf0d5;color:#7a5200;font-size:12px;line-height:1.45}
+.cb-final{margin:4px 0 14px;padding:12px 14px;border-radius:8px;background:#fdf0d5;border:1px solid #e8cf9a;color:#5c3f00;font-size:13.5px;line-height:1.55}
+.cb-final a{color:#6B1A22;font-weight:600}
 </style>
 
 <div class="toolbar">
@@ -3303,7 +3305,8 @@ async function custBoot(){
     box.innerHTML=`<h2>Please check your drawing</h2>
       <p>Check the sizes and details below. If everything is right, tick the box and approve it. If something needs changing, tell us and our team will update the drawing for you.</p>
       ${last?`<div class="cb-note">We received your change request on ${fmtDay(last.t)}. Our team will send you an updated drawing.</div>`:''}
-      <label class="cb-tick"><input type="checkbox" id="cbAgree"> I’ve checked the drawing and the sizes and details are correct.</label>
+      <div class="cb-final"><b>Please note:</b> once you approve this drawing it is final and we start making your piece. After approval we can’t make any further changes, including to the sizes, fabric or any other details. By approving, you also accept our <a href="https://nader.ae/pages/terms-conditions" target="_blank" rel="noopener">Terms &amp; Conditions</a>.</div>
+      <label class="cb-tick"><input type="checkbox" id="cbAgree"> I’ve checked the drawing, the sizes and details are correct, and I understand no changes can be made after I approve it.</label>
       <input id="cbName" class="cb-in" placeholder="Your name" autocomplete="name">
       <div class="cb-acts"><button type="button" id="cbApprove" class="cb-main">Approve drawing</button><button type="button" id="cbChangeBtn" class="cb-sec">Request a change</button></div>
       <div id="cbChange" hidden><textarea id="cbText" rows="3" class="cb-in" placeholder="Tell us what needs changing — for example a size, the chaise side or the legs."></textarea><button type="button" id="cbSend" class="cb-sec">Send request</button></div>
