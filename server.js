@@ -321,6 +321,11 @@ function custName(c) {
   if (!c) return '';
   return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || '';
 }
+/* a paid order whose Shopify line says 1 but the customer ordered more (e.g. 2 chairs on one line): tag "qty:2=2" = line 2 has 2 pieces */
+function qtyTags(items, tags) {
+  String(tags || '').split(',').forEach(t => { const m = t.trim().match(/^qty:(\d+)=(\d+)$/i); if (m && items[+m[1] - 1]) items[+m[1] - 1].qty = +m[2]; });
+  return items;
+}
 function mapLineItems(arr) {
   return (arr || []).map(li => ({
     product: li.title,
@@ -758,7 +763,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       promise: promiseOf(o),
       prod_stage: Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)),  // order-level = least-advanced line
       state: orderState(o),   // open | shipped | refunded  (safe to expose to factory — not price)
-      items: mapLineItems(o.line_items)
+      items: qtyTags(mapLineItems(o.line_items), o.tags)
     }));
     const out = factoryOnly(req) ? orders.map(stripPrice) : orders;
     let stats = raw; try { stats = await cached('stats', FETCH.stats, false); } catch (e) {}
@@ -803,7 +808,7 @@ app.get('/api/draft_orders', requireAuth, async (req, res) => {
       shipping_address: mapAddress(d.shipping_address),
       billing_address: mapAddress(d.billing_address),
       admin_url: `https://${STORE}/admin/draft_orders/${d.id}`,
-      items: mapLineItems(d.line_items)
+      items: qtyTags(mapLineItems(d.line_items), d.tags)
     }));
     const out = factoryOnly(req) ? drafts.map(stripPrice) : drafts;
     { let nts = {}; try { nts = await notesDoc(false); } catch (e) {} out.forEach(o => { o.tnotes = nts[o.id] || []; }); }
