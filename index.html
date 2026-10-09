@@ -5184,7 +5184,7 @@ function drawCtl(o,i,oi){
   if(!st.approved){
     h+=B("specLineItem('"+oq+"',"+i+")","📄 Check drawing");
     h+=B("drawSend("+oi+","+i+")",(resign||changed)?"Send to customer":st.sent?"Send again":"Send to customer","main");
-    if(st.sent&&st.sent.link)h+=B("drawCopy("+oi+","+i+")","Copy link");
+    if(st.sent&&st.sent.link)h+=B("drawCopy("+oi+","+i+")","Copy drawing link");
   }
   if(ROLES_HAS_ADMIN())h+=B("drawTest("+oi+","+i+")","✉ Test to me");
   return h+'<span class="dmsg" id="dmsg-'+oi+'-'+i+'"></span></div>';
@@ -5409,8 +5409,8 @@ function balControls(o,oi){
   return '<div class="payctl balctl" onclick="event.stopPropagation()"><span class="balchip">Extra to pay · '+AED2(o.outstanding)+'</span>'
     +(sent?'<span class="muted" style="font-size:11px">Sent '+esc(sent)+'</span>':'')
     +'<button type="button" class="dbtn main" onclick="balSend('+oi+',\'email\')">Email payment request</button>'
-    +'<button type="button" class="dbtn" onclick="balSend('+oi+',\'wa\')">WhatsApp link</button>'
-    +'<button type="button" class="dbtn" onclick="balSend('+oi+',\'copy\')">Copy link</button>'
+    +'<button type="button" class="dbtn" onclick="balSend('+oi+',\'wa\')">WhatsApp payment link</button>'
+    +'<button type="button" class="dbtn" onclick="balSend('+oi+',\'copy\')">Copy payment link</button>'
     +'<button type="button" class="dbtn" onclick="balBank('+oi+')">Send bank details</button>'
     +'<button type="button" class="dbtn" onclick="balPaid('+oi+')">✓ Mark extra paid</button>'
     +'<span class="dmsg" id="bmsg-'+oi+'"></span></div>';
@@ -5424,12 +5424,14 @@ async function balSend(oi,how){const o=SHOPIFY[oi];if(!o)return;
       if(!confirm("Email "+(o.email||"the customer")+" a payment request for "+AED2(o.outstanding)+" on order "+o.order+"?"))return;
       balMsg(oi,"Sending…");const d=await balApi(o,"email");
       if(d.emailed){balMsg(oi,"✓ Emailed to "+d.to);o.tags=(o.tags||"")+", balsent:"+new Date().toISOString().slice(0,10);return;}
-      if(d.error==="no-template"){balMsg(oi,"Email isn’t set up yet — use WhatsApp or Copy link");return;}
+      if(d.error==="no-template"){balMsg(oi,"Email isn’t set up yet — use WhatsApp or Copy payment link");return;}
       balMsg(oi,"Email failed: "+d.error);return;}
-    balMsg(oi,"…");const d=await balApi(o,"link");if(!d.url){balMsg(oi,"No payment link from Shopify");return;}
+    const ph0=how==="wa"?waNum(o.phone||(o.shipping_address||{}).phone):"",win=ph0?window.open("about:blank","_blank"):null;   /* open now (click), fill after — or it's blocked as a pop-up */
+    balMsg(oi,"…");let d;try{d=await balApi(o,"link");}catch(e){if(win)win.close();throw e;}if(!d.url){if(win)win.close();balMsg(oi,"No payment link from Shopify");return;}
     if(how==="copy"){try{await navigator.clipboard.writeText(d.url);balMsg(oi,"✓ Link copied");}catch(e){prompt("Copy this link:",d.url);balMsg(oi,"");}}
     else{const ph=waNum(o.phone||(o.shipping_address||{}).phone),msg=balText(o,d.url,d.due);
-      if(ph)window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(msg),"_blank");else prompt("No phone number — copy and send:",msg);balMsg(oi,"");}
+      const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(msg);
+      if(ph&&win)win.location=wa;else if(ph)window.open(wa,"_blank");else prompt("No phone number — copy and send:",msg);balMsg(oi,ph?"✓ WhatsApp opened":"");}
     balApi(o,"sent").catch(()=>{});
   }catch(e){balMsg(oi,"Couldn’t do it: "+e.message);}
 }
