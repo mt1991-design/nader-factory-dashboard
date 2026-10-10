@@ -178,7 +178,7 @@
   th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
   th.sortable:hover,th.sortable.on{color:var(--ox)}
   .sortarr{font-size:9px;opacity:.7}
-  .promise{display:inline-block;min-width:34px;text-align:center;padding:3px 9px;border-radius:20px;font:700 13px var(--mono)}
+  .promise{display:inline-block;min-width:34px;text-align:center;padding:3px 9px;border-radius:20px;font:700 13px var(--mono);white-space:nowrap}
   .promise.ok{background:rgba(47,122,58,.14);color:#2f7a3a}
   .promise.late{background:rgba(179,38,30,.12);color:#b3261e}
   .promise-u{display:block;font:500 10px var(--ui);color:var(--ink2);margin-top:3px}
@@ -4868,7 +4868,9 @@ function promiseCell(o){
   if(o.isDraft||o.state!=="open"||!o.promise)return "";
   const p=o.promise, left=p.hi-p.wd, cls=left>0?"ok":"late";
   const tip=(p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'” (by '+p.to+')':'Standard '+p.lo+'–'+p.hi+' working days (no delivery-date tag on the order)')+' · '+p.wd+' working days since the order';
-  return '<span class="promise '+cls+'" title="'+tip+'">'+(left<0?'−'+Math.abs(left):left)+'</span><span class="promise-u">working days</span>';
+  /* a window, not just the last day: 21–40 today, 20–39 tomorrow … "0–5" once the first day has passed, then −1, −2 when overdue */
+  const first=Math.max(0,p.lo-p.wd), txt=left<0?'−'+Math.abs(left):(first<left?first+'–'+left:String(left));
+  return '<span class="promise '+cls+'" title="'+tip+'">'+txt+'</span><span class="promise-u">working days</span>';
 }
 function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some((it,i)=>isFurnitureLine(it.product)&&!lineDrawn(o,i)); }
 function buildFilters(){
