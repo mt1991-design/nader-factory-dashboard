@@ -275,7 +275,7 @@ async function cached(name, fetcher, fresh) {
 }
 const byNewest = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''));
 const dedupe = arr => { const seen = new Set(); return arr.filter(o => !seen.has(o.id) && seen.add(o.id)); };
-const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at,total_outstanding';
+const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at,total_outstanding,shipping_lines';
 /* Only what the dashboard shows: orders not yet shipped + orders shipped in the last few days
    (was: every order ever placed, ~1,800, then filtered). */
 const FETCH = {
@@ -295,7 +295,7 @@ const FETCH = {
   /* Admin sales insights: every order from the last 13 months (paged; ~1,000 orders) */
   adminSales: async () => {
     const since = new Date(Date.now() - 400 * 864e5).toISOString();
-    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,current_total_price,financial_status,cancelled_at,cancel_reason,fulfillment_status,line_items,note,tags,user_id,source_name,shipping_address`, 12);
+    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,current_total_price,financial_status,cancelled_at,cancel_reason,fulfillment_status,line_items,note,tags,shipping_lines,user_id,source_name,shipping_address`, 12);
   },
   /* completed drafts already appear as orders — only open / invoice-sent drafts are needed (was: all ~1,500) */
   drafts: async () => {
@@ -382,7 +382,9 @@ function stageDatesFromTags(tags) {
 }
 const uaeNow = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16);   // UAE = UTC+4, no DST
 // Delivery promised to the customer (Mariam 10 Oct): a delivery-date TAG on the order ("14th to 22 oct", "Delivery 5th of October",
-// "End of October", "03.10 max") wins; every other order is the standard 21–40 working days. The order note is NOT read any more.
+// "End of October", "03.10 max") wins. Otherwise it is what THAT order was sold with — the delivery method Shopify saved on it
+// ("Standard Delivery 7 to 21 Working Days" up to 19 Sep 2026, "21 to 40 Working Days" since). Orders with no delivery method
+// (sales-form drafts) go by the same changeover date. The order note is NOT read.
 // Working days = Mon–Fri, counted from the order date (recomputed on every request, so the overdue list updates itself daily).
 function workingDaysSince(iso) {
   const start = new Date(String(iso).slice(0, 10) + 'T00:00:00+04:00'), now = new Date(Date.now() + 4 * 3600e3);
@@ -390,7 +392,15 @@ function workingDaysSince(iso) {
   while (true) { d.setUTCDate(d.getUTCDate() + 1); if (d > now) break; const wd = d.getUTCDay(); if (wd !== 0 && wd !== 6) n++; }
   return n;
 }
-const PROMISE_STD = { lo: 21, hi: 40 };
+const PROMISE_STD = { lo: 21, hi: 40 }, PROMISE_OLD = { lo: 7, hi: 21 };
+const PROMISE_SWITCH = '2026-09-19T13:00';   /* UAE time: first "21 to 40" order was #29292774 at 13:17, last "7 to 21" #29292773 at 12:15 */
+function shippingPromise(o) {
+  for (const sl of (o.shipping_lines || [])) { const m = String(sl.title || '').match(/(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:working|business)\s*days/i);
+    if (m && +m[1] <= +m[2]) return { lo: +m[1], hi: +m[2], src: 'shopify', method: sl.title }; }
+  const uae = o.created_at ? new Date(Date.parse(o.created_at) + 4 * 3600e3).toISOString().slice(0, 16) : '';
+  const std = uae && uae < PROMISE_SWITCH ? PROMISE_OLD : PROMISE_STD;
+  return { lo: std.lo, hi: std.hi, src: 'date' };
+}
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 /* a free-text delivery tag → { from, to } dates (yyyy-mm-dd), or null when it isn't a date */
 function tagDates(tag, createdIso) {
@@ -429,7 +439,8 @@ function promiseOf(o) {
   String(o.tags || '').split(',').forEach(tg => { const r = tagDates(tg, created); if (r && (!best || r.to > best.to)) best = { from: r.from, to: r.to, tag: tg.trim() }; });
   if (best) { const lo = workDaysBetween(created, best.from), hi = workDaysBetween(created, best.to);
     return { lo, hi, src: 'tag', tag: best.tag, from: best.from, to: best.to, wd, over: wd - hi }; }
-  return { lo: PROMISE_STD.lo, hi: PROMISE_STD.hi, src: 'standard', wd, over: wd - PROMISE_STD.hi };
+  const sp = shippingPromise(o);
+  return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi };
 }
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
 // Stays hidden until there are ≥5 finished lines AND ≥3 weeks since the first timed stage, so it's based on real data.

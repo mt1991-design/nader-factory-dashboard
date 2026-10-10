@@ -4863,7 +4863,7 @@ function drawTypeChip(title,o,i){
   if(isFurnitureLine(title))return '<span class="dwchip manual" title="No CAD template yet — draw by hand">✎ Needs manual drawing</span>';
   return "";
 }
-/* working days (Mon–Fri) left until the delivery promised to the customer: a delivery-date tag on the order, else the standard 21–40 working days.
+/* working days (Mon–Fri) left until the delivery promised to the customer: a delivery-date tag on the order, else the delivery method saved on that order in Shopify (7–21 before 19 Sep 2026, 21–40 since).
    Worked out fresh on every load, so it counts down by itself each day. Green = days in hand, red = 0 or past it (−1, −2 …). */
 function promiseCell(o){
   if(o.isDraft||o.state!=="open"||!o.promise)return "";
@@ -4872,7 +4872,7 @@ function promiseCell(o){
      Tags work the same way: "14th to 22 oct" is green until the 14th, orange until the 22nd. */
   const p=o.promise, toFirst=p.lo-p.wd, toLast=p.hi-p.wd;
   const cls=toFirst>0?"ok":toLast>0?"mid":"late", n=toLast;
-  const what=p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'”':'Standard '+p.lo+'–'+p.hi+' working days (no delivery-date tag on the order)';
+  const what=p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'”':p.lo+'–'+p.hi+' working days ('+(p.src==="shopify"?'the delivery method on this order in Shopify':'no delivery method on the order — the standard at the time it was placed')+')';
   const phase=cls==="ok"?'Green: working days until the last promised day (the first promised day has not passed yet)':cls==="mid"?'Orange: inside the delivery window — working days until the last promised day':'Red: past the last promised day';
   const tip=what+' · '+p.wd+' working days since the order · '+phase;
   return '<span class="promise '+cls+'" title="'+tip+'">'+(n<0?'−'+Math.abs(n):n)+'</span><span class="promise-u">working days</span>';
