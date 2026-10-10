@@ -295,7 +295,7 @@ const FETCH = {
   /* Admin sales insights: every order from the last 13 months (paged; ~1,000 orders) */
   adminSales: async () => {
     const since = new Date(Date.now() - 400 * 864e5).toISOString();
-    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,current_total_price,financial_status,cancelled_at,cancel_reason,fulfillment_status,line_items,note,user_id,source_name,shipping_address`, 12);
+    return shopify(`orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,created_at,total_price,current_total_price,financial_status,cancelled_at,cancel_reason,fulfillment_status,line_items,note,tags,user_id,source_name,shipping_address`, 12);
   },
   /* completed drafts already appear as orders — only open / invoice-sent drafts are needed (was: all ~1,500) */
   drafts: async () => {
@@ -381,23 +381,55 @@ function stageDatesFromTags(tags) {
   return out;
 }
 const uaeNow = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16);   // UAE = UTC+4, no DST
-// Lead time promised to the customer: read from the order note ("30–40 working days", "31 working days"),
-// otherwise the website's standard 7–21 working days. Working days = Mon–Fri, counted from the order date
-// (recomputed on every request, so the "past the promise window" list updates itself daily).
+// Delivery promised to the customer (Mariam 10 Oct): a delivery-date TAG on the order ("14th to 22 oct", "Delivery 5th of October",
+// "End of October", "03.10 max") wins; every other order is the standard 21–40 working days. The order note is NOT read any more.
+// Working days = Mon–Fri, counted from the order date (recomputed on every request, so the overdue list updates itself daily).
 function workingDaysSince(iso) {
   const start = new Date(String(iso).slice(0, 10) + 'T00:00:00+04:00'), now = new Date(Date.now() + 4 * 3600e3);
   let n = 0; const d = new Date(start.getTime());
   while (true) { d.setUTCDate(d.getUTCDate() + 1); if (d > now) break; const wd = d.getUTCDay(); if (wd !== 0 && wd !== 6) n++; }
   return n;
 }
+const PROMISE_STD = { lo: 21, hi: 40 };
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/* a free-text delivery tag → { from, to } dates (yyyy-mm-dd), or null when it isn't a date */
+function tagDates(tag, createdIso) {
+  const t = String(tag || '').toLowerCase().trim();
+  if (!t || /^[a-z_]+:/.test(t) || t.indexOf('@') >= 0 || /^quote\b/.test(t) || /^\+?\d{7,}$/.test(t)) return null;
+  const cy = +String(createdIso).slice(0, 4) || new Date().getUTCFullYear(), c0 = Date.parse(String(createdIso).slice(0, 10) + 'T00:00:00Z') || Date.now();
+  const mk = (m, d) => { let y = cy, ms = Date.UTC(y, m, d); if (ms < c0 - 45 * 864e5) ms = Date.UTC(++y, m, d); return new Date(ms).toISOString().slice(0, 10); };
+  const last = m => new Date(Date.UTC(cy, m + 1, 0)).getUTCDate();
+  const out = [];
+  let m = t.match(/\b(\d{1,2})[./](\d{1,2})\b/);                                   /* 03.10 max · 29.09 delivery */
+  if (m && +m[1] >= 1 && +m[1] <= 31 && +m[2] >= 1 && +m[2] <= 12) out.push(mk(+m[2] - 1, +m[1]));
+  else {
+    const toks = []; t.replace(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|(\d{1,2})(?!\d)/g, (all, mon, num) => { toks.push(mon ? { m: MONTHS.indexOf(mon) } : { d: +num }); return all; });
+    const months = toks.filter(x => 'm' in x); if (!months.length) return null;
+    const days = toks.filter(x => 'd' in x && x.d >= 1 && x.d <= 31);
+    if (days.length) toks.forEach((x, k) => { if (!('d' in x) || x.d < 1 || x.d > 31) return;
+      const next = toks.slice(k + 1).find(y => 'm' in y), prev = toks.slice(0, k).reverse().find(y => 'm' in y);
+      const adj = toks[k + 1] && 'm' in toks[k + 1] ? toks[k + 1] : null;   /* "26oct to 3rd of nov": each number takes the month right after it, else the one before */
+      out.push(mk((adj || prev || next).m, x.d)); });
+    else { const mo = months[0].m;                                                   /* End of October · First week of October */
+      const w = /\b(end|late|last week|fourth week)\b/.test(t) ? [24, last(mo)] : /\b(first week|early|beginning|start)\b/.test(t) ? [1, 7] : /\bsecond week\b/.test(t) ? [8, 14] : /\bmid|middle\b/.test(t) ? [12, 18] : /\bthird week\b/.test(t) ? [15, 21] : null;
+      if (!w) return null; out.push(mk(mo, w[0]), mk(mo, w[1])); }
+  }
+  if (!out.length) return null; out.sort();
+  return { from: out[0], to: out[out.length - 1] };
+}
+/* working days (Mon–Fri) from the order date up to and including a date */
+function workDaysBetween(fromIso, toIso) {
+  const d = new Date(String(fromIso).slice(0, 10) + 'T12:00:00Z'), end = new Date(String(toIso).slice(0, 10) + 'T12:00:00Z'); let n = 0;
+  while (d < end) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
 function promiseOf(o) {
-  const note = String(o.note || '');
-  let m = note.match(/(\d{1,3})\s*(?:-|–|—|to)\s*(\d{1,3})\s*(?:working|business)?\s*days?/i), lo, hi, src = 'note';
-  if (m) { lo = +m[1]; hi = +m[2]; }
-  else if ((m = note.match(/(\d{1,3})\s*(?:working|business)\s*days/i))) { lo = hi = +m[1]; }
-  else { lo = 7; hi = 21; src = 'standard'; }
-  const wd = workingDaysSince(o.created_at || '');
-  return { lo, hi, src, wd, over: wd - hi };
+  const created = String(o.created_at || '').slice(0, 10), wd = workingDaysSince(o.created_at || '');
+  let best = null;   /* several date tags on one order: the latest date is the current promise */
+  String(o.tags || '').split(',').forEach(tg => { const r = tagDates(tg, created); if (r && (!best || r.to > best.to)) best = { from: r.from, to: r.to, tag: tg.trim() }; });
+  if (best) { const lo = workDaysBetween(created, best.from), hi = workDaysBetween(created, best.to);
+    return { lo, hi, src: 'tag', tag: best.tag, from: best.from, to: best.to, wd, over: wd - hi }; }
+  return { lo: PROMISE_STD.lo, hi: PROMISE_STD.hi, src: 'standard', wd, over: wd - PROMISE_STD.hi };
 }
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
 // Stays hidden until there are ≥5 finished lines AND ≥3 weeks since the first timed stage, so it's based on real data.
@@ -707,7 +739,7 @@ app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async
     /* ordered MORE than 14 days ago: never an estimated date — delivery "Being confirmed", no delay message (Mariam 7 Oct) */
     const confirm = (Date.parse(uaeNow().slice(0, 10)) - Date.parse(created)) / 864e5 > 14;
     res.json({ ok: true, order: o.name, items, late: !confirm && pr.over > 0 && slow < 11, overdue: pr.over > 0,   /* stored+: no delay message, but overdue keeps 'Being confirmed' */
-      confirm, window: confirm ? null : { from: addWorkDays(created, pr.lo), to: addWorkDays(created, pr.hi) }, today: uaeNow().slice(0, 10) });
+      confirm, window: confirm ? null : (pr.src === 'tag' ? { from: pr.from, to: pr.to } : { from: addWorkDays(created, pr.lo), to: addWorkDays(created, pr.hi) }), today: uaeNow().slice(0, 10) });
   } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
 });
 

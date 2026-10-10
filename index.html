@@ -4862,12 +4862,12 @@ function drawTypeChip(title,o,i){
   if(isFurnitureLine(title))return '<span class="dwchip manual" title="No CAD template yet — draw by hand">✎ Needs manual drawing</span>';
   return "";
 }
-/* working days (Mon–Fri) left until the lead time promised to the customer (order note, else the standard 7–21 working days).
+/* working days (Mon–Fri) left until the delivery promised to the customer: a delivery-date tag on the order, else the standard 21–40 working days.
    Worked out fresh on every load, so it counts down by itself each day. Green = days in hand, red = 0 or past it (−1, −2 …). */
 function promiseCell(o){
   if(o.isDraft||o.state!=="open"||!o.promise)return "";
   const p=o.promise, left=p.hi-p.wd, cls=left>0?"ok":"late";
-  const tip='Promised '+p.lo+(p.hi!==p.lo?'–'+p.hi:'')+' working days ('+(p.src==="note"?"from the order note":"website standard")+') · '+p.wd+' working days since the order';
+  const tip=(p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'” (by '+p.to+')':'Standard '+p.lo+'–'+p.hi+' working days (no delivery-date tag on the order)')+' · '+p.wd+' working days since the order';
   return '<span class="promise '+cls+'" title="'+tip+'">'+(left<0?'−'+Math.abs(left):left)+'</span><span class="promise-u">working days</span>';
 }
 function needsDrawing(o){ return !o.isDraft && o.state==="open" && (o.prod_stage||0)<1 && (o.items||[]).some((it,i)=>isFurnitureLine(it.product)&&!lineDrawn(o,i)); }
