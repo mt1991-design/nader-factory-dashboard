@@ -4867,13 +4867,13 @@ function drawTypeChip(title,o,i){
    Worked out fresh on every load, so it counts down by itself each day. Green = days in hand, red = 0 or past it (−1, −2 …). */
 function promiseCell(o){
   if(o.isDraft||o.state!=="open"||!o.promise)return "";
-  /* two phases (Mariam 10 Oct): GREEN counts down to the FIRST promised day (21, 20 … 1); then ORANGE counts down the rest
-     of the window (19, 18 … 1); RED only once the last promised day has passed (0, −1, −2 …). Tags work the same way:
-     "14th to 22 oct" is green until the 14th, orange until the 22nd. */
+  /* one countdown to the LAST promised day (Mariam 10 Oct): 40, 39 … GREEN until the first promised day has passed (21 working
+     days in), then ORANGE (19, 18 … 1) = inside the delivery window; RED once the last day has passed (0, −1, −2 …).
+     Tags work the same way: "14th to 22 oct" is green until the 14th, orange until the 22nd. */
   const p=o.promise, toFirst=p.lo-p.wd, toLast=p.hi-p.wd;
-  const cls=toFirst>0?"ok":toLast>0?"mid":"late", n=toFirst>0?toFirst:toLast;
+  const cls=toFirst>0?"ok":toLast>0?"mid":"late", n=toLast;
   const what=p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'”':'Standard '+p.lo+'–'+p.hi+' working days (no delivery-date tag on the order)';
-  const phase=cls==="ok"?'Green: working days until the first promised day':cls==="mid"?'Orange: inside the delivery window — working days until the last promised day':'Red: past the last promised day';
+  const phase=cls==="ok"?'Green: working days until the last promised day (the first promised day has not passed yet)':cls==="mid"?'Orange: inside the delivery window — working days until the last promised day':'Red: past the last promised day';
   const tip=what+' · '+p.wd+' working days since the order · '+phase;
   return '<span class="promise '+cls+'" title="'+tip+'">'+(n<0?'−'+Math.abs(n):n)+'</span><span class="promise-u">working days</span>';
 }
