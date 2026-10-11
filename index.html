@@ -4850,9 +4850,16 @@ const IS_BED=t=>/\b(bed|headboard)s?\b/i.test(t)&&!/\b(bedside|side\s*table|day\
 const dropSameAs=t=>String(t||"").replace(/\b(same|similar|like)\s+(as\s+)?(the\s+)?[a-z]+(\s+(sofa|bed|chair))?/gi," ");   /* "same as the Alara…" is a reference, not the product */
 /* tables / chairs / stools: the name AND the right kind of piece ("Chios Dining Table" ≠ a Chios chair) */
 const AUTO_PIECE=[[/\b(chios|khios)\b/i,/\btable\b/i],[/\b(cheltenham|cheltenhan|cheltnam|cheltnham)\b/i,/\btable\b/i],[/\bbaku\b/i,/\bchairs?\b/i],[/\bsaga\b/i,/stool/i],[/\bsakai\b/i,/stool/i],[/\b(trevor|trever)\b/i,/\btable\b/i],[/\baura\b(?!\s+(uma|pop|tul|tye|zoa|xan|sun|yew)\b)/i,/\bsofa\b/i],[/\bchesterfield\b/i,/^(?!.*\b(custom|bespoke)\b).*\b(sofa|seater)\b/i]];
-function autoDrawable(title){title=dropSameAs(title);const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")))||AUTO_PIECE.some(([r,k])=>r.test(t)&&k.test(String(title||"")));}
+/* pre-form orders: a "… Fabric: …" line describes the piece before it — it is not an item (Mariam 11 Oct). It is not listed as a
+   row and never counts as needing a drawing; its text shows under the piece it belongs to. Line numbers are unchanged. */
+const FABRIC_NOTE=/^[^:|\d]*\bfabric(\s*(&|and)\s*colou?r)?\s*:/i;
+const isFabricNote=(o,i)=>i>0&&FABRIC_NOTE.test((o.items[i]||{}).product||"");
+function fabricNotesAfter(o,i){let h="";for(let j=i+1;j<o.items.length&&FABRIC_NOTE.test(o.items[j].product||"");j++)h+='<div class="muted" style="font-size:11.5px;margin-top:3px">'+esc(o.items[j].product)+'</div>';return h;}
+/* full-title check: products that share a name with a drawing but are a different design */
+const NOT_THIS_DRAWING=[/\baura\s+(uma|pop|tul|tye|zoa|xan|sun|yew)\b/i,/\bcloud\s+nine\b/i];
+function autoDrawable(title){if(FABRIC_NOTE.test(title||"")||NOT_THIS_DRAWING.some(r=>r.test(title||"")))return false;title=dropSameAs(title);const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")))||AUTO_PIECE.some(([r,k])=>r.test(t)&&k.test(String(title||"")));}
 function qtyChip(it){const q=+(it&&it.qty)||1;return q>1?' <span class="qtychip" title="Make '+q+' of this piece">×'+q+' PIECES</span>':'';}
-function isFurnitureLine(title){if(/^\s*(extra charge|change to order)\s*:/i.test(title||""))return false;return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
+function isFurnitureLine(title){if(/^\s*(extra charge|change to order)\s*:/i.test(title||"")||FABRIC_NOTE.test(title||""))return false;return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
 function lineCheck(o,i){const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="check");}   /* saved sheet says "Check dimensions" (e.g. ottoman size missing) */
 function lineDrawn(o,i){const it=o.items[i]||{};if(lineCheck(o,i))return false;if(autoDrawable(it.product))return true;const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="complete");}
@@ -5288,10 +5295,11 @@ function renderProduction(q){
   list.forEach(function(o){
     const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[];
     o.items.forEach(function(it,i){
+      if(isFabricNote(o,i)) return;
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();
       if(q&&hay.indexOf(q)<0) return; shown++;
       const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
-      const prod=esc(it.product)+qtyChip(it)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
+      const prod=esc(it.product)+qtyChip(it)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+fabricNotesAfter(o,i);
       const spec=(cur>=1||lineDrawn(o,i))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
       const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
       const dctl=drawCtl(o,i,oi);
@@ -5520,7 +5528,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     .sort(salesCmp);
   let html="",shown=0;
   const onlyDrawn=salesView==="orders"&&salesStatuses.size===1&&salesStatuses.has("drawn");
-  list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;if(onlyDrawn&&!lineDrawn(o,i))return;shown++;
+  list.forEach(o=>{const oi=SHOPIFY.indexOf(o);o.items.forEach((it,i)=>{if(isFabricNote(o,i))return;const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;if(onlyDrawn&&!lineDrawn(o,i))return;shown++;
     const st=shopifyStatus(o);
     const oid=lineId(o,i),done=DB.getOrder(oid)||SAVED_SPECS.has(specKey(oid));
     const multi=o.items.length>1;
@@ -5541,7 +5549,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const balCtrl=(i===0&&!o.isDraft&&ROLE!=="factory"&&+o.outstanding>0.5)?balControls(o,oi):"";
     const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="chgOpen('+oi+')">✎ Change order</button><div id="chg-'+oi+'" hidden></div></div>':"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl+xtra):"";
-    const prod=esc(it.product)+qtyChip(it)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi));
+    const prod=esc(it.product)+qtyChip(it)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="7" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
@@ -5606,6 +5614,7 @@ function renderFactoryProd(){
   let hidden=0;
   list.forEach(function(o){ const oi=SHOPIFY.indexOf(o), stages=o.prod_stages||[]; let firstShown=true;
     o.items.forEach(function(it,i){
+      if(isFabricNote(o,i)) return;
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase(); if(q&&hay.indexOf(q)<0) return;
       const cur=stages[i]||0;
       /* the factory only sees lines whose drawing is complete — nothing else, even if its stage was moved on */
@@ -5613,7 +5622,7 @@ function renderFactoryProd(){
       if(factStages.size && !factStages.has(lineStageKey(o,i))) return;
       shown++;
       const first=firstShown, multi=o.items.length>1; firstShown=false;
-      const prod=esc(it.product)+qtyChip(it)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i);
+      const prod=esc(it.product)+qtyChip(it)+(multi?' <span class="muted">· item '+(i+1)+"/"+o.items.length+"</span>":"")+drawTypeChip(it.product,o,i)+fabricNotesAfter(o,i);
       const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':(lineDrawn(o,i)?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>');
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
       const oq=esc(o.order).replace(/'/g,"");
