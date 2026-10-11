@@ -326,14 +326,18 @@ function qtyTags(items, tags) {
   String(tags || '').split(',').forEach(t => { const m = t.trim().match(/^qty:(\d+)=(\d+)$/i); if (m && items[+m[1] - 1]) items[+m[1] - 1].qty = +m[2]; });
   return items;
 }
+/* Old orders were typed straight into Shopify, so a piece is often followed by zero-price lines that only DESCRIBE it
+   ("Aura Sofa Fabric: Chenille - Champagne", "Top: Volakas Porcelain | Legs: Walnut"). Those are notes for the piece before
+   them, not items — flagged here (note: 1) so the dashboard counts and numbers real pieces only (Mariam 11 Oct). */
+const LINE_FABRIC_NOTE = /^[^:|\d]*\bfabric(\s*(&|and)\s*colou?r)?\s*:/i;
+const LINE_FURNITURE = /sofa|couch|sectional|loveseat|\bbeds?\b|headboard|daybed|chair|stool|table|bench|ottoman|pouf|puff|console|sideboard|cabinet|desk|bedside|nightstand|mirror|wardrobe|dresser|seater/i;
 function mapLineItems(arr) {
-  return (arr || []).map(li => ({
-    product: li.title,
-    variant: li.variant_title || '',
-    sku: li.sku || '',
-    qty: li.quantity || 1,
-    price: li.price || ''
-  }));
+  return (arr || []).map((li, i) => {
+    const t = String(li.title || ''), free = !li.product_id && !(parseFloat(li.price || 0) > 0);
+    const it = { product: li.title, variant: li.variant_title || '', sku: li.sku || '', qty: li.quantity || 1, price: li.price || '' };
+    if (i > 0 && free && (LINE_FABRIC_NOTE.test(t) || !LINE_FURNITURE.test(t))) it.note = 1;
+    return it;
+  });
 }
 function extractPdf(note) {
   if (!note) return '';

@@ -2531,6 +2531,9 @@ const NOT_THIS_DRAWING={aura:["Aura Uma Velvet Sofa","Aura Pop Leather Sofa","Au
   cloud:["Cloud Nine Modular Sofa"]};
 const normTitle=t=>String(t||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const otherProduct=(k,title)=>{const n=normTitle(title);return (NOT_THIS_DRAWING[k]||[]).some(x=>n.indexOf(normTitle(x))>=0);};
+/* note lines (flagged by the dashboard server, or a "… Fabric: …" title) are not items: "item 2/3" counts real pieces only */
+const isNoteItem=(o,j)=>j>0&&!!(((o.items||[])[j]||{}).note||FABRIC_NOTE.test(((o.items||[])[j]||{}).product||""));
+const pieceTag=(o,i)=>{let n=0,k=0;(o.items||[]).forEach((x,j)=>{if(!isNoteItem(o,j)){n++;if(j<=i)k++;}});return n>1?" \u00b7 item "+Math.max(1,k)+"/"+n:"";};
 function modelFor(title){const full=dropSameAs(title),t=dropSameAs(baseName(title))||full;
   if(FABRIC_NOTE.test(String(title||"")))return "";
   for(const k in MODELS){if(!liveModel(k)||!MODELS[k].match.test(t)||otherProduct(k,title))continue;
@@ -2735,7 +2738,7 @@ async function fromOrder(o,i){
   const it=(o.items||[])[i]||{product:"Unknown product"};
   const O=blankOrder(it.product);O.orderedAs=it.product;
   const a=o.shipping_address||{};
-  O.orderNo=o.order+((o.items||[]).length>1?" · item "+(i+1)+"/"+o.items.length:"");
+  O.orderNo=o.order+pieceTag(o,i|0);
   O.date=o.date?new Date(o.date+"T12:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):today();
   {const mm=modelForOrder(it.product,O.date);if(/^thistle2?$/.test(O.model||"")&&mm!==O.model){O.model=mm;O.V=Object.assign({},MODELS[mm].defaults);}}   /* Thistle v1 for orders before 8 Oct */
   O.cust={name:o.customer||"",phone:o.phone||a.phone||"",email:o.email||"",addr:[a.address1,a.address2].filter(Boolean).join(", "),
@@ -2748,7 +2751,7 @@ async function fromOrder(o,i){
   const extra=(o.items||[]).filter((x,j)=>j!==i&&!modelFor(x.product)&&!/sofa|bed|chair|table|stool|ottoman/i.test(x.product)).map(x=>x.product);
   if(extra.length)O.notes=[extra.join("\n"),O.notes].filter(Boolean).join("\n");
   /* a "… Fabric: …" line right after this piece is THIS piece's fabric */
-  {const fl=[];for(let j=(i|0)+1;j<(o.items||[]).length&&FABRIC_NOTE.test(o.items[j].product||"");j++)fl.push(String(o.items[j].product).replace(/^[^:]*:\s*/,"").trim());
+  {const fl=[];for(let j=(i|0)+1;j<(o.items||[]).length&&isNoteItem(o,j);j++)if(FABRIC_NOTE.test(o.items[j].product||""))fl.push(String(o.items[j].product).replace(/^[^:]*:\s*/,"").trim());
     if(fl.length&&!O.spec.some(r=>r[0]==="Fabric (from the order)"))O.spec.push(["Fabric (from the order)",fl.join(" · ")]);}
   /* keep what sales actually typed in the product line (e.g. "- puffy - back cushion like the Namba") */
   if(it.product.replace(/\s+/g," ").trim().length>28||/[-–]\s/.test(it.product))O.notes=["Ordered as: "+it.product.trim(),O.notes].filter(Boolean).join("\n");
@@ -3375,23 +3378,26 @@ async function boot(){
     const sysLock=!ORDER.locked||/auto-drawn/i.test(String((ORDER.locked||{}).by||"")), oa=ORDER.orderedAs||"";
     const isNote=FABRIC_NOTE.test(oa), wrong=!!(ORDER.model&&oa&&MODELS[ORDER.model]&&!/^thistle2?$/.test(ORDER.model)&&modelFor(oa)!==ORDER.model&&otherProduct(ORDER.model,oa));
     const lostRows=!ORDER.model&&!ORDER.manualChosen&&!ORDER._auraFix&&oa&&Object.keys(NOT_THIS_DRAWING).some(k=>otherProduct(k,oa))&&!(ORDER.spec||[]).some(r=>/^size$/i.test(String(r&&r[0]||"")));
-    const multi=/item\s+\d+\s*\//.test(String(ORDER.orderNo||""));
-    if((sysLock&&(wrong||lostRows||(isNote&&(ORDER.model||ORDER.photo))))||(multi&&!isNote&&!ORDER._fabChecked)){
-      const no=Q.o||String(ORDER.orderNo||"").split("\u00b7")[0].trim(), idx=Math.max(0,Q.o?(Q.i|0):(((String(ORDER.orderNo||"").match(/item\s+(\d+)\s*\//)||[0,1])[1]|0)-1));
+    /* the sheet's id ends in the LINE number ("29292741-5") — that, not the "item x/y" label, says which order line it is */
+    const sfx=(String(SPEC_ID).match(/^\d{5,}-(\d{1,2})$/)||[])[1], multi=!!sfx||/item\s+\d+\s*\//.test(String(ORDER.orderNo||""));
+    if((sysLock&&(wrong||lostRows||(isNote&&(ORDER.model||ORDER.photo))))||(multi&&ORDER._noteV!==2)){
+      const no=Q.o||String(ORDER.orderNo||"").split("\u00b7")[0].trim(), idx=Math.max(0,Q.o?(Q.i|0):(sfx?(sfx|0)-1:(((String(ORDER.orderNo||"").match(/item\s+(\d+)\s*\//)||[0,1])[1]|0)-1)));
       let o=null;for(const u of (Q.k==="draft"?["/api/draft_orders"]:["/api/orders","/api/draft_orders"])){const r=await fetch(u,{credentials:"same-origin"});const d=await r.json();o=(d.orders||d.drafts||[]).find(x=>x.order===no);if(o)break;}
+      const label=o?o.order+pieceTag(o,idx):"";
       if(o&&sysLock&&isNote&&(ORDER.model||ORDER.photo)){
-        ORDER.model="";ORDER.manualChosen=true;ORDER.V={};ORDER.photo="";ORDER.photoCleared=true;ORDER.locked=null;ORDER.product=oa;
+        ORDER.model="";ORDER.manualChosen=true;ORDER.V={};ORDER.photo="";ORDER.photoCleared=true;ORDER.locked=null;ORDER.product=oa;ORDER._noteV=2;if(label)ORDER.orderNo=label;
         (ORDER.log=ORDER.log||[]).push({id:Math.random().toString(36).slice(2,11),t:Date.now(),by:"System",what:"Drawing removed — this line is a fabric note for the item before it, not a piece",changes:[]});__fixed=true;
       }else if(o&&sysLock&&(wrong||lostRows)){const old=ORDER,nu=await fromOrder(o,idx);
         ["custNotes","refs","assigned","_edit","unlockedBy","customDraw","photoManual"].forEach(k=>{if(old[k]!=null)nu[k]=old[k];});
         if(String(old.notes||"").trim()&&String(old.notes).trim()!==String(nu.notes||"").trim())nu.notes=[String(nu.notes||"").trim(),String(old.notes).trim()].filter(Boolean).filter((x,i2,a)=>a.indexOf(x)===i2).join("\n");
         if(old.photoManual&&old.photo)nu.photo=old.photo;
         nu.log=(old.log||[]).concat([{id:Math.random().toString(36).slice(2,11),t:Date.now(),by:"System",what:"Wrong drawing removed ("+((MODELS[old.model]||{}).label||"template")+" does not belong to "+oa+") — needs a manual drawing",changes:[]}]);
-        nu._auraFix=1;nu._fabChecked=1;ORDER=nu;__fixed=true;
-      }else if(o&&multi&&!isNote&&!ORDER._fabChecked){
-        const fl=[];for(let j=idx+1;j<(o.items||[]).length&&FABRIC_NOTE.test(o.items[j].product||"");j++)fl.push(String(o.items[j].product).replace(/^[^:]*:\s*/,"").trim());
-        ORDER._fabChecked=1;
+        nu._auraFix=1;nu._noteV=2;ORDER=nu;__fixed=true;
+      }else if(o&&multi&&ORDER._noteV!==2){
+        const fl=[];if(!isNote)for(let j=idx+1;j<(o.items||[]).length&&isNoteItem(o,j);j++)if(FABRIC_NOTE.test(o.items[j].product||""))fl.push(String(o.items[j].product).replace(/^[^:]*:\s*/,"").trim());
+        ORDER._noteV=2;
         if(fl.length&&!(ORDER.spec||[]).some(r=>r[0]==="Fabric (from the order)")){(ORDER.spec=ORDER.spec||[]).push(["Fabric (from the order)",fl.join(" \u00b7 ")]);__fixed=true;}
+        if(label&&label!==ORDER.orderNo){ORDER.orderNo=label;__fixed=true;}   /* "item 5/6" → "item 3/3" once note lines stopped counting */
       }
     }
   }catch(e){}}
