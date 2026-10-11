@@ -2475,7 +2475,8 @@ const MODELS={
   autumn:{ver:"dwg1",match:/\b(autumn|autum)\b/i,label:"Autumn",name:"Autumn Sofa",defaults:AUTUMN_DEFAULT,draw:AutumnDraw,photoSide:"N",photo:PHOTO_AUTUMN,
     sides:["N"],seats:true,fields:STRAIGHT_FIELDS([["BC","Back cushion depth"],["A","Arm width","both arms"],["CA","Arm on the left","as you face it","yn"],["OA","Arm on the right","as you face it","yn"]],[["H","Overall height","top of the back cushions"],["AH","Arm height"],["SH","Seat height"],["BH","Base height"],["LH","Feet height"]]),
     autoSpec(V){return [["Size",`${V.n} Seater · ${F2(V.W)} × ${F2(V.D)} cm`,1],["Configuration","Straight sofa"],["Seat Depth",`${F2(V.D-V.B)} cm`],["Seat Height",`${F2(V.SH)} cm`],["Back / Arm Height",`${F2(V.H)} / ${F2(V.AH)} cm`],["Seat Widths",AU_SEATS(V).map(F2).join(" · ")+" cm"],["Arm Width",armText(V,`${F2(V.A)} cm`)]];}},
-  aura:{ver:"dwg1",match:/\b(aura)\b/i,label:"Aura (curved)",name:"Aura Tug Velvet Sofa",defaults:AURA_DEFAULT,draw:AuraDraw,photoSide:"N",photo:PHOTO_AURA,
+  aura:{ver:"dwg1",match:/\baura\b(?!\s+(uma|pop|tul|tye|zoa|xan|sun|yew)\b)/i,   /* the curved DWG is the Aura TUG — the other "Aura …" sofas are different designs (Aura Uma is a corner sofa; Mariam 11 Oct) */
+    label:"Aura (curved)",name:"Aura Tug Velvet Sofa",defaults:AURA_DEFAULT,draw:AuraDraw,photoSide:"N",photo:PHOTO_AURA,
     sides:["N"],seats:false,fields:[["Top view",[["W","Overall width","two curved halves"],["D","Depth at the middle","back to seat front"],["B","Back depth"],["T","Overall depth","to the front of the curled ends"]]],["Front elevation",[["H","Overall height"],["SH","Seat height"],["LH","Feet height"]]]],
     autoSpec(V){return [["Size",`${F2(V.W)} × ${F2(V.T)} cm`,1],["Configuration","Curved · two halves"],["Seat Depth",`${F2(V.D-V.B)} cm at the middle`],["Seat Height",`${F2(V.SH)} cm`],["Back Height",`${F2(V.H)} cm`]];}},
   bretagne:{ver:"dwg1",match:/\b(bretagne|bretange|bretagn|brittany)\b/i,label:"Bretagne",name:"Bretagne Leather Corner Sofa",defaults:BRETAGNE_DEFAULT,draw:BretagneDraw,photoSide:"L",   /* the photo shows the chaise on the LEFT (LHF) */photo:PHOTO_BRETAGNE,
@@ -2783,7 +2784,7 @@ function applyFormSpec(O,spec){
       if(/seat height/.test(L)){const n=num(val);if(n>0){v.H+=n-v.SH;v.SH=n;}return;}
     }
     else if(m){
-      if(L==="size"){const x=/[×x]/.test(val)?(val.split(":").pop().match(/\d+(?:\.\d+)?/g)||[]).map(Number):[];   /* "4 seater: 300cm x 180cm x 150cm" */
+      if(L==="size"){const x=/[×x]/.test(val)?(val.split(":").pop().match(/\d+(?:\.\d+)?/g)||[]).map(Number).filter(n=>n>=50):[];   /* ≥50: a seat count ("4 Seater ( 300cm x 180CM )") is not a width */   /* "4 seater: 300cm x 180cm x 150cm" */
         if(x.length>=2){v.W=x[0];if(v.side!=="N")v.RL=x[1];if(x.length>=3&&"RR" in v)v.RR=x[2];}return;}
       if(/total sofa width/.test(L)){const n=num(val);if(n>0)v.W=n;return;}
       if(/left chaise/.test(L)){const n=num(val);if(n>0){v.RL=n;}return;}
