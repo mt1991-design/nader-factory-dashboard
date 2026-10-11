@@ -3261,6 +3261,10 @@ async function loadSavedList(){
 }
 
 function start(){
+  /* a sheet saved on the curved Aura (Tug) drawing for a DIFFERENT "Aura …" sofa (e.g. Aura Uma, a corner sofa): that drawing never
+     applied — drop it and put the real product name back. Locked / approved sheets are left for the team to review. (Mariam 11 Oct) */
+  if(ORDER.model==="aura"&&ORDER.orderedAs&&!ORDER.locked&&modelFor(ORDER.orderedAs)!=="aura"){
+    ORDER.model="";ORDER.V={};ORDER.product=(typeof baseName==="function"&&baseName(ORDER.orderedAs))||ORDER.orderedAs;}
   if(!ORDER.model&&!ORDER.manualChosen){const m=modelForOrder(ORDER.orderedAs||ORDER.product,ORDER.date);
     if(m){ORDER.model=m;ORDER.V=Object.assign({...MODELS[m].defaults},{side:(ORDER.V&&MODELS[m].sides.includes(ORDER.V.side))?ORDER.V.side:MODELS[m].defaults.side});ORDER.photoSide=MODELS[m].photoSide;}}
   V=ORDER.V=Object.assign({...modelDefaults()},ORDER.V||{});
