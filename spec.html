@@ -3351,6 +3351,19 @@ async function boot(){
   if(!Q.id)history.replaceState(null,"","/spec.html?"+new URLSearchParams(Object.assign({},Q.o?{o:Q.o,i:Q.i,k:Q.k}:{},Q.p?{p:Q.p}:{},{id:SPEC_ID})).toString());
   setSaveState("Loading…");
   try{const r=await fetch("/api/spec?id="+encodeURIComponent(SPEC_ID),{credentials:"same-origin"});const d=await r.json();if(d.ok&&d.data){ORDER=d.data;FROM_SAVE=true;}}catch(e){}
+  /* A sheet first drawn on the curved Aura (Tug) template for a DIFFERENT "Aura …" sofa (Aura Uma is a corner sofa): that template
+     swallowed the order's own Size / Configuration / Seat depth / heights. Rebuild the sheet from the order so those rows come
+     back exactly as the sales form has them; keep what the team added (notes, photos, log). Locked sheets are left alone. Mariam 11 Oct */
+  if(ORDER&&FROM_SAVE&&!ORDER.locked&&!ORDER._auraFix&&ORDER.orderedAs&&/\baura\b/i.test(ORDER.orderedAs)&&modelFor(ORDER.orderedAs)!=="aura"
+     &&(ORDER.model==="aura"||(!ORDER.model&&!ORDER.manualChosen&&!(ORDER.spec||[]).some(r=>/^size$/i.test(String(r&&r[0]||"")))))){try{
+    const no=Q.o||String(ORDER.orderNo||"").split("\u00b7")[0].trim(), idx=Q.o?(Q.i|0):(((String(ORDER.orderNo||"").match(/item\s+(\d+)\s*\//)||[0,1])[1]|0)-1);
+    let o=null;for(const u of (Q.k==="draft"?["/api/draft_orders"]:["/api/orders","/api/draft_orders"])){const r=await fetch(u,{credentials:"same-origin"});const d=await r.json();o=(d.orders||d.drafts||[]).find(x=>x.order===no);if(o)break;}
+    if(o){const old=ORDER,nu=await fromOrder(o,Math.max(0,idx));
+      ["custNotes","refs","log","assigned","_edit","unlockedBy","customDraw","photoManual"].forEach(k=>{if(old[k]!=null)nu[k]=old[k];});
+      if(String(old.notes||"").trim()&&String(old.notes).trim()!==String(nu.notes||"").trim())nu.notes=[String(nu.notes||"").trim(),String(old.notes).trim()].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join("\n");
+      if(old.photoManual&&old.photo)nu.photo=old.photo;
+      nu._auraFix=1;ORDER=nu;}
+  }catch(e){}}
   if(!ORDER&&Q.o){
     try{
       const url=Q.k==="draft"?"/api/draft_orders":"/api/orders";
