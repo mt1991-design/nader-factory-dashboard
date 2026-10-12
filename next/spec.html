@@ -3188,7 +3188,9 @@ function renderDrawings(){
     if(ORDER.customDraw){   /* the team's own drawing replaces the generated one */
       document.getElementById('topBody').innerHTML=customPanel("top","Top view");
       document.getElementById('frontBody').innerHTML=customPanel("front","Front elevation");
-      w.classList.remove('show');
+      /* an uploaded drawing: the template's own geometry warnings don't apply, but "the sheet's sizes differ from the signed form" does */
+      {const fm=allErrors();w.innerHTML=fm.map(e=>"• "+esc(e)).join("<br>")+(fm.length?'<br><span style="font-weight:400">This sheet shows the team’s own uploaded drawing — check it against the form, then correct the sizes or confirm them.</span>':'')+(fm.length&&dimsOk()?'<br><b>✓ Checked by '+esc(ORDER.dimsOk.by||'')+' — marked as fine.</b>':'');
+        w.classList.toggle('show',fm.length>0);w.classList.toggle('ok',fm.length>0&&dimsOk());}
       const ow=document.getElementById('ottWrap'),on=hasOtt(M)&&+V.OTT;ow.hidden=!on;if(on)document.getElementById('ottBody').innerHTML=ottSVG(V);
       renderStatus();photoFlip();renderSpec();applyLock();return;
     }
