@@ -3509,7 +3509,7 @@ async function boot(){
       /* sheets made before the mismatch check existed: remember what the form says, so the warning works on them too */
       let addTyped=0;if(!ORDER.formTyped){ORDER.formTyped={};Object.keys(sp).forEach(k0=>{const k=k0.replace(/\s*\*+\s*$/,""),v=String(sp[k0]||"").trim();
         if(v&&FORM_DIM.test(k)&&!NOT_SPEC_LABEL_RX.test(k.toLowerCase())&&num(v)>0){ORDER.formTyped[k]=v;addTyped++;}});}
-      if(fresh.length||addRows||addTyped)save();
+      if(fresh.length||addRows||addTyped){if(typeof renderAll==="function")renderAll();else if(typeof renderDrawings==="function")renderDrawings();save();}   /* redraw: the new rows + any mismatch warning must show at once */
     }}catch(e){}}
   /* sheets saved before Quantity existed: add the row (from the order when we know it) */
   if(ORDER&&Array.isArray(ORDER.spec)&&!ORDER.spec.some(r=>r[0]==="Quantity")){let q="1";
