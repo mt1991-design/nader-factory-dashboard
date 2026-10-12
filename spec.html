@@ -2785,7 +2785,9 @@ function applyFormSpec(O,spec){
     /* the form's required-field star ("Configuration *") must not change the label — it stopped the facing / size
        being read and doubled the spec rows (Mariam 6 Oct) */
     const label=label0.replace(/\s*\*+\s*$/,""), val=String(spec[label0]||"").trim(), L=label.toLowerCase();if(!val)return;
-    if(/^product|quantity|price|aed|total|unit/.test(L))return;
+    /* money / bookkeeping labels only. The old test dropped ANY label containing "total" — so "Total Width", "Total Depth",
+       "Total Sofa Width", "Total Height" typed on the form never reached the sheet or the drawing (Mariam 12 Oct, #29292862) */
+    if(/^product\b|^quantity$|price|\baed\b|^total$|^(order|grand|item|line)\s+total|^unit\b/.test(L))return;
     if(/customisation notes|special requests|cushion notes|^customisations?$/.test(L)){notes.push(L.startsWith('customisations')?'Customisations: '+val:val);return;}
     if(m&&MODELS[m].bed){
       if(L==="size"){bedSize(v,val);set(label,val);return;}
@@ -2824,7 +2826,7 @@ function applyFormSpec(O,spec){
       if(/arm height/.test(L)&&"AH" in v){const n=num(val);if(n>0)v.AH=n;return;}
       if(/number of modules/.test(L)){const n=Math.round(num(val));if(n>=2&&n<=6)v.n=n;return;}
     }
-    set(label,val);
+    set(label,/^total\s/.test(L)&&/^\d+(\.\d+)?$/.test(val)?val+" cm":val);
   });
   if("SHAPE" in v&&O._lflag)v.SHAPE=O._cfgSide==="R"?"CR":"CL";
   /* U-shape with one longer return: Left / Right Hand Facing = which side the LONGER return is on */
@@ -3429,7 +3431,12 @@ async function boot(){
       Object.keys(sp).forEach(k=>{const v=String(sp[k]||"").trim();if(!v)return;
         if(/customisation notes|special requests/i.test(k))add.push(v);else if(/^customisations?$/i.test(k))add.push("Customisations: "+v);});
       const cur=String(ORDER.notes||""),fresh=add.filter(v=>cur.indexOf(v)<0);
-      if(fresh.length){ORDER.notes=(cur.trim()?cur.trim()+"\n":"")+fresh.join("\n");save();}
+      /* sheets made while the "Total …" sizes were being dropped: put those rows back from the form (adds only, never changes a drawing) */
+      let addRows=0;Object.keys(sp).forEach(k0=>{const k=k0.replace(/\s*\*+\s*$/,""),v=String(sp[k0]||"").trim(),L=k.toLowerCase();
+        if(!v||!/^total\s+\S/.test(L)||/price|amount|\baed\b/.test(L))return;
+        if(!(ORDER.spec||[]).some(r=>String(r&&r[0]||"").toLowerCase().replace(/\s*\*+\s*$/,"")===L)){(ORDER.spec=ORDER.spec||[]).push([k,/^\d+(\.\d+)?$/.test(v)?v+" cm":v]);addRows++;}});
+      if(fresh.length)ORDER.notes=(cur.trim()?cur.trim()+"\n":"")+fresh.join("\n");
+      if(fresh.length||addRows)save();
     }}catch(e){}}
   /* sheets saved before Quantity existed: add the row (from the order when we know it) */
   if(ORDER&&Array.isArray(ORDER.spec)&&!ORDER.spec.some(r=>r[0]==="Quantity")){let q="1";
