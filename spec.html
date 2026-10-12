@@ -2866,6 +2866,9 @@ function formMismatchesFor(O,v){
   return out;
 }
 function applyFormSpec(O,spec){
+  /* SHAPE → MODULAR on the sales form: the sofa is built from pieces, not from the product's DWG — so no template
+     drawing (it would show the wrong sofa). The pieces, their sizes and the layout arrive as rows; the drawing is added by hand. */
+  if(O.model&&Object.keys(spec||{}).some(k=>/^shape\b/i.test(k)&&/^modular/i.test(String(spec[k]||"")))){O.model="";O.manualChosen=true;O.V={};}
   const m=O.model, v=O.V, rows=[], notes=[];
   const set=(k,val)=>{const r=O.spec.find(x=>x[0].toLowerCase()===k.toLowerCase());if(r)r[1]=val;else rows.push([k,val]);};
   O.formTyped=O.formTyped||{};
