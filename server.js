@@ -485,11 +485,21 @@ function prodStagesFromTags(tags, nLines) {
   if (legacy != null) for (let i = 0; i < arr.length; i++) arr[i] = legacy;
   return arr;
 }
+// Some custom line titles carry money in their TEXT ("Custom Dining Chairs | Each Chair: 4000 Aed/- | …", "Total Order Amount: AED …").
+// For a factory-only login keep the description and drop the money parts. The line itself stays (line numbers drive the stages).
+const MONEY_TEXT = /\baed\b|\bdhs?\b|\bdirhams?\b|\d\s*\/-|\bprice\b|\bamount\b|\bdiscount\b|\bpayment\b|\bupfront\b|\bdeposit\b/i;
+function stripMoneyText(title) {
+  const t = String(title || '');
+  if (!MONEY_TEXT.test(t)) return t;
+  const keep = t.split(/\s*\|\s*/).filter(part => part && !MONEY_TEXT.test(part));
+  return keep.length ? keep.join(' | ') : '(pricing line — not shown to the factory)';
+}
 // Strip all pricing from an order/draft before sending to the factory role.
 function stripPrice(o) {
   const c = Object.assign({}, o);
   delete c.total; delete c.subtotal; delete c.tax; delete c.currency; delete c.financial_status; delete c.outstanding;
-  c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; return x; });
+  delete c.invoice_url;
+  c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; if (x.product) x.product = stripMoneyText(x.product); return x; });
   if (c.note) c.note = c.note.split('\n').filter(l => !/\bAED\b|total/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n');
   return c;
 }
