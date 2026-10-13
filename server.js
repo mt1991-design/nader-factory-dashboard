@@ -336,6 +336,11 @@ function mapLineItems(arr) {
   return (arr || []).map((li, i) => {
     const t = String(li.title || ''), free = !li.product_id && !(parseFloat(li.price || 0) > 0);
     const it = { product: li.title, variant: li.variant_title || '', sku: li.sku || '', qty: li.quantity || 1, price: li.price || '' };
+    /* what the customer picked on the website (fabric, fabric code, seat depth, configuration …) — Mariam 13 Oct: online orders
+       such as #29292871 showed none of it anywhere on the dashboard. Hidden app properties (leading "_") are left out. */
+    const props = (li.properties || []).map(pr => [String(pr && pr.name || '').trim(), String(pr && pr.value != null ? pr.value : '').trim()])
+      .filter(pr => pr[0] && pr[1] && pr[0].charAt(0) !== '_');
+    if (props.length) it.props = props;
     if (i > 0 && free && (LINE_FABRIC_NOTE.test(t) || !LINE_FURNITURE.test(t))) it.note = 1;
     return it;
   });
@@ -497,7 +502,9 @@ function stripPrice(o) {
   const c = Object.assign({}, o);
   delete c.total; delete c.subtotal; delete c.tax; delete c.currency; delete c.financial_status; delete c.outstanding;
   delete c.invoice_url;
-  c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; if (x.product) x.product = stripMoneyText(x.product); return x; });
+  c.items = (c.items || []).map(it => { const x = Object.assign({}, it); delete x.price; if (x.product) x.product = stripMoneyText(x.product);
+    if (x.props) { x.props = x.props.filter(pr => !MONEY_TEXT.test(pr[0]) && !/\bprice\b|\bpremium\b/i.test(pr[0])); if (!x.props.length) delete x.props; }   /* e.g. "Depth Premium (AED)" */
+    return x; });
   if (c.note) c.note = c.note.split('\n').filter(l => !/\bAED\b|total/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n');
   return c;
 }
