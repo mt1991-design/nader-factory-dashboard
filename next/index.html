@@ -136,6 +136,7 @@
   .specbtn{flex:0 0 auto;background:var(--ox);color:#fff;border:1px solid var(--ox);border-radius:7px;font:600 11.5px var(--ui);padding:6px 12px;cursor:pointer;white-space:nowrap;letter-spacing:.02em}
   .specbtn:hover{background:#4a1017}
   .specbtn.done{background:transparent;color:#2f7a3a;border-color:#2f7a3a}
+  .onlinetag{display:inline-block;font:700 11px var(--ui);letter-spacing:.04em;text-transform:uppercase;color:#0b5f63;background:#d9f2f1;border:1px solid #8fd0cc;border-radius:7px;padding:6px 9px;white-space:nowrap;vertical-align:middle}
   .pdflink{display:inline-block;font:600 11.5px var(--ui);color:var(--ox);text-decoration:none;border:1px solid var(--panelline);border-radius:7px;padding:6px 9px;white-space:nowrap}
   .pdflink:hover{border-color:var(--ox)}
   .dwchip{display:inline-block;font:700 10px var(--ui,inherit);letter-spacing:.02em;padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;vertical-align:1px}
@@ -5378,7 +5379,7 @@ function humanTags(o){ return String(o.tags||"").split(",").map(t=>t.trim()).fil
 function openOrderDetail(o){
   const st=shopifyStatus(o);
   const oq2=esc(o.order).replace(/'/g,"");
-  $("od-title").innerHTML=esc(o.order)+(o.isDraft?' <span class="muted" style="font:600 12px var(--ui)">· draft</span>':'');
+  $("od-title").innerHTML=esc(o.order)+(o.isDraft?' <span class="muted" style="font:600 12px var(--ui)">· draft</span>':'')+(o.online?' <span class="onlinetag" style="margin-left:8px">Online order</span>':'');
   const items=(o.items||[]).map((it,i)=>`<tr><td>${esc(it.product)}${webOpts(it)}</td><td>${esc(it.sku)}</td><td style="text-align:center">${esc(it.qty)}</td><td style="text-align:right">${esc(fmtMoney(it.price,o.currency))}</td><td style="text-align:right"><button class="linkbtn" onclick="specFromDetail('${esc(o.order).replace(/'/g,"")}',${i})">＋ Spec</button></td></tr>`).join("");
   $("od-body").innerHTML=`
     <div class="odsec">
@@ -5548,6 +5549,8 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const specCls="specbtn",specTxt="＋ Spec",oq=esc(o.order).replace(/'/g,"");   /* always the same red button (Mariam 2 Oct) */
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
     const editBtn=(i===0&&o.edit_state&&!(o.state==="shipped")&&canEditOrder(o))?'<a class="pdflink" href="#" onclick="event.preventDefault();event.stopPropagation();editOrder('+oi+')" title="'+(o.isDraft?'Edit this order — the customer re-signs':'Change this paid order — any extra is added to the order and requested from the customer')+'">✎ Edit</a> ':"";
+    /* an order the customer placed on the website: say so where Edit / PDF would be (it has neither) — Mariam 13 Oct */
+    const onlineTag=(i===0&&o.online)?'<span class="onlinetag" title="Placed by the customer on the website. There is no sales form for it, so there is no Edit and no signed PDF.">Online order</span> ':"";
     const draw=(i===0&&needsDrawing(o))?'<br><span class="drawchip" title="Needs drawing — assigned to '+assignedDrawer(o)+'">✎ '+assignedDrawer(o)+'</span>':"";
     const sig=(i===0&&o.isDraft)?(
         o.signature==="signed"
@@ -5563,7 +5566,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="chgOpen('+oi+')">✎ Change order</button><div id="chg-'+oi+'" hidden></div></div>':"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl+xtra):"";
     const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i)+webOpts(it);
-    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
+    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+onlineTag+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="7" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
   const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");
