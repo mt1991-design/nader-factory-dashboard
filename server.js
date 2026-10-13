@@ -386,8 +386,8 @@ function stageDatesFromTags(tags) {
   return out;
 }
 const uaeNow = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16);   // UAE = UTC+4, no DST
-// Delivery promised to the customer (Mariam 10 Oct): a delivery-date TAG on the order ("14th to 22 oct", "Delivery 5th of October",
-// "End of October", "03.10 max") wins. Otherwise it is what THAT order was sold with — the delivery method Shopify saved on it
+// Delivery promised to the customer: what THAT order was sold with — the delivery method Shopify saved on it. (Until 13 Oct 2026 a
+// delivery-date TAG on the order won; Mariam removed that rule — tags are ignored.) The delivery method reads like
 // ("Standard Delivery 7 to 21 Working Days" up to 19 Sep 2026, "21 to 40 Working Days" since). Orders with no delivery method
 // (sales-form drafts) go by the same changeover date. The order note is NOT read.
 // Working days = Mon–Fri, counted from the order date (recomputed on every request, so the overdue list updates itself daily).
@@ -439,12 +439,10 @@ function workDaysBetween(fromIso, toIso) {
   return n;
 }
 function promiseOf(o) {
-  const created = String(o.created_at || '').slice(0, 10), wd = workingDaysSince(o.created_at || '');
-  let best = null;   /* several date tags on one order: the latest date is the current promise */
-  String(o.tags || '').split(',').forEach(tg => { const r = tagDates(tg, created); if (r && (!best || r.to > best.to)) best = { from: r.from, to: r.to, tag: tg.trim() }; });
-  if (best) { const lo = workDaysBetween(created, best.from), hi = workDaysBetween(created, best.to);
-    return { lo, hi, src: 'tag', tag: best.tag, from: best.from, to: best.to, wd, over: wd - hi }; }
-  const sp = shippingPromise(o);
+  /* Mariam 13 Oct 2026: delivery-date TAGS no longer count ("we shouldn't be looking at the tag"). The promise is ONLY the
+     delivery method Shopify saved on that order — 7 to 14, 7 to 21, 21 to 40 working days, whatever it says — and, for an
+     order with no delivery method, the standard at the time it was placed. tagDates() above is kept but no longer used here. */
+  const wd = workingDaysSince(o.created_at || ''), sp = shippingPromise(o);
   return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi };
 }
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
