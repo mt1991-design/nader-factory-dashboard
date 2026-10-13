@@ -168,6 +168,7 @@
   .teamstrip .workerlist{flex-direction:row;flex-wrap:wrap}
   .teamstrip .addrow{max-width:420px}
   .promisetd{white-space:nowrap}
+  .webopts{margin-top:4px;font:400 11.5px/1.5 var(--ui);color:var(--ink2);max-width:420px}.webopts b{font-weight:600;color:var(--ink)}
   .tagchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
   .tagchip{display:inline-block;padding:2px 8px;border-radius:20px;background:#f3ecdf;border:1px solid #e3d6bf;color:#6b5634;font:600 10.5px var(--ui);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
   .tagchips.big .tagchip{font-size:12.5px;padding:4px 10px;max-width:none}
@@ -4865,6 +4866,11 @@ const NOT_THIS_DRAWING={"aura":["Aura Uma Velvet Sofa","Aura Pop Leather Sofa","
 const normTitleD=t=>String(t||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const otherProductD=title=>{const n=normTitleD(title);return Object.keys(NOT_THIS_DRAWING).some(k=>NOT_THIS_DRAWING[k].some(x=>n.indexOf(normTitleD(x))>=0));};
 function autoDrawable(title){if(FABRIC_NOTE.test(title||"")||otherProductD(title))return false;title=dropSameAs(title);const t=drawBase(title);return (AUTO_DRAW.some(r=>r.test(t))&&!NOT_SOFA.test(t))||(AUTO_BED.some(r=>r.test(t))&&IS_BED(String(title||"")))||AUTO_PIECE.some(([r,k])=>r.test(t)&&k.test(String(title||"")));}
+/* online orders: the options the customer chose on the website (variant + line properties), shown under the product */
+function webOpts(it){ if(!it)return ""; const parts=[]; if(it.variant&&!/default title/i.test(it.variant))parts.push("<b>"+esc(it.variant)+"</b>");
+  (it.props||[]).forEach(function(pr){ if(/premium|price/i.test(pr[0])&&!(parseFloat(pr[1])>0))return;   /* a 0 premium says nothing */
+    parts.push(esc(pr[0].replace(/\s*\(cm\)\s*$/i,""))+": <b>"+esc(pr[1])+(/\(cm\)\s*$/i.test(pr[0])&&/^\d+(\.\d+)?$/.test(pr[1])?" cm":"")+"</b>"); });
+  return parts.length?'<div class="webopts" title="Chosen by the customer on the website">'+parts.join(" · ")+"</div>":""; }
 function qtyChip(it){const q=+(it&&it.qty)||1;return q>1?' <span class="qtychip" title="Make '+q+' of this piece">×'+q+' PIECES</span>':'';}
 function isFurnitureLine(title){if(/^\s*(extra charge|change to order)\s*:/i.test(title||"")||FABRIC_NOTE.test(title||""))return false;return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
@@ -5308,7 +5314,7 @@ function renderProduction(q){
       const first=(i===0), multi=o.items.length>1, cur=stages[i]||0;
       const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+fabricNotesAfter(o,i);
       const spec=(cur>=1||lineDrawn(o,i))?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>';
-      const meta='<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
+      const meta=webOpts(it)+'<div class="muted" style="font-size:11px;margin-top:3px">'+(first?esc(o.customer||"")+' · ':'')+spec+'</div>';
       const dctl=drawCtl(o,i,oi);
       // every line item gets its OWN progress bar
       /* the order date + days to promise under the number, so the sort is visible */
@@ -5373,7 +5379,7 @@ function openOrderDetail(o){
   const st=shopifyStatus(o);
   const oq2=esc(o.order).replace(/'/g,"");
   $("od-title").innerHTML=esc(o.order)+(o.isDraft?' <span class="muted" style="font:600 12px var(--ui)">· draft</span>':'');
-  const items=(o.items||[]).map((it,i)=>`<tr><td>${esc(it.product)}${it.variant?' <span class="muted">'+esc(it.variant)+'</span>':''}</td><td>${esc(it.sku)}</td><td style="text-align:center">${esc(it.qty)}</td><td style="text-align:right">${esc(fmtMoney(it.price,o.currency))}</td><td style="text-align:right"><button class="linkbtn" onclick="specFromDetail('${esc(o.order).replace(/'/g,"")}',${i})">＋ Spec</button></td></tr>`).join("");
+  const items=(o.items||[]).map((it,i)=>`<tr><td>${esc(it.product)}${webOpts(it)}</td><td>${esc(it.sku)}</td><td style="text-align:center">${esc(it.qty)}</td><td style="text-align:right">${esc(fmtMoney(it.price,o.currency))}</td><td style="text-align:right"><button class="linkbtn" onclick="specFromDetail('${esc(o.order).replace(/'/g,"")}',${i})">＋ Spec</button></td></tr>`).join("");
   $("od-body").innerHTML=`
     <div class="odsec">
       <div class="odrow"><span class="k">Status</span><span><span class="pill ${st.cls}">${st.txt}</span></span></div>
@@ -5556,7 +5562,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const balCtrl=(i===0&&!o.isDraft&&ROLE!=="factory"&&+o.outstanding>0.5)?balControls(o,oi):"";
     const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="chgOpen('+oi+')">✎ Change order</button><div id="chg-'+oi+'" hidden></div></div>':"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl+xtra):"";
-    const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i);
+    const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i)+webOpts(it);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   tb.innerHTML=shown?html:'<tr><td colspan="7" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
@@ -5631,7 +5637,7 @@ function renderFactoryProd(){
       const first=firstShown, multi=o.items.length>1; firstShown=false;
       const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+fabricNotesAfter(o,i);
       const draw=cur>=1?'<span class="speccomplete yes">✓ Ready</span>':(lineDrawn(o,i)?'<span class="speccomplete yes">✓ Drawing complete</span>':'<span class="speccomplete no">Awaiting drawing</span>');
-      const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
+      const meta=webOpts(it)+(first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"");
       const oq=esc(o.order).replace(/'/g,"");
       const specBtn='<button class="specbtn done" style="margin-top:6px" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')" title="Open the spec sheet — check, edit and print / save PDF">📄 Spec sheet</button>';
       html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order)+tagChipsHTML(o,oi):"")+'</td><td>'+prod+meta+'</td><td class="promisetd">'+(first?promiseCell(o):"")+'</td><td class="fabtd">'+fabricCell(o,i,true)+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';   /* days to promise on the factory page too (Mariam 13 Oct) */

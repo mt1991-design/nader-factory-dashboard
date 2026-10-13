@@ -2818,6 +2818,19 @@ async function fromOrder(o,i){
   /* orders made WITHOUT the sales form (typed straight into Shopify): read sizes from the title / extra lines / note.
      Orders made WITH the form use ONLY the form's dimension boxes. */
   if(!fromForm)applyOrderText(O,[it.product].concat(extra).join("\n")+"\n"+itemNote);
+  /* ONLINE orders: what the customer picked on the website arrives as line properties (Fabric, Fabric Code, Seat Depth (cm),
+     Configuration …). They were not reaching the sheet at all (Mariam 13 Oct, #29292871). Sizes go through the same path as
+     the sales form's answers (so they drive a template drawing and the mismatch warning); everything else shows as a row. */
+  if(!fromForm&&Array.isArray(it.props)&&it.props.length){
+    const sp={};
+    it.props.forEach(pr=>{const k=String(pr[0]||""),v=String(pr[1]==null?"":pr[1]).trim(); if(!k||!v||/\baed\b|price|premium|full sku/i.test(k))return;
+      const L=k.replace(/\s*\((cm|aed)\)\s*$/i,"").trim();
+      if(/^fabric code$/i.test(L)){const r=O.spec.find(x=>x[0]==="Fabric Catalogue Code");if(r&&!String(r[1]||"").trim())r[1]=v;else O.spec.push(["Fabric Code (website)",v]);return;}
+      if(/^fabric$/i.test(L)){O.spec.push(["Fabric (website)",v]);return;}
+      sp[L]=v;});
+    if(Object.keys(sp).length){ if(O.model){try{applyFormSpec(O,sp);}catch(e){}}
+      Object.keys(sp).forEach(k=>{ if(!O.spec.some(r=>String(r[0]).toLowerCase().indexOf(k.toLowerCase())===0))O.spec.push([k+" (website)",sp[k]+(/depth|width|height|length/i.test(k)&&/^\d+(\.\d+)?$/.test(sp[k])?" cm":"")]); }); }
+  }
   if(!O.photo||/^data:/.test(O.photo)){const p=await productPhoto(it.product);if(p)O.photo=p;}
   return O;
 }
