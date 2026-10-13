@@ -359,7 +359,7 @@
           <option value="asc">Date · oldest to newest</option><option value="desc">Date · newest to oldest</option></select></label>
         <div id="factstage" class="factstage"></div>
       </div>
-      <div class="otablewrap"><table class="otable prodtable"><thead><tr><th>Order</th><th>Product</th><th>Fabric</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
+      <div class="otablewrap"><table class="otable prodtable"><thead><tr><th>Order</th><th>Product</th><th>Days to promise</th><th>Fabric</th><th>Drawing</th><th>Production status</th></tr></thead><tbody id="orderrows"></tbody></table></div>
       <div id="dashempty" class="dashempty">No open orders in production yet.</div>
       <div id="factoryhidden" class="muted" style="font-size:12px;padding:8px 12px"></div>
     </div>
@@ -5634,7 +5634,7 @@ function renderFactoryProd(){
       const meta=first?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(o.customer||"")+'</div>':"";
       const oq=esc(o.order).replace(/'/g,"");
       const specBtn='<button class="specbtn done" style="margin-top:6px" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')" title="Open the spec sheet — check, edit and print / save PDF">📄 Spec sheet</button>';
-      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order)+tagChipsHTML(o,oi):"")+'</td><td>'+prod+meta+'</td><td class="fabtd">'+fabricCell(o,i,true)+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';
+      html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(first?esc(o.order)+tagChipsHTML(o,oi):"")+'</td><td>'+prod+meta+'</td><td class="promisetd">'+(first?promiseCell(o):"")+'</td><td class="fabtd">'+fabricCell(o,i,true)+'</td><td>'+draw+'<br>'+specBtn+'</td><td>'+prodBar(o,i,cur,true)+'</td></tr>';   /* days to promise on the factory page too (Mariam 13 Oct) */
     });
   });
   tb.innerHTML=shown?html:"";
