@@ -4,6 +4,13 @@
    cancelled / refunded / voided orders are left out. */
 (function(){
 "use strict";
+/* overdue list: the stages ticked as a filter (none ticked = all). Kept while the panel re-renders. */
+const LATE_STAGES=new Set();
+function adLateApply(){const tb=document.getElementById("ad-late-rows");if(!tb)return;let n=0,tot=0;
+  [].forEach.call(tb.querySelectorAll("tr[data-stage]"),tr=>{tot++;const show=!LATE_STAGES.size||LATE_STAGES.has(tr.dataset.stage);tr.style.display=show?"":"none";if(show)tr.firstElementChild.textContent=String(++n);});
+  [].forEach.call(document.querySelectorAll("#ad-late [data-late]"),b=>b.classList.toggle("on",b.dataset.late==="all"?!LATE_STAGES.size:LATE_STAGES.has(b.dataset.late)));
+  const c=document.getElementById("ad-late-n");if(c)c.textContent=LATE_STAGES.size?("showing "+n+" of "+tot):"";}
+window.adLateStage=function(k){if(k==="all")LATE_STAGES.clear();else if(LATE_STAGES.has(k))LATE_STAGES.delete(k);else LATE_STAGES.add(k);adLateApply();};
 const $=id=>document.getElementById(id);
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ym=d=>String(d).slice(0,7);
@@ -146,14 +153,29 @@ function renderSales(){
     <div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Order total</th><th>Refunded</th><th>What happened</th></tr></thead><tbody>
     ${refRows.sort((a,b)=>b.d.localeCompare(a.d)).map(r=>{const amt=r.st==="x"?(r.rf>0.5?r.rf:r.t):r.rf;const what=r.cx?("Cancelled "+r.cx+(r.why?" · "+r.why:"")):r.fin==="refunded"?"Fully refunded":r.fin==="voided"?"Voided":"Partly refunded";
       return `<tr><td><b>${esc(r.n)}</b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}</td><td>${aed(r.t)}</td><td><b>${aed(amt)}</b></td><td class="ad-m">${esc(what)}</td></tr>`;}).join("")||'<tr><td colspan="7" class="ad-m">No refunds or cancellations this month.</td></tr>'}</tbody></table></div></div>`;
-  /* overdue list — ALL overdue open orders, most overdue first, scrolls; stage from the live orders list (Mariam 8 Oct) */
+  /* overdue list — ALL overdue open orders, most overdue first, scrolls; stage from the live orders list (Mariam 8 Oct).
+     13 Oct: a count per stage at the top, and the counts are tick-able filters — tick one or several stages to see only those. */
   const lateL=late.slice().sort((a,b)=>b.p.over-a.p.over);
   const SO=(typeof SHOPIFY!=="undefined"&&Array.isArray(SHOPIFY))?SHOPIFY:[];
-  const stageOf=r=>{const o=SO.find(x=>x.order===r.n);if(!o)return "—";const st=Math.min.apply(null,(o.prod_stages&&o.prod_stages.length?o.prod_stages:[o.prod_stage||0]));
-    return (typeof PROD_STAGES!=="undefined"&&PROD_STAGES[st])||"—";};
-  h+=`<div class="ad-card"><div class="ad-h">Overdue open orders · ${lateL.length} <span>every open order past what the customer was promised, most overdue first — working days over</span></div>
-    <div class="ad-tablewrap ad-scroll"><table class="ad-table"><thead><tr><th>#</th><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Stage now</th><th>Promised</th><th>Over</th></tr></thead><tbody>
-    ${lateL.map((r,k)=>`<tr><td class="ad-m">${k+1}</td><td><b><a href="https://admin.shopify.com/store/91fb05/orders/${r.id}" target="_blank" rel="noopener">${esc(r.n)}</a></b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}${r.it.length>1?` <span class="ad-m">+${r.it.length-1}</span>`:""}</td><td>${esc(stageOf(r))}</td><td>${r.p.lo}–${r.p.hi} days</td><td><span class="promise late">−${r.p.over}</span></td></tr>`).join("")||'<tr><td colspan="8" class="ad-m">Nothing overdue. 🎉</td></tr>'}</tbody></table></div></div>`;
+  const STG=(typeof PROD_STAGES!=="undefined")?PROD_STAGES:[];
+  /* an order's stage = its least-advanced real piece (fabric-note lines are not pieces); every piece delivered = Delivered */
+  const stageKey=r=>{const o=SO.find(x=>x.order===r.n);if(!o)return "none";
+    const idx=(o.items||[]).map((it,i)=>i).filter(i=>!(typeof isNoteLine==="function"&&isNoteLine(o,i)));const use=idx.length?idx:[0];
+    if(use.every(i=>{const d=(o.delivered||{})[i];return d&&d.d;}))return "delivered";
+    return String(Math.min.apply(null,use.map(i=>(o.prod_stages||[])[i]||0)));};
+  const stageName=k=>k==="delivered"?"Delivered":k==="none"?"Not on the orders list":(STG[+k]||"—");
+  lateL.forEach(r=>{r._sk=stageKey(r);});
+  const sCount={};lateL.forEach(r=>{sCount[r._sk]=(sCount[r._sk]||0)+1;});
+  const sOrder=STG.map((n,i)=>String(i)).concat(["delivered"]).concat(sCount.none?["none"]:[]);   /* every stage is listed, also the ones with 0 */
+  LATE_STAGES.forEach(k=>{if(!sCount[k])LATE_STAGES.delete(k);});
+  h+=`<div class="ad-card" id="ad-late"><div class="ad-h">Overdue open orders · ${lateL.length} <span>every open order past what the customer was promised, most overdue first — working days over</span></div>
+    <div class="ad-latebar"><span class="ad-m">Where they are now — tick to filter:</span>
+      <button type="button" class="fchip${LATE_STAGES.size?"":" on"}" data-late="all" onclick="adLateStage('all')">All <span class="wr-c">${lateL.length}</span></button>
+      ${sOrder.map(k=>`<button type="button" class="fchip${LATE_STAGES.has(k)?" on":""}" data-late="${k}" onclick="adLateStage('${k}')">${esc(stageName(k))} <span class="wr-c">${sCount[k]||0}</span></button>`).join("")}
+      <span class="ad-m" id="ad-late-n"></span></div>
+    <div class="ad-tablewrap ad-scroll"><table class="ad-table"><thead><tr><th>#</th><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Stage now</th><th>Promised</th><th>Over</th></tr></thead><tbody id="ad-late-rows">
+    ${lateL.map((r,k)=>`<tr data-stage="${r._sk}"><td class="ad-m">${k+1}</td><td><b><a href="https://admin.shopify.com/store/91fb05/orders/${r.id}" target="_blank" rel="noopener">${esc(r.n)}</a></b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}${r.it.length>1?` <span class="ad-m">+${r.it.length-1}</span>`:""}</td><td>${esc(stageName(r._sk))}</td><td>${r.p.lo}–${r.p.hi} days</td><td><span class="promise late">−${r.p.over}</span></td></tr>`).join("")||'<tr><td colspan="8" class="ad-m">Nothing overdue. 🎉</td></tr>'}</tbody></table></div></div>`;
+  setTimeout(adLateApply,0);
   /* name the Shopify staff accounts */
   const acc=Object.entries(DATA.accounts||{}).sort((a,b)=>b[1].n-a[1].n);
   const ex=uid=>rows().filter(r=>String(r.u)===uid).sort((a,b)=>b.d.localeCompare(a.d)).slice(0,2);

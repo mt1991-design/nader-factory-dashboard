@@ -350,6 +350,7 @@ body.wr-workshop .wr-adv{flex-basis:100%}
 .ad-m{color:var(--w-muted);font-size:12px}
 .ad-tablewrap{overflow-x:auto}
 .ad-scroll{max-height:420px;overflow-y:auto}
+.ad-latebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 12px}.ad-latebar .ad-m{font-size:12px}
 .ad-table{width:100%;border-collapse:collapse;font-size:13px}
 .ad-table th{text-align:left;font:600 10.5px var(--w-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--w-muted);padding:6px 10px;border-bottom:1px solid var(--w-line);white-space:nowrap;position:sticky;top:0;background:var(--w-surface)}
 .ad-table td{padding:10px;border-bottom:1px solid var(--w-line);vertical-align:middle}
