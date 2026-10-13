@@ -166,12 +166,12 @@ function renderSales(){
   const stageName=k=>k==="delivered"?"Delivered":k==="none"?"Not on the orders list":(STG[+k]||"—");
   lateL.forEach(r=>{r._sk=stageKey(r);});
   const sCount={};lateL.forEach(r=>{sCount[r._sk]=(sCount[r._sk]||0)+1;});
-  const sOrder=STG.map((n,i)=>String(i)).concat(["delivered","none"]).filter(k=>sCount[k]);
+  const sOrder=STG.map((n,i)=>String(i)).concat(["delivered"]).concat(sCount.none?["none"]:[]);   /* every stage is listed, also the ones with 0 */
   LATE_STAGES.forEach(k=>{if(!sCount[k])LATE_STAGES.delete(k);});
   h+=`<div class="ad-card" id="ad-late"><div class="ad-h">Overdue open orders · ${lateL.length} <span>every open order past what the customer was promised, most overdue first — working days over</span></div>
     <div class="ad-latebar"><span class="ad-m">Where they are now — tick to filter:</span>
       <button type="button" class="fchip${LATE_STAGES.size?"":" on"}" data-late="all" onclick="adLateStage('all')">All <span class="wr-c">${lateL.length}</span></button>
-      ${sOrder.map(k=>`<button type="button" class="fchip${LATE_STAGES.has(k)?" on":""}" data-late="${k}" onclick="adLateStage('${k}')">${esc(stageName(k))} <span class="wr-c">${sCount[k]}</span></button>`).join("")}
+      ${sOrder.map(k=>`<button type="button" class="fchip${LATE_STAGES.has(k)?" on":""}" data-late="${k}" onclick="adLateStage('${k}')">${esc(stageName(k))} <span class="wr-c">${sCount[k]||0}</span></button>`).join("")}
       <span class="ad-m" id="ad-late-n"></span></div>
     <div class="ad-tablewrap ad-scroll"><table class="ad-table"><thead><tr><th>#</th><th>Order</th><th>Ordered</th><th>Agent</th><th>Product</th><th>Stage now</th><th>Promised</th><th>Over</th></tr></thead><tbody id="ad-late-rows">
     ${lateL.map((r,k)=>`<tr data-stage="${r._sk}"><td class="ad-m">${k+1}</td><td><b><a href="https://admin.shopify.com/store/91fb05/orders/${r.id}" target="_blank" rel="noopener">${esc(r.n)}</a></b></td><td>${r.d}</td><td>${esc(r.a)}</td><td>${esc(clean(r.it[0]&&r.it[0][0]))}${r.it.length>1?` <span class="ad-m">+${r.it.length-1}</span>`:""}</td><td>${esc(stageName(r._sk))}</td><td>${r.p.lo}–${r.p.hi} days</td><td><span class="promise late">−${r.p.over}</span></td></tr>`).join("")||'<tr><td colspan="8" class="ad-m">Nothing overdue. 🎉</td></tr>'}</tbody></table></div></div>`;
