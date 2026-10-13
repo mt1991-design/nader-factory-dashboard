@@ -276,7 +276,7 @@ async function cached(name, fetcher, fresh) {
 }
 const byNewest = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''));
 const dedupe = arr => { const seen = new Set(); return arr.filter(o => !seen.has(o.id) && seen.add(o.id)); };
-const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at,total_outstanding,shipping_lines';
+const ORDER_FIELDS = 'id,name,created_at,processed_at,financial_status,fulfillment_status,currency,total_price,subtotal_price,total_tax,customer,email,phone,shipping_address,billing_address,line_items,tags,note,fulfillments,cancelled_at,updated_at,total_outstanding,shipping_lines,source_name';
 /* Only what the dashboard shows: orders not yet shipped + orders shipped in the last few days
    (was: every order ever placed, ~1,800, then filtered). */
 const FETCH = {
@@ -815,6 +815,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       note: o.note || '',
       pdf_url: extractPdf(o.note),
       edit_state: (String(o.tags || '').match(/state:(s_[a-z0-9]+)/i) || [])[1] || '',
+      online: o.source_name === 'web',   // placed by the customer on the website (no sales form: no Edit, no signed PDF) — Mariam 13 Oct
       shipping_address: mapAddress(o.shipping_address),
       billing_address: mapAddress(o.billing_address),
       admin_url: `https://${STORE}/admin/orders/${o.id}`,
