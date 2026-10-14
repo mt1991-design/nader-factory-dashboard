@@ -635,7 +635,7 @@ app.get('/api/drawing', async (req, res) => {
     const sp = await workerJson('/spec/' + drawSpecId(o, k.line));
     if (!sp || !sp.data) return res.status(404).json({ ok: false, error: 'notfound' });
     /* the customer never gets the team's internal notes, the agent or who drew / locked it */
-    const data = Object.assign({}, sp.data); delete data.notes; delete data.unlockReq; delete data.locked; delete data.completedBy; delete data.unlockedBy;
+    const data = Object.assign({}, sp.data); delete data.notes; delete data.unlockReq; delete data.locked; delete data.completedBy; delete data.unlockedBy; delete data.teamNotes;   /* + the sales team's comments */
     if (data.cust) data.cust = Object.assign({}, data.cust, { agent: '', showroom: '' });
     res.json({ ok: true, order: o.name, data, test: !!k.test, status: { approved: st.approved || null, changes: st.changes || [] } });
   } catch (e) { res.status(502).json({ ok: false, error: 'unavailable' }); }
@@ -1203,7 +1203,12 @@ app.get('/api/specs', requireAuth, async (req, res) => {
 });
 app.get('/api/spec', requireAuth, async (req, res) => {
   const id = specKey(req.query.id); if (!id) return res.status(400).json({ ok: false, error: 'no id' });
-  try { res.json(await workerJson('/spec/' + id)); } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+  try {
+    const out = await workerJson('/spec/' + id);
+    /* the sales team's comments are for sales / admin only (Mariam 14 Oct) — a factory-only login never receives them */
+    if (factoryOnly(req) && out && out.data && out.data.teamNotes) { out.data = Object.assign({}, out.data); delete out.data.teamNotes; }
+    res.json(out);
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 app.post('/api/spec', requireAuth, async (req, res) => {
   const b = req.body || {}, id = specKey(b.id), data = b.data;
@@ -1242,6 +1247,13 @@ app.post('/api/spec', requireAuth, async (req, res) => {
       } catch (e) { console.error('resign check', e.message); }
     }
     if (old && old.locked && !data.locked) logEvent(req.session.username, 'spec_unlock', { id });
+    /* sales team comments: never lost — a factory-only save (it never had them) or two people saving at once keeps every comment */
+    if (old && Array.isArray(old.teamNotes) && old.teamNotes.length) {
+      const seen = new Set((Array.isArray(data.teamNotes) ? data.teamNotes : []).map(n => n && (n.by + '|' + n.t)));
+      const keep = old.teamNotes.filter(n => n && !seen.has(n.by + '|' + n.t));
+      if (keep.length || factoryOnly(req)) data.teamNotes = (factoryOnly(req) ? [] : (data.teamNotes || [])).concat(factoryOnly(req) ? old.teamNotes : keep).sort((a, b) => (a.t || 0) - (b.t || 0));
+    }
+    if (factoryOnly(req) && !(old && old.teamNotes)) delete data.teamNotes;
     const out = await workerJson('/spec/' + id, { method: 'POST', body: JSON.stringify({ data,
       meta: { product: data.product || '', customer: c.name || '', orderNo: data.orderNo || '', by: req.session.username,
         status: ['complete', 'manual', 'check'].includes(status) ? status : '' } }) });
