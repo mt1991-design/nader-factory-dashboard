@@ -138,6 +138,12 @@ body.custview .cust-box{max-width:210mm!important}
 .seg.seg2{display:grid!important;grid-template-columns:1fr 1fr;width:100%}
 .seg.seg2 button{font-size:11.5px;padding:8px 2px;white-space:nowrap;min-width:0}
 .seg.seg4 button{font-size:11.5px;padding:8px 2px;white-space:nowrap;min-width:0}
+#teamNotes{margin:10px 0;padding:10px 12px;border:1px solid #c9d6e8;border-radius:10px;background:#f6f9fd;font-size:12px;line-height:1.45;color:#2b2621}
+#teamNotes .hist-h{color:#2d5a8a}#teamNotes .muted{color:#8a93a0;font-weight:400;text-transform:none;letter-spacing:0}
+.tn-list{max-height:220px;overflow-y:auto;margin:4px 0 8px}.tn-e{padding:6px 0;border-bottom:1px solid #e1e8f1}.tn-e:last-child{border-bottom:0}
+#teamNotes textarea{width:100%;box-sizing:border-box;font:inherit;font-size:12.5px;padding:7px 8px;border:1px solid #c9d6e8;border-radius:6px;background:#fff;resize:vertical}
+#teamNotes button{margin-top:6px;width:100%;border-radius:6px;padding:7px 10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #2d5a8a;background:#2d5a8a;color:#fff}
+@media print{#teamNotes{display:none!important}}
 #histBox,#custInfo{margin:10px 0;padding:10px 12px;border:1px solid #e3d6bb;border-radius:10px;background:#fffdf8;font-size:12px;line-height:1.45;color:#2b2621}
 #histBox .hist-e{padding:6px 0;border-top:1px dashed #e8dcc4}#histBox .hist-e:first-of-type{border-top:0}
 #histBox ul{margin:4px 0 0 16px;padding:0}#histBox li{margin:1px 0}
@@ -2609,7 +2615,7 @@ const WORKER="https://nader-drafts.partner-e88.workers.dev";
 const SF={url:"https://91fb05.myshopify.com/api/2024-10/graphql.json",token:"be7a8d7a841c0bd4c963af0573d3ee9d"};
 const qs=new URLSearchParams(location.search);
 const Q={o:qs.get("o")||"",i:parseInt(qs.get("i")||"0",10)||0,k:qs.get("k")||"",id:qs.get("id")||"",p:qs.get("p")||"",t:qs.get("t")||""};
-let LIVE=false, SPEC_ID="", ORDER=null, V=null, IS_ADMIN=false, ME="", FROM_SAVE=false;
+let LIVE=false, SPEC_ID="", ORDER=null, V=null, IS_ADMIN=false, ME="", FROM_SAVE=false, CAN_SALES=true;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cleanId=s=>String(s||"").replace(/[^A-Za-z0-9-]/g,"");
 const num=s=>{const m=String(s||"").replace(/,/g,"").match(/-?\d+(?:\.\d+)?/);return m?parseFloat(m[0]):NaN;};
@@ -3141,6 +3147,29 @@ function renderCustInfo(){
   const c=ORDER.cust||{};if(!c.name&&!c.phone&&!c.email){box.innerHTML="";box.hidden=true;return;}box.hidden=false;
   box.innerHTML='<div class="hist-h">Customer <span class="muted">(not printed)</span></div>'+(c.name?'<div><b>'+esc(c.name)+'</b></div>':'')+(c.phone?'<div>'+esc(c.phone)+'</div>':'')+(c.email?'<div>'+esc(c.email)+'</div>':'');
 }
+/* SALES TEAM COMMENTS (Mariam 14 Oct 2026): a place for the sales team to write to each other about this sheet.
+   Never printed, never on the customer's drawing page (the server strips them), not shown to factory-only logins (the server
+   strips them for those too), not part of the drawing — so adding one never unlocks the sheet, changes its status or its
+   change log, and works on a locked sheet. The server keeps everyone's comments when two people save at once. */
+function renderTeamNotes(){
+  const lb=document.getElementById("lockBox");if(!lb||document.body.classList.contains("custview"))return;
+  let box=document.getElementById("teamNotes");
+  if(!CAN_SALES){if(box)box.remove();return;}
+  if(!box){box=document.createElement("div");box.id="teamNotes";box.className="noprint";lb.parentNode.insertBefore(box,lb);}
+  const L=(ORDER.teamNotes||[]).slice().sort((a,b)=>(a.t||0)-(b.t||0)), when=t=>new Date(t).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+  const keep=(document.getElementById("teamNoteIn")||{}).value||"";
+  box.innerHTML='<div class="hist-h">Sales team comments <span class="muted">(team only — not printed, not sent)</span></div>'
+    +(L.length?'<div class="tn-list">'+L.map(n=>'<div class="tn-e"><b>'+esc(n.by||"")+'</b> <span class="muted">· '+when(n.t)+'</span><div>'+esc(n.text||"").replace(/\n/g,"<br>")+'</div></div>').join("")+'</div>':'<div class="muted" style="margin:2px 0 6px">No comments yet.</div>')
+    +'<textarea id="teamNoteIn" rows="2" placeholder="Write a comment for the sales team…"></textarea><button type="button" id="teamNoteAdd">Add comment</button>';
+  const ta=document.getElementById("teamNoteIn");ta.value=keep;
+  document.getElementById("teamNoteAdd").addEventListener("click",addTeamNote);
+  ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();addTeamNote();}});
+  const list=box.querySelector(".tn-list");if(list)list.scrollTop=list.scrollHeight;
+}
+function addTeamNote(){
+  const ta=document.getElementById("teamNoteIn"),text=(ta&&ta.value||"").trim();if(!text||!ORDER)return;
+  ORDER.teamNotes=(ORDER.teamNotes||[]).concat([{by:ME||"Team",t:Date.now(),text:text.slice(0,2000)}]);ta.value="";renderTeamNotes();save();
+}
 /* not an admin: ask one to unlock (goes to the dashboard's "Edit requested" list) */
 async function requestUnlock(){
   const box=document.getElementById('unlockReq'); if(!box)return;
@@ -3169,7 +3198,7 @@ function applyLock(){
     box.innerHTML=(drawStatus()==="complete"?`New drawing — you can edit it now; it locks as soon as it's closed and reopened.`:`Not locked — you can edit it. Lock it once the drawing is final.`)+`<button type="button" id="lockBtn">🔒 Lock now</button>`;
     document.getElementById('lockBtn').onclick=()=>{recordEdits();delete ORDER._edit;ORDER.locked={by:ME,at:Date.now()};applyLock();save();};
   }else{box.className="";box.innerHTML="";}
-  lockCells();renderHistory();renderCustInfo();
+  lockCells();renderHistory();renderCustInfo();renderTeamNotes();
 }
 function renderStatus(){
   const box=document.getElementById('statusBox'); if(!box)return;
@@ -3521,7 +3550,7 @@ async function boot(){
     ORDER=DEMO();try{const s=JSON.parse(localStorage.getItem("nader-spec-demo-"+ORDER.model+((MODELS[ORDER.model]||{}).ver||""))||"null");if(s&&s.V)ORDER=s;}catch(e){}
     document.getElementById("backLink").hidden=true;start();return;
   }
-  LIVE=true; IS_ADMIN=(sess.roles||[]).includes("admin"); ME=sess.name||sess.username||"";
+  LIVE=true; IS_ADMIN=(sess.roles||[]).includes("admin"); CAN_SALES=(sess.roles||[]).some(r=>r==="sales"||r==="admin"); ME=sess.name||sess.username||"";
   SPEC_ID=cleanId(Q.id)||("N"+Date.now().toString(36).toUpperCase());
   if(!Q.id)history.replaceState(null,"","/spec.html?"+new URLSearchParams(Object.assign({},Q.o?{o:Q.o,i:Q.i,k:Q.k}:{},Q.p?{p:Q.p}:{},{id:SPEC_ID})).toString());
   setSaveState("Loading…");
