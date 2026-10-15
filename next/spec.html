@@ -2908,7 +2908,7 @@ function formMismatchesFor(O,v){
 function applyFormSpec(O,spec){
   /* SHAPE → MODULAR on the sales form: the sofa is built from pieces, not from the product's DWG — so no template
      drawing (it would show the wrong sofa). The pieces, their sizes and the layout arrive as rows; the drawing is added by hand. */
-  if(O.model&&Object.keys(spec||{}).some(k=>/^shape\b/i.test(k)&&/^modular/i.test(String(spec[k]||"")))){O.model="";O.manualChosen=true;O.V={};}
+  if(O.model&&Object.keys(spec||{}).some(k=>/^shape\b/i.test(k)&&/^(modular|build)/i.test(String(spec[k]||"")))){O.model="";O.manualChosen=true;O.V={};}
   const m=O.model, v=O.V, rows=[], notes=[];
   const set=(k,val)=>{const r=O.spec.find(x=>x[0].toLowerCase()===k.toLowerCase());if(r)r[1]=val;else rows.push([k,val]);};
   O.formTyped=O.formTyped||{};
@@ -2950,6 +2950,7 @@ function applyFormSpec(O,spec){
       if(L==="shape"){   /* the form's required Shape pick: Standard / L-shape / U-shape */
         if(/^u/i.test(val)){if("SHAPE" in v)v.SHAPE="U";else if(MODELS[m].sides.includes("U"))v.side="U";else set(label,val);return;}
         if(/^l/i.test(val)){O._lflag=true;return;}
+        if(/same as (the )?photo/i.test(val))return;   /* 15 Oct: "Standard (same as the photo)" = the product's own shape — NOT straight */
         if(/standard|straight/i.test(val)){O._straight=true;return;}
         set(label,val);return;}
       if(/configure as l-?shape/.test(L)){O._lflag=/yes|true|on/i.test(val)||val==="Yes";return;}
