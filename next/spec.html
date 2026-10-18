@@ -2420,6 +2420,8 @@ var NaderBuildPlan = (function(){
     var aL = hasArm(k) && armLen(p) > 0 ? p.at : 0, aR = k === 'twoarm' && armLen2(p) > 0 ? p.at : 0, bD = hasBack(k) && backLen(p) > 0 ? p.bt : 0;
     var x0 = aL + 3, x1 = w - aR - 3, y;
     if (x1 - x0 > fs) { y = d - fs * 0.95; o += ln(x0, y, x1, y) + tx((p.r % 180) ? x0 + (x1 - x0) * 0.22 : (x0 + x1) / 2, y, Math.round(w - aL - aR)); }
+    if (hasBack(k) && p.sc > 1) { var cx0 = hasArm(k) ? p.at : 0, cx1 = k === 'twoarm' ? w - p.at : w, cw = (cx1 - cx0) / p.sc, i;   /* each seat cushion's width (18 Oct) */
+      if ((d - p.bt) <= (cx1 - cx0) * 1.2 && cw > fs * 1.6) for (i = 0; i < p.sc; i++) o += tx(cx0 + cw * (i + 0.5), d - fs * 2.35, Math.round(cw * 10) / 10, fs * 0.8); }
     if (k !== 'curve' && k !== 'semi' && d - bD > fs * 2.4) { var x = x1 - fs * 0.9, y0 = bD + 3, y1 = d - fs * 1.9; o += ln(x, y0, x, y1) + tx(x, y0 + fs * 0.95, Math.round(d - bD)); }
     if (aL) o += tx(aL / 2 + 1, p.ao + armLen(p) / 2, p.at, fs * 0.85);
     if (aR) o += tx(w - aR / 2 - 1, p.ao2 + armLen2(p) / 2, p.at, fs * 0.85);
