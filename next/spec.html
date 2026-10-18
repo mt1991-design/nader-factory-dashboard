@@ -187,6 +187,7 @@ body.custview .refs .ref{width:160px;height:130px}
 .draw-hint{margin:6px 0 10px;padding:8px 10px;border-radius:8px;background:#fdf0d5;color:#7a5200;font-size:12px;line-height:1.45}
 .cb-final{margin:4px 0 14px;padding:12px 14px;border-radius:8px;background:#fdf0d5;border:1px solid #e8cf9a;color:#5c3f00;font-size:13.5px;line-height:1.55}
 .cb-final a{color:#6B1A22;font-weight:600}
+.bplan{width:100%}.bplan svg{max-width:100%}.bplan-note{font-size:11px;color:#6b6457;margin-top:6px;line-height:1.4}.bplan .upbtn{margin-top:8px}
 </style>
 
 <div class="toolbar">
@@ -2354,6 +2355,115 @@ const ChBedDraw=PieceDraw.make({
   check:bedCheck
 });
 
+/*BUILD_PLAN_START*/
+/* ===== Build plan drawing — ONE source for the customer PDF (sales form) and the factory spec sheet (dashboard).
+   18 Oct (Mariam): "when a sales agent uses the draw function … include the drawing in the pdf that goes to the customer and
+   also on the spec sheet, so Abdul and Mohammed have a reference".
+   Edit HERE only (~/Desktop/nader-spec-source/build_plan.js). build_spec.py puts it in the spec sheet; sync_build_plan.py copies
+   it into the sales form's sales-form-extra.js (run_all.sh checks the two copies are the same).
+   Input: the planner's saved state — JSON of pieces [kind, x, y, turn, flip, w, d, unset, back offset, back length (-1 = full),
+   back depth, arm offset, arm length (-1 = full), arm width, arm2 offset, arm2 length, seat cushions] (cm, as on the planner).
+   Output: an SVG string, to scale, seen from above. Numbers only are read from the state — nothing in it is ever used as markup. ===== */
+var NaderBuildPlan = (function(){
+  var NAMES = { corner: 'Corner', middle: 'Middle', twoarm: 'Two-arm', ottoman: 'Ottoman', curve: 'Curved end', table: 'End table', ccorner: 'Curved corner', semi: 'Semi-circle' };
+  var EXTRA = { ottoman: 1, curve: 1, table: 1, ccorner: 1, semi: 1 };
+  var C = '#6B1A22', LINE = '#8a7a63', SEAT = '#efe7da', PART = '#d9ccb7';
+  function n(v, d){ v = Number(v); return isFinite(v) ? v : d; }
+  function r1(v){ return Math.round(v * 10) / 10; }
+  function pieces(json){
+    var a = []; try { a = typeof json === 'string' ? JSON.parse(json || '[]') : (json || []); } catch (e) { return []; }
+    if (!Array.isArray(a)) return [];
+    return a.filter(function(q){ return Array.isArray(q) && q.length >= 7 && NAMES[q[0]]; }).map(function(q){
+      var w = Math.max(10, n(q[5], 90)), d = Math.max(10, n(q[6], 90)), p = { k: String(q[0]), x: n(q[1], 0), y: n(q[2], 0), r: ((n(q[3], 0) % 360) + 360) % 360, f: n(q[4], 0) ? 1 : 0, w: w, d: d };
+      var bt0 = Math.min(25, Math.round(d / 4));
+      p.bo = n(q[8], 0); p.bk = n(q[9], -1); p.bt = n(q[10], bt0) || bt0; p.ao = n(q[11], 0); p.am = n(q[12], -1); p.at = n(q[13], 25) || 25;
+      p.ao2 = n(q[14], 0); p.am2 = n(q[15], -1); p.sc = Math.max(1, Math.min(8, n(q[16], 1)));
+      return p; });
+  }
+  var hasBack = function(k){ return !EXTRA[k]; }, hasArm = function(k){ return k === 'corner' || k === 'twoarm'; };
+  function backLen(p){ return Math.max(0, Math.min(p.bk < 0 ? p.w - p.bo : p.bk, p.w - p.bo)); }
+  function armLen(p){ return Math.max(0, Math.min(p.am < 0 ? p.d - p.ao : p.am, p.d - p.ao)); }
+  function armLen2(p){ return Math.max(0, Math.min(p.am2 < 0 ? p.d - p.ao2 : p.am2, p.d - p.ao2)); }
+  function dims(p){ return (p.r % 180) ? [p.d, p.w] : [p.w, p.d]; }
+  function rect(x, y, w, h, rx, fill, sw){ return '<rect x="' + r1(x) + '" y="' + r1(y) + '" width="' + r1(Math.max(1, w)) + '" height="' + r1(Math.max(1, h)) + '" rx="' + r1(rx) + '" fill="' + fill + '" stroke="' + LINE + '" stroke-width="' + sw + '"/>'; }
+  /* one piece in its own cm coordinates (back along the top, arm down the left) */
+  function body(p, fs, sw){
+    var w = p.w, d = p.d, k = p.k, s = '', b, R, r2, A;
+    if (k === 'curve') { R = Math.max(10, Math.min(w - 2, d - 2)); b = Math.min(25, Math.round(d / 4)); r2 = Math.max(4, R - b / 2 - 1);
+      return '<path d="M1 1 H' + r1(w - R) + ' A' + r1(R - 1) + ' ' + r1(R - 1) + ' 0 0 1 ' + r1(w - 1) + ' ' + r1(R) + ' V' + r1(d - 1) + ' H1 Z" fill="' + SEAT + '" stroke="' + LINE + '" stroke-width="' + sw + '"/>'
+        + '<path d="M1 ' + r1(1 + b / 2) + ' H' + r1(w - R) + ' A' + r1(r2) + ' ' + r1(r2) + ' 0 0 1 ' + r1(w - 1 - b / 2) + ' ' + r1(R) + ' V' + r1(d - 1) + '" fill="none" stroke="' + PART + '" stroke-width="' + b + '"/>' + sizes(p, fs, sw); }
+    if (k === 'ccorner') { b = Math.min(25, Math.round(Math.min(w, d) / 4)); var ri = Math.max(8, Math.min(w, d) - b - Math.max(30, Math.min(w, d) * 0.62));
+      return '<path d="M1 1 A' + r1(w - 2) + ' ' + r1(d - 2) + ' 0 0 1 ' + r1(w - 1) + ' ' + r1(d - 1) + ' H' + r1(1 + ri) + ' A' + r1(ri) + ' ' + r1(ri) + ' 0 0 0 1 ' + r1(d - 1 - ri) + ' Z" fill="' + SEAT + '" stroke="' + LINE + '" stroke-width="' + sw + '"/>'
+        + '<path d="M1 ' + r1(1 + b / 2) + ' A' + r1(w - 2 - b / 2) + ' ' + r1(d - 2 - b / 2) + ' 0 0 1 ' + r1(w - 1 - b / 2) + ' ' + r1(d - 1) + '" fill="none" stroke="' + PART + '" stroke-width="' + b + '"/>'; }
+    if (k === 'semi') { b = Math.min(25, Math.round(d / 4)); var rx = (w - 2) / 2, ry = d - 2;
+      return '<path d="M1 ' + r1(d - 1) + ' A' + r1(rx) + ' ' + r1(ry) + ' 0 0 1 ' + r1(w - 1) + ' ' + r1(d - 1) + ' Z" fill="' + SEAT + '" stroke="' + LINE + '" stroke-width="' + sw + '"/>'
+        + '<path d="M' + r1(1 + b / 2) + ' ' + r1(d - 1) + ' A' + r1(rx - b / 2) + ' ' + r1(ry - b / 2) + ' 0 0 1 ' + r1(w - 1 - b / 2) + ' ' + r1(d - 1) + '" fill="none" stroke="' + PART + '" stroke-width="' + b + '"/>' + sizes(p, fs, sw); }
+    if (k === 'table') return rect(1, 1, w - 2, d - 2, 4, '#dcc8a6', sw) + rect(7, 7, w - 14, d - 14, 3, 'none', sw * 0.7);
+    s += rect(1, 1, w - 2, d - 2, k === 'ottoman' ? 12 : 8, SEAT, sw);
+    if (hasBack(k) && p.sc > 1) { var x0 = hasArm(k) ? p.at : 0, x1 = k === 'twoarm' ? w - p.at : w, deep = (d - p.bt) > (x1 - x0) * 1.2, i, v;
+      for (i = 1; i < p.sc; i++) { if (deep) { v = p.bt + (d - p.bt) * i / p.sc; s += '<line x1="' + r1(x0 + 3) + '" y1="' + r1(v) + '" x2="' + r1(x1 - 3) + '" y2="' + r1(v) + '" stroke="' + LINE + '" stroke-width="' + sw * 0.85 + '" stroke-dasharray="4 3"/>'; }
+        else { v = x0 + (x1 - x0) * i / p.sc; s += '<line x1="' + r1(v) + '" y1="' + r1(p.bt + 2) + '" x2="' + r1(v) + '" y2="' + r1(d - 3) + '" stroke="' + LINE + '" stroke-width="' + sw * 0.85 + '" stroke-dasharray="4 3"/>'; } } }
+    if (hasBack(k)) { A = backLen(p); if (A > 0) s += rect(p.bo + 1, 1, A - 2, p.bt, Math.min(7, A / 3, p.bt / 3), PART, sw * 0.8); }
+    if (hasArm(k)) { A = armLen(p); if (A > 0) s += rect(1, p.ao + 1, p.at, A - 2, Math.min(7, p.at / 3, A / 3), PART, sw * 0.8); }
+    if (k === 'twoarm') { A = armLen2(p); if (A > 0) s += rect(w - 1 - p.at, p.ao2 + 1, p.at, A - 2, Math.min(7, p.at / 3, A / 3), PART, sw * 0.8); }
+    return s + sizes(p, fs, sw);
+  }
+  /* the red numbers inside a piece (as on the planner): seat width inside the arms, seat depth, arm width, back depth — always upright */
+  function sizes(p, fs, sw){
+    var w = p.w, d = p.d, k = p.k, o = '';
+    function tx(x, y, t, z){ z = z || fs; var bw = String(t).length * z * 0.62 + z * 0.5;
+      return '<g transform="translate(' + r1(x) + ' ' + r1(y) + ') scale(' + (p.f ? -1 : 1) + ' 1) rotate(' + (-p.r) + ')"><rect x="' + r1(-bw / 2) + '" y="' + r1(-z * 0.62) + '" width="' + r1(bw) + '" height="' + r1(z * 1.24) + '" rx="' + r1(z * 0.3) + '" fill="#fffdf8" opacity=".92"/><text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-size="' + r1(z) + '" font-weight="700" fill="' + C + '">' + t + '</text></g>'; }
+    function ln(x1, y1, x2, y2){ var t = fs * 0.35, a = ' stroke="' + C + '" stroke-width="' + sw * 0.75 + '"/>';
+      return '<line x1="' + r1(x1) + '" y1="' + r1(y1) + '" x2="' + r1(x2) + '" y2="' + r1(y2) + '"' + a + (x1 === x2
+        ? '<line x1="' + r1(x1 - t) + '" y1="' + r1(y1) + '" x2="' + r1(x1 + t) + '" y2="' + r1(y1) + '"' + a + '<line x1="' + r1(x1 - t) + '" y1="' + r1(y2) + '" x2="' + r1(x1 + t) + '" y2="' + r1(y2) + '"' + a
+        : '<line x1="' + r1(x1) + '" y1="' + r1(y1 - t) + '" x2="' + r1(x1) + '" y2="' + r1(y1 + t) + '"' + a + '<line x1="' + r1(x2) + '" y1="' + r1(y2 - t) + '" x2="' + r1(x2) + '" y2="' + r1(y2 + t) + '"' + a); }
+    var aL = hasArm(k) && armLen(p) > 0 ? p.at : 0, aR = k === 'twoarm' && armLen2(p) > 0 ? p.at : 0, bD = hasBack(k) && backLen(p) > 0 ? p.bt : 0;
+    var x0 = aL + 3, x1 = w - aR - 3, y;
+    if (x1 - x0 > fs) { y = d - fs * 0.95; o += ln(x0, y, x1, y) + tx((p.r % 180) ? x0 + (x1 - x0) * 0.22 : (x0 + x1) / 2, y, Math.round(w - aL - aR)); }
+    if (k !== 'curve' && k !== 'semi' && d - bD > fs * 2.4) { var x = x1 - fs * 0.9, y0 = bD + 3, y1 = d - fs * 1.9; o += ln(x, y0, x, y1) + tx(x, y0 + fs * 0.95, Math.round(d - bD)); }
+    if (aL) o += tx(aL / 2 + 1, p.ao + armLen(p) / 2, p.at, fs * 0.85);
+    if (aR) o += tx(w - aR / 2 - 1, p.ao2 + armLen2(p) / 2, p.at, fs * 0.85);
+    if (bD) o += tx(p.bo + backLen(p) / 2, bD / 2 + 1, p.bt, fs * 0.85);
+    return o;
+  }
+  /* reading order — back row first, left to right (the planner numbers pieces the same way) */
+  function number(ps){
+    var rows = [], k = 0;
+    ps.slice().sort(function(a, b){ return a.y - b.y || a.x - b.x; }).forEach(function(p){
+      var row = null; rows.forEach(function(r){ if (Math.abs(r.y - p.y) < 40) row = row || r; }); if (row) row.p.push(p); else rows.push({ y: p.y, p: [p] }); });
+    rows.forEach(function(r){ r.p.sort(function(a, b){ return a.x - b.x; }).forEach(function(p){ p.n = ++k; }); });
+  }
+  /* opts.ppc = pixels per cm of the finished picture (3 by default); opts.title = a caption above the drawing */
+  function svg(json, opts){
+    opts = opts || {}; var ps = pieces(json); if (!ps.length) return '';
+    number(ps);
+    var ppc = opts.ppc || 3, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    ps.forEach(function(p){ var f = dims(p); x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + f[0]); y1 = Math.max(y1, p.y + f[1]); });
+    /* lettering grows with the sofa, so it stays readable when the picture is shrunk onto a page */
+    var fs = Math.max(11 / ppc, Math.max(x1 - x0, y1 - y0) / 44), sw = Math.max(1.3 / ppc, fs * 0.09);
+    var M = fs * 1.4, gapTop = fs * 3.2, gapLeft = fs * 3.2, vx = x0 - gapLeft - M, vy = y0 - gapTop - M, VW = (x1 - x0) + gapLeft + 2 * M, VH = (y1 - y0) + gapTop + 2 * M;
+    var out = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + r1(vx) + ' ' + r1(vy) + ' ' + r1(VW) + ' ' + r1(VH) + '" width="' + Math.round(VW * ppc) + '" height="' + Math.round(VH * ppc) + '" font-family="Helvetica, Arial, sans-serif">'
+      + '<rect x="' + r1(vx) + '" y="' + r1(vy) + '" width="' + r1(VW) + '" height="' + r1(VH) + '" fill="#ffffff"/>';
+    ps.forEach(function(p){ var f = dims(p), cx = p.x + f[0] / 2, cy = p.y + f[1] / 2;
+      out += '<g transform="translate(' + r1(cx) + ' ' + r1(cy) + ') rotate(' + p.r + ') scale(' + (p.f ? -1 : 1) + ' 1) translate(' + r1(-p.w / 2) + ' ' + r1(-p.d / 2) + ')">' + body(p, fs, sw) + '</g>'; });
+    /* the number and the block size of every piece, upright, in its middle */
+    ps.forEach(function(p){ var f = dims(p), cx = p.x + f[0] / 2, cy = p.y + f[1] / 2, z = fs * 1.05, rr = z * 0.85;
+      out += '<circle cx="' + r1(cx) + '" cy="' + r1(cy - z * 0.9) + '" r="' + r1(rr) + '" fill="#1c1a17"/><text x="' + r1(cx) + '" y="' + r1(cy - z * 0.9) + '" text-anchor="middle" dominant-baseline="central" font-size="' + r1(z * 0.95) + '" font-weight="700" fill="#fff">' + p.n + '</text>'
+        + '<text x="' + r1(cx) + '" y="' + r1(cy + z * 0.75) + '" text-anchor="middle" dominant-baseline="central" font-size="' + r1(z) + '" font-weight="600" fill="#3d372f">' + Math.round(f[0]) + ' × ' + Math.round(f[1]) + '</text>'; });
+    /* overall width (top) and depth (left) */
+    var G = '#8a6d2f', t = fs * 0.4, ty = y0 - gapTop * 0.45, lx = x0 - gapLeft * 0.45, a = ' stroke="' + G + '" stroke-width="' + sw + '"/>';
+    out += '<line x1="' + r1(x0) + '" y1="' + r1(ty) + '" x2="' + r1(x1) + '" y2="' + r1(ty) + '"' + a + '<line x1="' + r1(x0) + '" y1="' + r1(ty - t) + '" x2="' + r1(x0) + '" y2="' + r1(ty + t) + '"' + a + '<line x1="' + r1(x1) + '" y1="' + r1(ty - t) + '" x2="' + r1(x1) + '" y2="' + r1(ty + t) + '"' + a
+      + '<text x="' + r1((x0 + x1) / 2) + '" y="' + r1(ty - fs * 0.7) + '" text-anchor="middle" font-size="' + r1(fs * 1.15) + '" font-weight="700" fill="' + G + '">' + Math.round(x1 - x0) + ' cm</text>';
+    out += '<line x1="' + r1(lx) + '" y1="' + r1(y0) + '" x2="' + r1(lx) + '" y2="' + r1(y1) + '"' + a + '<line x1="' + r1(lx - t) + '" y1="' + r1(y0) + '" x2="' + r1(lx + t) + '" y2="' + r1(y0) + '"' + a + '<line x1="' + r1(lx - t) + '" y1="' + r1(y1) + '" x2="' + r1(lx + t) + '" y2="' + r1(y1) + '"' + a
+      + '<text transform="translate(' + r1(lx - fs * 0.7) + ' ' + r1((y0 + y1) / 2) + ') rotate(-90)" text-anchor="middle" font-size="' + r1(fs * 1.15) + '" font-weight="700" fill="' + G + '">' + Math.round(y1 - y0) + ' cm</text>';
+    return out + '</svg>';
+  }
+  /* the piece list in words, numbered like the drawing */
+  function legend(json){ var ps = pieces(json); number(ps); return ps.sort(function(a, b){ return a.n - b.n; }).map(function(p){ var f = dims(p); return p.n + ' ' + NAMES[p.k] + ' ' + Math.round(f[0]) + ' × ' + Math.round(f[1]); }); }
+  return { svg: svg, legend: legend, count: function(json){ return pieces(json).length; } };
+})();
+/*BUILD_PLAN_END*/
+
 /* =====================================================================
    DRAWING TEMPLATES — matched by product title. Add a model here once
    its DWG has been traced. Anything else = "Needs manual drawing".
@@ -2906,6 +3016,8 @@ function formMismatchesFor(O,v){
   return out;
 }
 function applyFormSpec(O,spec){
+  /* 18 Oct: a Build order carries its plan (piece kinds, sizes and positions) as "_Build plan" — drawn on the sheet, never a row */
+  if(spec&&spec["_Build plan"]){O.buildPlan=String(spec["_Build plan"]);spec=Object.assign({},spec);delete spec["_Build plan"];}
   /* SHAPE → MODULAR on the sales form: the sofa is built from pieces, not from the product's DWG — so no template
      drawing (it would show the wrong sofa). The pieces, their sizes and the layout arrive as rows; the drawing is added by hand. */
   if(O.model&&Object.keys(spec||{}).some(k=>/^shape\b/i.test(k)&&/^(modular|build)/i.test(String(spec[k]||"")))){O.model="";O.manualChosen=true;O.V={};}
@@ -3292,7 +3404,9 @@ function setShape(sh){const M=MODELS[ORDER.model];if(!M)return;
 function renderDrawings(){
   const w=document.getElementById('warn');
   if(!ORDER.model){
-    document.getElementById('topBody').innerHTML=manualPanel("top","Top view");
+    /* a Build order: the sales form's own plan, to scale, until the team uploads a drawing of their own (18 Oct) */
+    const bp=(!(ORDER.drawings||{}).top&&ORDER.buildPlan&&typeof NaderBuildPlan!=="undefined"&&NaderBuildPlan.count(ORDER.buildPlan))?NaderBuildPlan.svg(ORDER.buildPlan,{ppc:2}):"";
+    document.getElementById('topBody').innerHTML=bp?`<div class="bplan">${bp.replace(/ width="\d+" height="\d+"/," style=\"width:100%;height:auto;display:block\"")}<div class="bplan-note">From the sales form’s <b>Build</b> plan — seen from above, to scale (cm). Red numbers: seat width, seat depth, arm width and back depth.</div><button type="button" class="upbtn noprint" data-up="top">⬆ Upload our own drawing instead</button></div>`:manualPanel("top","Top view");
     document.getElementById('frontBody').innerHTML=manualPanel("front","Front elevation");
     w.classList.remove('show');
   }else{
