@@ -2917,6 +2917,15 @@ function cleanFormNote(t){
   });
   return out.join("\n");
 }
+/* 19 Oct (Mariam: "the drawing hasn't appeared for order 2886"): orders sent BEFORE 18 Oct have no "_Build plan" on the item,
+   but the form's saved state still holds the planner ("mod-state") for the item that was on screen when it was sent — the last
+   item. Use that for a Build item, so older Build orders get their drawing too. */
+function planFromState(st,d,disp){
+  const sp=(d&&d.spec)||{};if(sp["_Build plan"])return String(sp["_Build plan"]);
+  const build=Object.keys(sp).some(k=>/^shape\b/i.test(k)&&/^(modular|build)/i.test(String(sp[k]||"")));
+  const last=disp&&disp.length&&d===disp[disp.length-1], ms=st&&st.f&&st.f["mod-state"];
+  return (build&&last&&ms&&typeof NaderBuildPlan!=="undefined"&&NaderBuildPlan.count(ms))?String(ms):"";
+}
 async function fromOrder(o,i){
   const it=(o.items||[])[i]||{product:"Unknown product"};
   const O=blankOrder(it.product);O.orderedAs=it.product;
@@ -2951,7 +2960,7 @@ async function fromOrder(o,i){
         O.cust.emirate=f["ord-emirate"]||O.cust.emirate;O.cust.area=[f["ord-area"],f["ord-city"]].filter(Boolean).join(", ")||O.cust.area;
         if(f["ord-addr1"])O.cust.addr=[f["ord-addr1"],f["ord-addr2"]].filter(Boolean).join(", ");
         O.cust.phone=f["ord-phone"]||O.cust.phone;O.cust.email=f["ord-email"]||O.cust.email;O.cust.name=f["ord-name"]||O.cust.name;}
-      if(d){applyFormSpec(O,d.spec||{});fromForm=true;if(d.image){O.photo=d.image;}}
+      if(d){applyFormSpec(O,d.spec||{});fromForm=true;if(d.image){O.photo=d.image;}if(!O.buildPlan){const bp=planFromState(st,d,disp);if(bp)O.buildPlan=bp;}}
     }catch(e){}
   }
   /* orders made WITHOUT the sales form (typed straight into Shopify): read sizes from the title / extra lines / note.
@@ -3731,6 +3740,7 @@ async function boot(){
       const st=decodeState(fj.state),disp=(st&&st.display)||[],it=(o.items||[])[Q.i|0]||{};
       const dd=disp.find(x=>x&&x.product_name===it.product)||disp[Q.i|0];
       const sp=(dd&&dd.spec)||{},add=[];
+      if(!ORDER.model&&!ORDER.buildPlan){const bp=planFromState(st,dd,disp);if(bp){ORDER.buildPlan=bp;window.__saveAfterStart=true;}}   /* 19 Oct: saved Build sheets get their plan */
       Object.keys(sp).forEach(k=>{const v=String(sp[k]||"").trim();if(!v)return;
         if(/customisation notes|special requests/i.test(k))add.push(v);else if(/^customisations?$/i.test(k))add.push("Customisations: "+v);});
       const cur=String(ORDER.notes||""),fresh=add.filter(v=>cur.indexOf(v)<0);
