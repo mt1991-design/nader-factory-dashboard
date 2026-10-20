@@ -1463,6 +1463,7 @@ app.get('/api/health', (req, res) =>
 
 /* ---------- static ---------- */
 app.use(express.static(path.join(__dirname), { index: 'index.html', extensions: ['html'] }));
+app.get('/api/instagram-status', requireAuth, (req, res) => res.json({ ok: true, on: IG.on, configured: !!(IG.token && IG.user), posts: IG_PLAN.length, last: IG.last }));   /* (IG is set up further down — read at request time) */
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 /* ---------- INSTAGRAM AUTO-POSTING (Mariam 20 Oct 2026: "without me having my laptop open") ----------
@@ -1511,6 +1512,5 @@ async function igTick() {
   } catch (e) { igNote('ERROR ' + e.message); } finally { IG.busy = false; }
 }
 setInterval(igTick, 5 * 60e3); setTimeout(igTick, 30e3);
-app.get('/api/instagram-status', requireAuth, (req, res) => res.json({ ok: true, on: IG.on, configured: !!(IG.token && IG.user), posts: IG_PLAN.length, last: IG.last }));
 
 app.listen(PORT, () => console.log(`Nader dashboard on :${PORT} (store ${STORE || 'unset'})`));
