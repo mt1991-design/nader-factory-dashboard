@@ -1465,4 +1465,52 @@ app.get('/api/health', (req, res) =>
 app.use(express.static(path.join(__dirname), { index: 'index.html', extensions: ['html'] }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
+/* ---------- INSTAGRAM AUTO-POSTING (Mariam 20 Oct 2026: "without me having my laptop open") ----------
+   instagram-plan.json = the approved posts (day, date, 20:00 UAE, caption, public media URLs on the Nader Shopify CDN).
+   Every 5 minutes: a post whose time has come (and is at most 2 days late) is published to @nader.uae, then added to the story
+   (the Reel itself, or the post's own first photo). Nothing is ever posted twice: before posting, the account's recent posts are
+   checked for the same caption, and the account's live stories for one made after that post. Off unless IG_AUTOPOST=on.
+   The token is an encrypted app setting (META_ACCESS_TOKEN) — never in this public repo. */
+const IG = { token: process.env.META_ACCESS_TOKEN || '', user: process.env.META_IG_USER_ID || '', on: process.env.IG_AUTOPOST === 'on', busy: false, last: [] };
+const IG_PLAN = (() => { try { return JSON.parse(require('fs').readFileSync(path.join(__dirname, 'instagram-plan.json'), 'utf8')); } catch (e) { return []; } })();
+async function igApi(p, method, q) {
+  const body = new URLSearchParams(Object.assign({}, q || {}, { access_token: IG.token }));
+  const r = await fetch('https://graph.facebook.com/v21.0/' + p + (method === 'POST' ? '' : '?' + body), method === 'POST' ? { method: 'POST', body } : {});
+  const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); return j;
+}
+async function igWait(id, mins) { for (let i = 0; i < (mins || 15) * 6; i++) { const s = (await igApi(id, 'GET', { fields: 'status_code' })).status_code;
+  if (s === 'FINISHED') return; if (s === 'ERROR' || s === 'EXPIRED') throw new Error('Instagram could not process it'); await new Promise(r => setTimeout(r, 10000)); } throw new Error('still processing'); }
+async function igPublish(c) { await igWait(c); return (await igApi(IG.user + '/media_publish', 'POST', { creation_id: c })).id; }
+const igNote = m => { IG.last.unshift(new Date().toISOString() + ' ' + m); IG.last = IG.last.slice(0, 30); console.log('[instagram] ' + m); };
+async function igTick() {
+  if (!IG.on || !IG.token || !IG.user || IG.busy || !IG_PLAN.length) return; IG.busy = true;
+  try {
+    const now = new Date(Date.now() + 4 * 3600e3), today = now.toISOString().slice(0, 10), hm = now.toISOString().slice(11, 16);
+    const due = IG_PLAN.filter(p => (p.date < today || (p.date === today && p.time <= hm)) && (Date.parse(today) - Date.parse(p.date)) / 864e5 <= 2);
+    if (!due.length) return;
+    const recent = (await igApi(IG.user + '/media', 'GET', { fields: 'id,caption,timestamp', limit: 30 })).data || [];
+    const stories = (await igApi(IG.user + '/stories', 'GET', { fields: 'id,timestamp' }).catch(() => ({ data: [] }))).data || [];
+    for (const p of due) {
+      const key = String(p.caption || '').trim().slice(0, 80);
+      let feed = recent.find(m => String(m.caption || '').trim().slice(0, 80) === key);
+      if (!feed) {
+        let c;
+        if (p.kind === 'Reel') c = (await igApi(IG.user + '/media', 'POST', { media_type: 'REELS', video_url: p.video, cover_url: p.cover || '', caption: p.caption, share_to_feed: 'true' })).id;
+        else if (p.kind === 'Carousel') { const kids = []; for (const u of p.images) { const k = (await igApi(IG.user + '/media', 'POST', { image_url: u, is_carousel_item: 'true' })).id; await igWait(k, 5); kids.push(k); }
+          c = (await igApi(IG.user + '/media', 'POST', { media_type: 'CAROUSEL', children: kids.join(','), caption: p.caption })).id; }
+        else c = (await igApi(IG.user + '/media', 'POST', { image_url: p.images[0], caption: p.caption })).id;
+        const id = await igPublish(c); feed = { id, timestamp: new Date().toISOString() }; igNote('posted day ' + p.day + ' ' + p.title + ' (' + id + ')');
+      }
+      const st = p.story || {};
+      /* only while the post is fresh: stories vanish after 24 h, so an older post's missing story is not a reason to post it again */
+      if ((st.video || st.image) && Date.now() - Date.parse(feed.timestamp) < 20 * 3600e3 && !stories.some(s => Date.parse(s.timestamp) >= Date.parse(feed.timestamp) - 60e3)) {
+        const c = (await igApi(IG.user + '/media', 'POST', Object.assign({ media_type: 'STORIES' }, st.video ? { video_url: st.video } : { image_url: st.image }))).id;
+        const sid = await igPublish(c); stories.push({ id: sid, timestamp: new Date().toISOString() }); igNote('story day ' + p.day + ' (' + sid + ')');
+      }
+    }
+  } catch (e) { igNote('ERROR ' + e.message); } finally { IG.busy = false; }
+}
+setInterval(igTick, 5 * 60e3); setTimeout(igTick, 30e3);
+app.get('/api/instagram-status', requireAuth, (req, res) => res.json({ ok: true, on: IG.on, configured: !!(IG.token && IG.user), posts: IG_PLAN.length, last: IG.last }));
+
 app.listen(PORT, () => console.log(`Nader dashboard on :${PORT} (store ${STORE || 'unset'})`));
