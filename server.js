@@ -334,7 +334,7 @@ function qtyTags(items, tags) {
 const LINE_FABRIC_NOTE = /^[^:|\d]*\bfabric(\s*(&|and)\s*colou?r)?\s*:/i;   /*@rules — generated from rules/nader-rules.json, do not edit here*/
 const LINE_FURNITURE = /sofa|couch|sectional|loveseat|\bbeds?\b|headboard|daybed|chair|stool|table|bench|ottoman|pouf|puff|console|sideboard|cabinet|desk|bedside|nightstand|mirror|wardrobe|dresser|seater/i;
 function mapLineItems(arr) {
-  return (arr || []).map((li, i) => {
+  const out = (arr || []).map((li, i) => {
     const t = String(li.title || ''), free = !li.product_id && !(parseFloat(li.price || 0) > 0);
     const it = { product: li.title, variant: li.variant_title || '', sku: li.sku || '', qty: li.quantity || 1, price: li.price || '' };
     /* what the customer picked on the website (fabric, fabric code, seat depth, configuration …) — Mariam 13 Oct: online orders
@@ -343,8 +343,27 @@ function mapLineItems(arr) {
       .filter(pr => pr[0] && pr[1] && pr[0].charAt(0) !== '_');
     if (props.length) it.props = props;
     if (i > 0 && free && (LINE_FABRIC_NOTE.test(t) || !LINE_FURNITURE.test(t))) it.note = 1;
+    /* the layout a customer drew in the website's Cloud Nine planner rides on the line as "_Build plan" (27 Oct) */
+    const bp = (li.properties || []).find(pr => pr && pr.name === '_Build plan'); if (bp && bp.value) it.plan = String(bp.value);
     return it;
   });
+  return c9Group(out, arr);
+}
+/* 27 Oct (Mariam, #29292921): a Cloud Nine sofa bought on the WEBSITE arrives as one line per piece type (Corner ×4, Middle ×1,
+   Ottoman ×2). The factory makes ONE sofa from ONE spec sheet and ONE drawing: the first Cloud Nine line becomes the sofa — all
+   its pieces listed, the customer's layout if they drew one — and the other Cloud Nine lines are folded into it (shown under it,
+   no sheet or stage of their own). Website lines only (they carry "Cushions"); a sales-form order keeps its own items. */
+const C9_LINE = /^\s*cloud\s*nine\s*modular/i;
+function c9Group(items, arr) {
+  const idx = items.map((it, i) => i).filter(i => C9_LINE.test(String(items[i].product || '')) && ((arr[i] || {}).properties || []).some(pr => pr && /^(cushions|_build plan)$/i.test(pr.name || '')));
+  if (!idx.length) return items;
+  const head = items[idx[0]], parts = [];
+  let n = 0;
+  idx.forEach(i => { const it = items[i], q = +it.qty || 1; n += q; parts.push(q + ' × ' + (it.variant || 'Piece')); if (!head.plan && it.plan) head.plan = it.plan;
+    if (i !== idx[0]) { it.note = 1; it.c9part = 1; } });
+  const rank = t => /corner/i.test(t) ? 0 : /middle/i.test(t) ? 1 : /ottoman/i.test(t) ? 2 : 3;
+  head.variant = parts.sort((a, b) => rank(a) - rank(b)).join(' · '); head.qty = 1; head.c9 = n;
+  return items;
 }
 function extractPdf(note) {
   if (!note) return '';
@@ -751,14 +770,15 @@ app.post('/api/order-status', express.text({ type: '*/*', limit: '2kb' }), async
     let fab = {}; try { fab = await fabricIndex(false); } catch (e) {}
     let specs = {}; try { ((await workerJson('/spec')).items || []).forEach(x => { specs[x.id] = x; }); } catch (e) {}
     const items = [];
+    const grouped = mapLineItems(lis);
     lis.forEach((li, i) => {
-      if (!isPiece(li)) return;
+      if (!isPiece(li) || (grouped[i] || {}).c9part) return;
       const st = stages[i] || 0, since = ((pd[i] || {})[st] || '').slice(0, 10) || created;
       const sp = specs[num + (lis.length > 1 ? '-' + (i + 1) : '')], drawn = sp && sp.status === 'complete' ? new Date(sp.at + 4 * 3600e3).toISOString().slice(0, 10) : '';
       const f = fab[o.id + ':' + i] || {}, delivered = (dlv[i] && dlv[i].d) || (shipped ? ((o.fulfillments || []).map(x => x.created_at).filter(Boolean).sort().pop() || '').slice(0, 10) : '');
       const s = trackStep(st, since, drawn, (f.delivered || '').slice(0, 10), delivered);
       const h = [...String(o.id) + i].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-      items.push({ name: trackName(li.title) + ((li.quantity || 1) > 1 ? ' ×' + li.quantity : ''), type: trackType(li.title), color: TRACK_COLORS[h % TRACK_COLORS.length],
+      items.push({ name: trackName(li.title) + ((grouped[i] || {}).c9 ? ' · ' + grouped[i].c9 + ' pieces' : ((li.quantity || 1) > 1 ? ' ×' + li.quantity : '')), type: trackType(li.title), color: TRACK_COLORS[h % TRACK_COLORS.length],
         step: s.step, since: s.since || '', booked: booked[i] || '' });
     });
     if (!items.length && lis.length) {   /* nothing reads like a piece (e.g. a seat-depth change order): show the order as a whole */
