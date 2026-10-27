@@ -3015,6 +3015,12 @@ async function fromOrder(o,i){
     if(Object.keys(sp).length){ if(O.model){try{applyFormSpec(O,sp);}catch(e){}}
       Object.keys(sp).forEach(k=>{ if(!O.spec.some(r=>String(r[0]).toLowerCase().indexOf(k.toLowerCase())===0))O.spec.push([k+" (website)",sp[k]+(/depth|width|height|length/i.test(k)&&/^\d+(\.\d+)?$/.test(sp[k])?" cm":"")]); }); }
   }
+  /* 27 Oct (Mariam, #29292921): a Cloud Nine sofa bought on the website = ONE sheet for all its pieces (the server folds the other
+     Cloud Nine lines into this one). The pieces are listed; the customer's own layout from the website planner is drawn, if they made one. */
+  if(it.c9){ const vr=O.spec.find(x=>x[0]==="Variant"); if(vr){vr[0]="Pieces";vr[1]=it.c9+" in total: "+it.variant;}
+    if(O.model){O.model="";O.manualChosen=true;O.V={};}
+    if(it.plan&&!O.buildPlan)O.buildPlan=String(it.plan);
+    O.spec.push(["Layout",O.buildPlan?"As the customer arranged it on the website — see the plan":"Not arranged by the customer — pieces only, any standard arrangement"]); }
   if(!O.photo||/^data:/.test(O.photo)){const p=await productPhoto(it.product);if(p)O.photo=p;}
   return O;
 }

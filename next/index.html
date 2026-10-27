@@ -4857,7 +4857,7 @@ const AUTO_PIECE=[[/\b(chios|khios)\b/i,/\btable\b/i],[/\b(cheltenham|cheltenhan
 const FABRIC_NOTE=/^[^:|\d]*\bfabric(\s*(&|and)\s*colou?r)?\s*:/i;   /*@rules — generated from rules/nader-rules.json, do not edit here*/
 const isNoteLine=(o,i)=>i>0&&!!((o.items[i]||{}).note||FABRIC_NOTE.test((o.items[i]||{}).product||""));
 const isFabricNote=isNoteLine;
-function fabricNotesAfter(o,i){let h="";for(let j=i+1;j<o.items.length&&isNoteLine(o,j);j++)h+='<div class="muted" style="font-size:11.5px;margin-top:3px">'+esc(o.items[j].product)+'</div>';return h;}
+function fabricNotesAfter(o,i){let h="";for(let j=i+1;j<o.items.length&&isNoteLine(o,j);j++)if(!(o.items[j]||{}).c9part)h+='<div class="muted" style="font-size:11.5px;margin-top:3px">'+esc(o.items[j].product)+'</div>';return h;}
 /* "item 2/3" counts real pieces only (note lines are not items). The line's own number stays as it is for sheets + stage tags. */
 function pieceCount(o){let n=0;for(let j=0;j<o.items.length;j++)if(!isNoteLine(o,j))n++;return n;}
 function pieceNo(o,i){let k=0;for(let j=0;j<=i&&j<o.items.length;j++)if(!isNoteLine(o,j))k++;return k;}
@@ -4871,8 +4871,9 @@ function autoDrawable(title){if(FABRIC_NOTE.test(title||"")||otherProductD(title
 function webOpts(it){ if(!it)return ""; const parts=[]; if(it.variant&&!/default title/i.test(it.variant))parts.push("<b>"+esc(it.variant)+"</b>");
   (it.props||[]).forEach(function(pr){ if(/premium|price/i.test(pr[0])&&!(parseFloat(pr[1])>0))return;   /* a 0 premium says nothing */
     parts.push(esc(pr[0].replace(/\s*\(cm\)\s*$/i,""))+": <b>"+esc(pr[1])+(/\(cm\)\s*$/i.test(pr[0])&&/^\d+(\.\d+)?$/.test(pr[1])?" cm":"")+"</b>"); });
+  if(it.c9)parts.push(it.plan?'Layout: <b>drawn by the customer — on the spec sheet</b>':'Layout: <b>none drawn — pieces only</b>');   /* 27 Oct: Cloud Nine bought on the website */
   return parts.length?'<div class="webopts" title="Chosen by the customer on the website">'+parts.join(" · ")+"</div>":""; }
-function qtyChip(it){const q=+(it&&it.qty)||1;return q>1?' <span class="qtychip" title="Make '+q+' of this piece">×'+q+' PIECES</span>':'';}
+function qtyChip(it){if(it&&it.c9)return ' <span class="qtychip" title="One Cloud Nine sofa made from '+it.c9+' pieces — one spec sheet, one drawing">'+it.c9+' PIECES · ONE SOFA</span>';const q=+(it&&it.qty)||1;return q>1?' <span class="qtychip" title="Make '+q+' of this piece">×'+q+' PIECES</span>':'';}
 function isFurnitureLine(title){if(/^\s*(extra charge|change to order)\s*:/i.test(title||"")||FABRIC_NOTE.test(title||""))return false;return autoDrawable(title)||/sofa|bed\b|chair|table|stool|ottoman|bench|console|daybed|headboard|sideboard|cabinet|desk|pouf|sectional|couch|loveseat/i.test(title||"");}
 /* a line is drawn when it has a CAD template OR the team uploaded a drawing and set the spec status to complete */
 function lineCheck(o,i){const m=SAVED_SPECS.get(specKey(lineId(o,i)));return !!(m&&m.status==="check");}   /* saved sheet says "Check dimensions" (e.g. ottoman size missing) */
