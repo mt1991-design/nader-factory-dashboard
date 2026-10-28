@@ -39,7 +39,7 @@ const USERS = {
   aslam: { name: "Mohammed Aslam", roles: ["sales", "factory"], salt: "aec9ab7d64cc471c7a5d4013d4a3f00a", hash: "0fefb6223fe8682accc278e5c06bda6acdeed5c5a8332b599c7cb2cec9aa56de" },
   sam: { name: "Sam", roles: ["sales", "factory"], salt: "2ede4da91610ea4721d4d1a8d9060e20", hash: "ce7b72b2bf918da150befd204441c989e76400bb288a4f496d3020fc3dbd772d" },
   akash: { name: "Akash", roles: ["factory"], salt: "88af2252a294be2535b0f6f776bc564c", hash: "a106d08ae94a71a2b9e2bf18d7c93a42b5108b22b5fc76d910d36de8e0f1f98a" },   // factory only (Mariam 13 Oct): no prices, no sales screens
-  vinay: { name: "Vinay", roles: ["sales"], salt: "729b2b69f6abeb2d6c8d6e99bcf5b3b4", hash: "7cd8dbc5ffda1895f8540233a6c8c855c5aa0b7349022c3355a95c5602bdbda9" },   // sales only (Mariam 16 Oct)
+  /* vinay: access removed 28 Oct 2026 (Mariam) */
 };
 function checkPassword(user, password) {
   if (!user || !password) return false;
