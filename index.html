@@ -142,6 +142,7 @@
   .dwchip{display:inline-block;font:700 10px var(--ui,inherit);letter-spacing:.02em;padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;vertical-align:1px}
   .dwchip.auto{background:#e6f4ea;color:#1e7d43}
   .dwchip.manual{background:rgba(179,38,30,.10);color:#b3261e}
+  .editchip{display:inline-block;font:600 10px var(--mono);letter-spacing:.03em;padding:2px 7px;border-radius:20px;background:#eef1f6;color:#3a4a63;margin-top:5px;white-space:nowrap;cursor:help}
   .drawchip{display:inline-block;font:600 10px var(--mono);letter-spacing:.03em;padding:2px 7px;border-radius:20px;background:rgba(179,38,30,.10);color:#b3261e;margin-top:5px;white-space:nowrap}
   .oddraw select{font:600 12px var(--ui);padding:5px 8px;border:1px solid var(--fieldline);border-radius:7px;background:var(--field);color:var(--ink)}
   .filtersel{font:600 12px var(--ui);padding:7px 10px;border:1px solid var(--fieldline);border-radius:8px;background:var(--field);color:var(--ink);cursor:pointer}
@@ -5565,7 +5566,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const payCtrl=(i===0&&o.isDraft&&ROLE!=="factory"&&o.signature==="signed")?payControls(o,oi):"";
     const balCtrl=(i===0&&!o.isDraft&&ROLE!=="factory"&&+o.outstanding>0.5)?balControls(o,oi):"";
     const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="chgOpen('+oi+')">✎ Change order</button><div id="chg-'+oi+'" hidden></div></div>':"";
-    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+payCtrl+balCtrl+xtra):"";
+    const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+(i===0?editChip(o):"")+payCtrl+balCtrl+xtra):"";
     const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i)+webOpts(it);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+onlineTag+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
@@ -5586,11 +5587,16 @@ function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!
   const url="/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:specKey(lineId(o,i))}).toString();
   if(!SAVED_SPECS.has(specKey(lineId(o,i))))SAVED_SPECS.set(specKey(lineId(o,i)),{});window.open(url,"_blank");setTimeout(renderSalesDash,50);}
 /* the sales form is staff-only: open it with a signed pass from the server (who is logged in, valid 12h) */
-/* ✎ Edit: only the sales agent named on the order ("Agent: …" in the note) or an admin.
+/* ✎ Edit: ANY sales login or admin (Mariam 30 Oct 2026: "someone is off sick and the customer comes back" — was only the
+   agent named on the order). The order stays under its original agent; each edit is logged in the order note as
+   "✎ Edited by … · date" (drafts) or "✎ Changed … by …" (paid orders) and shown on the row (editLog).
    Drafts (signed or not) reopen for changes + re-signing; PAID orders open in change mode (extra is added to the same order). */
 function orderAgent(o){ const m=String(o.note||"").match(/Agent:\s*([^\n·]+?)\s*(?:·|\n|$)/); return m?m[1].trim():""; }
-function canEditOrder(o){ if(!USER||ROLE==="factory")return false; if(USER.roles.indexOf("admin")>=0)return true;
-  const a=orderAgent(o).toLowerCase(), me=String(USER.name||USER.username||"").trim().toLowerCase(); return !!a&&!!me&&(a===me||a.split(" ")[0]===me.split(" ")[0]); }
+function canEditOrder(o){ return !!USER&&ROLE!=="factory"; }
+function editLog(o){ return String(o.note||"").split("\n").map(l=>{ let m=l.match(/^✎ Edited by (.+?) · (\d{4}-\d\d-\d\d \d\d:\d\d)/); if(m)return {who:m[1],t:m[2]};
+    m=l.match(/^✎ Changed (\d{4}-\d\d-\d\d \d\d:\d\d) by ([^:]+):/); return m?{who:m[2].trim(),t:m[1]}:null; }).filter(Boolean); }
+function editChip(o){ const L=editLog(o); if(!L.length)return ""; const e=L[L.length-1], M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], d=t=>(+t.slice(8,10))+" "+M[+t.slice(5,7)-1]+" "+t.slice(11,16);
+  return '<br><span class="editchip" title="'+esc(L.map(x=>x.who+" · "+x.t).join("\n"))+'">✎ Edited by '+esc(e.who)+' · '+d(e.t)+(L.length>1?' · '+L.length+' edits':'')+'</span>'; }
 function editOrder(oi){ const o=SHOPIFY[oi]; if(!o||!o.edit_state)return;
   let h="edit="+o.edit_state;
   if(!o.isDraft) h+="&order="+encodeURIComponent(o.id)+"&on="+encodeURIComponent(o.order)+"&paid="+encodeURIComponent(o.total||"");
