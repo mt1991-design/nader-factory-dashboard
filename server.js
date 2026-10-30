@@ -1512,6 +1512,9 @@ async function igTick() {
     const recent = (await igApi(IG.user + '/media', 'GET', { fields: 'id,caption,timestamp', limit: 30 })).data || [];
     const stories = (await igApi(IG.user + '/stories', 'GET', { fields: 'id,timestamp' }).catch(() => ({ data: [] }))).data || [];
     for (const p of due) {
+      /* 29 Oct 2026 (Mariam): never post a caption with more than 5 hashtags — too many can get the account blocked */
+      const tags = (String(p.caption || '').match(/#[^\s#]+/g) || []).length;
+      if (tags > 5) { igNote('SKIPPED day ' + p.day + ' ' + p.title + ': ' + tags + ' hashtags (max 5)'); continue; }
       const key = String(p.caption || '').trim().slice(0, 80);
       let feed = recent.find(m => String(m.caption || '').trim().slice(0, 80) === key);
       if (!feed) {
