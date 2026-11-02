@@ -1483,6 +1483,50 @@ app.get('/api/health', (req, res) =>
 
 /* ---------- static ---------- */
 app.use(express.static(path.join(__dirname), { index: 'index.html', extensions: ['html'] }));
+/* ---- WhatsApp catalogue feed (Mariam 2 Nov 2026) ----------------------------------------------------------------------
+   The Shopify→Meta catalogue has every size/colour/fabric as its own item (16,000+), too many for WhatsApp (WhatsApp Web
+   will not even load it). This feed lists each ACTIVE product ONCE (~730): photo, "from" price, short description, website
+   link and a clean category taken from the website collections. Meta reads it daily into the separate "Nader – WhatsApp"
+   catalogue that the WhatsApp Business number uses. Public on purpose (Meta fetches it); only public website data. */
+const WA_FEED = { at: 0, csv: '' };
+const WA_CATS = [['u-shape-sofas', 'U-Shape Sofas'], ['corner-sofas', 'Corner Sofas'], ['day-beds', 'Daybeds'], ['bedside-tables', 'Bedside Tables'],
+  ['beds', 'Beds'], ['dining-tables', 'Dining Tables'], ['dining-chairs', 'Dining Chairs'], ['bar-stools', 'Bar Stools'], ['armchairs', 'Armchairs'],
+  ['benches', 'Benches'], ['all-sofas', 'Sofas']];
+function waCategory(p) {
+  if (/cloud nine/i.test(p.title)) return 'Modular Sofas';
+  const hs = (p.collections && p.collections.nodes || []).map(c => c.handle);
+  for (const [h, name] of WA_CATS) if (hs.includes(h)) return name;
+  const t = (p.productType || '').toLowerCase();
+  if (/dining table/.test(t)) return 'Dining Tables'; if (/arm ?chair/.test(t)) return 'Armchairs'; if (/bench/.test(t)) return 'Benches'; if (/sofa/.test(t)) return 'Sofas';
+  return 'Furniture';
+}
+async function buildWaFeed() {
+  const rows = []; let cur = null;
+  const Q = `query($c:String){ products(first:100, after:$c, query:"status:active"){ pageInfo{ hasNextPage endCursor } nodes{ id title productType description onlineStoreUrl
+    featuredImage{ url } images(first:5){ nodes{ url } } priceRangeV2{ minVariantPrice{ amount currencyCode } } collections(first:30){ nodes{ handle } } } } }`;
+  do {
+    const d = await shopifyGql(Q, { c: cur }); if (d.errors) throw new Error(d.errors[0].message);
+    const pg = d.data.products;
+    for (const p of pg.nodes) {
+      const price = Number(p.priceRangeV2.minVariantPrice.amount);
+      if (!p.onlineStoreUrl || !p.featuredImage || !(price > 0) || p.productType === 'Upgrade' || /^extra charge/i.test(p.title)) continue;
+      const desc = (String(p.description || '').replace(/\s+/g, ' ').trim() || (p.title + '. Made to order by our team in your size, fabric and colour.')).slice(0, 4900);
+      const extra = p.images.nodes.map(i => i.url).filter(u => u !== p.featuredImage.url).slice(0, 4).join(',');
+      rows.push([p.id.split('/').pop(), p.title, desc, 'in stock', 'new', price.toFixed(2) + ' ' + (p.priceRangeV2.minVariantPrice.currencyCode || 'AED'),
+        p.onlineStoreUrl, p.featuredImage.url, extra, 'Nader', waCategory(p), 'Furniture']);
+    }
+    cur = pg.pageInfo.hasNextPage ? pg.pageInfo.endCursor : null;
+  } while (cur);
+  const esc = v => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const head = ['id', 'title', 'description', 'availability', 'condition', 'price', 'link', 'image_link', 'additional_image_link', 'brand', 'product_type', 'google_product_category'];
+  return [head].concat(rows).map(r => r.map(esc).join(',')).join('\n') + '\n';
+}
+app.get('/feeds/whatsapp-catalog.csv', async (req, res) => {
+  try {
+    if (!WA_FEED.csv || Date.now() - WA_FEED.at > 6 * 3600e3) { WA_FEED.csv = await buildWaFeed(); WA_FEED.at = Date.now(); }
+    res.set('Content-Type', 'text/csv; charset=utf-8'); res.set('Cache-Control', 'public, max-age=3600'); res.send(WA_FEED.csv);
+  } catch (e) { res.status(500).type('text/plain').send('feed error: ' + e.message); }
+});
 app.get('/api/instagram-status', requireAuth, (req, res) => res.json({ ok: true, on: IG.on, configured: !!(IG.token && IG.user), posts: IG_PLAN.length, last: IG.last }));   /* (IG is set up further down — read at request time) */
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
