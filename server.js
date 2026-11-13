@@ -40,6 +40,7 @@ const USERS = {
   sam: { name: "Sam", roles: ["sales", "factory"], salt: "2ede4da91610ea4721d4d1a8d9060e20", hash: "ce7b72b2bf918da150befd204441c989e76400bb288a4f496d3020fc3dbd772d" },
   akash: { name: "Akash", roles: ["factory"], salt: "88af2252a294be2535b0f6f776bc564c", hash: "a106d08ae94a71a2b9e2bf18d7c93a42b5108b22b5fc76d910d36de8e0f1f98a" },   // factory only (Mariam 13 Oct): no prices, no sales screens
   /* romesh (Romesh Thamel): access removed 7 Nov 2026 (Mariam) */
+  piyumi: { name: "Piyumi", roles: ["sales", "factory"], salt: "c3ba0a01796ba40d79fd661995d6f33a", hash: "2148e6ff9010cb99eda9e9daacfcad83e39559d826f497689e00247f60c893aa" },   // sales + factory (Mariam 13 Nov 2026)
   /* vinay: access removed 28 Oct 2026 (Mariam) */
 };
 function checkPassword(user, password) {
