@@ -301,7 +301,7 @@
     <img id="saleslogo" alt="Nader" class="worklogo">
     <div class="topttl">Sales · New orders</div>
     <div class="topspacer"></div>
-    <a class="small" href="https://nader.ae/pages/sales-form" onclick="return openSalesForm(event,'')" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
+    <a class="small" href="https://nader.ae/pages/sales-form-test" onclick="return openSalesForm(event,'')" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2f7a3a;color:#fff;border:1px solid #2f7a3a;border-radius:9px;padding:8px 14px;font-weight:600">＋ New order</a>
     <button type="button" class="small" onclick="newDrawing()" title="Create a spec sheet / drawing without a sales form" style="display:inline-flex;align-items:center;gap:6px;background:#fff;color:#1c1a17;border:1px solid #cfc6b4;border-radius:9px;padding:8px 14px;font-weight:600;cursor:pointer">✎ New drawing</button>
     <span class="roleswitch" id="roleSwitch-sales"></span>
     <button class="ghost small" onclick="logout()">Log out</button>
@@ -5602,7 +5602,7 @@ function editOrder(oi){ const o=SHOPIFY[oi]; if(!o||!o.edit_state)return;
   if(!o.isDraft) h+="&order="+encodeURIComponent(o.id)+"&on="+encodeURIComponent(o.order)+"&paid="+encodeURIComponent(o.total||"");
   track("edit_order",{order:o.order,paid:!o.isDraft}); openSalesForm(null,h); }
 function openSalesForm(ev,hash){ if(ev)ev.preventDefault(); const w=window.open("about:blank","_blank");
-  fetch("/api/formlink",{credentials:"same-origin"}).then(r=>r.json()).then(d=>{const u="https://nader.ae/pages/sales-form"+(d&&d.ok?"?k="+encodeURIComponent(d.k):"")+(hash?"#"+hash:"");if(w)w.location=u;else location.href=u;})
+  fetch("/api/formlink",{credentials:"same-origin"}).then(r=>r.json()).then(d=>{const u="https://nader.ae/pages/sales-form-test"+(d&&d.ok?"?k="+encodeURIComponent(d.k):"")+(hash?"#"+hash:"");if(w)w.location=u;else location.href=u;})
     .catch(()=>{if(w)w.close();alert("Couldn't open the sales form — check your connection.");}); return false; }
 function specKey(id){return String(id||"").replace(/[^A-Za-z0-9-]/g,"");}
 function newDrawing(){window.open("/next/spec.html?p="+encodeURIComponent("Kobe Corner Sofa"),"_blank");}
