@@ -196,6 +196,13 @@ body.custview .refs .ref{width:160px;height:130px}
 .draw-hint{margin:6px 0 10px;padding:8px 10px;border-radius:8px;background:#fdf0d5;color:#7a5200;font-size:12px;line-height:1.45}
 .cb-final{margin:4px 0 14px;padding:12px 14px;border-radius:8px;background:#fdf0d5;border:1px solid #e8cf9a;color:#5c3f00;font-size:13.5px;line-height:1.55}
 .cb-final a{color:#6B1A22;font-weight:600}
+/* 13 Nov 2026 (Abdul, via Mariam): the FACTORY print shows only Workshop Notes — "Notes to Customer" stays on screen for the sales team
+   and on the customer's own drawing page, but is not printed for the factory. And the top view is bigger (it was held to 60 mm). */
+@media print{body:not(.custview) :is(.cnotes,.cnotes-h){display:none!important}}
+body:not(.custview):not(.is-stool) .grid2c{grid-template-columns:24fr 76fr}
+body:not(.custview):not(.is-stool) .toppanel .body{min-height:92mm}
+body:not(.custview):not(.is-stool) .toppanel .body svg{max-height:104mm}
+body:not(.custview):not(.is-stool) .toppanel .body .mdraw img,body:not(.custview):not(.is-stool) .toppanel .body img{width:auto;height:auto;max-width:100%;max-height:104mm}
 .bplan{width:100%}.bplan svg{max-width:100%}.bplan-note{font-size:11px;color:#6b6457;margin-top:6px;line-height:1.4}.bplan .upbtn{margin-top:8px}
 /* ---------- 23 Oct (Mariam: "not mobile-friendly — the left box covers the drawing"): PHONES, team view ----------
    The sheet fits the screen (like the customer view) and "Drawing options" becomes a drawer at the bottom: a slim bar when
