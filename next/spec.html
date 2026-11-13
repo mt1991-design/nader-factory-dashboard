@@ -2480,9 +2480,76 @@ var NaderBuildPlan = (function(){
       var row = null; rows.forEach(function(r){ if (Math.abs(r.y - p.y) < 40) row = row || r; }); if (row) row.p.push(p); else rows.push({ y: p.y, p: [p] }); });
     rows.forEach(function(r){ r.p.sort(function(a, b){ return a.x - b.x; }).forEach(function(p){ p.n = ++k; }); });
   }
+  /* ===== 11 Nov 2026 (Mariam): ANGLED RUN — pieces in a row with a turn at each joint (half hexagon, bay window, a box with one
+     side angled…). Saved in the same plan as ONE entry: ["arun", depth, back, arm, startEnd, startAngle, endEnd, endAngle,
+     [[outer length, seat cushions], …], [turn at joint 1, …]]  — ends are "arm" | "open" | "angle". Each piece's end is cut at
+     half the turn at its joint, so neighbouring pieces meet flush. Drawn with the outside size (gold) and the inside sizes (blue). ===== */
+  var TURNS = [0, 15, 22.5, 30, 45, 60, 90];
+  function run(json){
+    var a = []; try { a = typeof json === 'string' ? JSON.parse(json || '[]') : (json || []); } catch (e) { return null; }
+    if (!Array.isArray(a)) return null;
+    var q = null; a.forEach(function(x){ if (!q && Array.isArray(x) && x[0] === 'arun') q = x; }); if (!q) return null;
+    var segs = (Array.isArray(q[8]) ? q[8] : []).filter(Array.isArray).map(function(g){ return { L: Math.max(40, Math.min(600, n(g[0], 180))), seats: Math.max(1, Math.min(6, Math.round(n(g[1], 1)))) }; });
+    if (!segs.length) return null;
+    var end = function(v){ return v === 'open' || v === 'angle' ? v : 'arm'; }, ang = function(v){ v = n(v, 30); return Math.max(0, Math.min(75, v)); };
+    var turns = (Array.isArray(q[9]) ? q[9] : []).map(function(t){ t = n(t, 0); return Math.max(0, Math.min(90, t)); });
+    while (turns.length < segs.length - 1) turns.push(0); turns.length = segs.length - 1;
+    return { d: Math.max(50, Math.min(160, n(q[1], 95))), bt: Math.max(5, Math.min(40, n(q[2], 20))), at: Math.max(0, Math.min(45, n(q[3], 25))),
+      s: end(q[4]), sa: ang(q[5]), e: end(q[6]), ea: ang(q[7]), segs: segs, turns: turns };
+  }
+  function rad(a){ return a * Math.PI / 180; }
+  function runGeom(R){
+    var d = R.d, P = [0, 0], th = -R.turns.reduce(function(x, y){ return x + y; }, 0) / 2, out = [];
+    R.segs.forEach(function(g, i){
+      var cs = i === 0 ? (R.s === 'angle' ? R.sa : 0) : R.turns[i - 1] / 2, ce = i === R.segs.length - 1 ? (R.e === 'angle' ? R.ea : 0) : R.turns[i] / 2;
+      var u = [Math.cos(rad(th)), Math.sin(rad(th))], nn = [-u[1], u[0]], P0 = P, P1 = [P0[0] + g.L * u[0], P0[1] + g.L * u[1]], ts = Math.tan(rad(cs)), te = Math.tan(rad(ce));
+      out.push({ i: i, g: g, P0: P0, P1: P1, F0: [P0[0] + d * nn[0] + d * ts * u[0], P0[1] + d * nn[1] + d * ts * u[1]], F1: [P1[0] + d * nn[0] - d * te * u[0], P1[1] + d * nn[1] - d * te * u[1]],
+        u: u, n: nn, cs: cs, ce: ce, inner: g.L - d * (ts + te), armS: i === 0 && R.s === 'arm', armE: i === R.segs.length - 1 && R.e === 'arm' });
+      P = P1; if (i < R.segs.length - 1) th += R.turns[i];
+    });
+    return out;
+  }
+  function runBox(G, front){ var b = [1e9, 1e9, -1e9, -1e9]; G.forEach(function(s){ (front ? [s.F0, s.F1] : [s.P0, s.P1, s.F0, s.F1]).forEach(function(p){ b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]); }); }); return b; }
+  function runSummary(json){ var R = run(json); if (!R) return null; var G = runGeom(R), o = runBox(G), f = runBox(G, true);
+    return { R: R, G: G, outer: [o[2] - o[0], o[3] - o[1]], inner: G.length > 1 ? [f[2] - f[0], f[3] - f[1]] : null, seatLen: G.reduce(function(t, s){ return t + s.inner; }, 0) }; }
+  function runSvg(json, opts){
+    var S = runSummary(json); if (!S) return ''; var R = S.R, G = S.G, d = R.d, bt = R.bt, at = R.at, ppc = opts.ppc || 3;
+    var bx = runBox(G), x0 = bx[0], y0 = bx[1], x1 = bx[2], y1 = bx[3], W = x1 - x0, H = y1 - y0;
+    var fs = Math.max(11 / ppc, Math.max(W, H) / 42), sw = Math.max(1.3 / ppc, fs * 0.09), M = fs * 5.2, vx = x0 - M, vy = y0 - M, VW = W + 2 * M, VH = H + 2 * M;
+    var pt = function(p){ return r1(p[0]) + ' ' + r1(p[1]); }, lerp = function(a, b, t){ return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }, add = function(a, v, k){ return [a[0] + v[0] * k, a[1] + v[1] * k]; };
+    var poly = function(ps, fill, w){ return '<path d="M' + ps.map(pt).join(' L') + ' Z" fill="' + fill + '" stroke="' + LINE + '" stroke-width="' + r1(w * 100) / 100 + '"/>'; };
+    var lab = function(p, t, z, col, bg){ var bw = String(t).length * z * 0.58 + z * 0.6;
+      return (bg ? '<rect x="' + r1(p[0] - bw / 2) + '" y="' + r1(p[1] - z * 0.62) + '" width="' + r1(bw) + '" height="' + r1(z * 1.24) + '" rx="' + r1(z * 0.25) + '" fill="#fffdf8" opacity=".92"/>' : '')
+        + '<text x="' + r1(p[0]) + '" y="' + r1(p[1]) + '" text-anchor="middle" dominant-baseline="central" font-size="' + r1(z) + '" font-weight="700" fill="' + col + '">' + t + '</text>'; };
+    var BL = '#2f6f8f', GD = '#8a6d2f', o = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + r1(vx) + ' ' + r1(vy) + ' ' + r1(VW) + ' ' + r1(VH) + '" width="' + Math.round(VW * ppc) + '" height="' + Math.round(VH * ppc) + '" font-family="Helvetica, Arial, sans-serif">'
+      + '<rect x="' + r1(vx) + '" y="' + r1(vy) + '" width="' + r1(VW) + '" height="' + r1(VH) + '" fill="#ffffff"/>';
+    G.forEach(function(s){
+      var ts = Math.tan(rad(s.cs)), te = Math.tan(rad(s.ce)), B0 = add(add(s.P0, s.n, bt), s.u, bt * ts), B1 = add(add(s.P1, s.n, bt), s.u, -bt * te), k, j;
+      o += poly([s.P0, s.P1, s.F1, s.F0], SEAT, sw * 1.3) + poly([s.P0, s.P1, B1, B0], PART, sw);
+      if (s.armS && at > 0) o += poly([s.P0, add(s.P0, s.u, at), add(add(s.P0, s.n, d), s.u, at), add(s.P0, s.n, d)], PART, sw);
+      if (s.armE && at > 0) o += poly([s.P1, add(s.P1, s.u, -at), add(add(s.P1, s.n, d), s.u, -at), add(s.P1, s.n, d)], PART, sw);
+      k = s.g.seats; for (j = 1; j < k; j++) { var a = lerp(B0, B1, j / k), b = lerp(s.F0, s.F1, j / k); o += '<line x1="' + r1(a[0]) + '" y1="' + r1(a[1]) + '" x2="' + r1(b[0]) + '" y2="' + r1(b[1]) + '" stroke="' + LINE + '" stroke-width="' + r1(sw * 80) / 100 + '" stroke-dasharray="' + r1(fs * 0.4) + ' ' + r1(fs * 0.3) + '"/>'; }
+      o += lab(add(lerp(s.P0, s.P1, .5), s.n, -fs * 1.3), Math.round(s.g.L), fs, C, false);   /* outer (back) length */
+      var A = add(s.F0, s.n, -fs * 0.75), Bq = add(s.F1, s.n, -fs * 0.75), tk = fs * 0.32, L = function(p, q){ return '<line x1="' + r1(p[0]) + '" y1="' + r1(p[1]) + '" x2="' + r1(q[0]) + '" y2="' + r1(q[1]) + '" stroke="' + BL + '" stroke-width="' + r1(sw * 90) / 100 + '"/>'; };
+      o += L(A, Bq) + L(add(A, s.n, tk), add(A, s.n, -tk)) + L(add(Bq, s.n, tk), add(Bq, s.n, -tk)) + lab(add(lerp(A, Bq, .5), s.n, -fs * 0.85), 'inner ' + Math.round(s.inner), fs * 0.82, BL, true);
+      var c = lerp(lerp(s.P0, s.P1, .5), lerp(s.F0, s.F1, .5), .55);
+      o += '<circle cx="' + r1(c[0]) + '" cy="' + r1(c[1]) + '" r="' + r1(fs * 0.95) + '" fill="#1c1a17"/><text x="' + r1(c[0]) + '" y="' + r1(c[1]) + '" text-anchor="middle" dominant-baseline="central" font-size="' + r1(fs) + '" font-weight="700" fill="#fff">' + (s.i + 1) + '</text>';
+    });
+    G.forEach(function(s, i){ if (i === G.length - 1 || !R.turns[i]) return; var q = add(s.P1, [s.n[0] + G[i + 1].n[0], s.n[1] + G[i + 1].n[1]], -fs * 1.3); o += lab(q, (180 - R.turns[i]) + '°', fs * 0.85, GD, false); });
+    if (S.inner) { var f = runBox(G, true), ix0 = f[0], iy0 = f[1], ix1 = f[2], iy1 = f[3], t = fs * 0.35, yb = iy1 + fs * 1.6, xm = (ix0 + ix1) / 2, Ls = function(a, b, c2, d2){ return '<line x1="' + r1(a) + '" y1="' + r1(b) + '" x2="' + r1(c2) + '" y2="' + r1(d2) + '" stroke="' + BL + '" stroke-width="' + r1(sw * 100) / 100 + '"/>'; };
+      o += '<rect x="' + r1(ix0) + '" y="' + r1(iy0) + '" width="' + r1(ix1 - ix0) + '" height="' + r1(iy1 - iy0) + '" fill="none" stroke="' + BL + '" stroke-width="' + r1(sw * 100) / 100 + '" stroke-dasharray="' + r1(fs * 0.5) + ' ' + r1(fs * 0.35) + '" opacity=".7"/>'
+        + Ls(ix0, yb, ix1, yb) + Ls(ix0, yb - t, ix0, yb + t) + Ls(ix1, yb - t, ix1, yb + t) + lab([xm, yb + fs * 1.05], 'inner width ' + Math.round(ix1 - ix0) + ' cm', fs * 1.05, BL, false)
+        + Ls(xm, iy0, xm, iy1) + Ls(xm - t, iy0, xm + t, iy0) + Ls(xm - t, iy1, xm + t, iy1) + lab([xm, iy0 + (iy1 - iy0) * 0.72], 'inner depth ' + Math.round(iy1 - iy0) + ' cm', fs * 1.05, BL, true); }
+    var ty = y0 - M * 0.55, lx = x0 - M * 0.55, tk2 = fs * 0.4, Lg = function(a, b, c2, d2){ return '<line x1="' + r1(a) + '" y1="' + r1(b) + '" x2="' + r1(c2) + '" y2="' + r1(d2) + '" stroke="' + GD + '" stroke-width="' + r1(sw * 100) / 100 + '"/>'; };
+    o += Lg(x0, ty, x1, ty) + Lg(x0, ty - tk2, x0, ty + tk2) + Lg(x1, ty - tk2, x1, ty + tk2) + '<text x="' + r1((x0 + x1) / 2) + '" y="' + r1(ty - fs * 0.8) + '" text-anchor="middle" font-size="' + r1(fs * 1.15) + '" font-weight="700" fill="' + GD + '">' + Math.round(W) + ' cm</text>'
+      + Lg(lx, y0, lx, y1) + Lg(lx - tk2, y0, lx + tk2, y0) + Lg(lx - tk2, y1, lx + tk2, y1) + '<text transform="translate(' + r1(lx - fs * 0.8) + ' ' + r1((y0 + y1) / 2) + ') rotate(-90)" text-anchor="middle" font-size="' + r1(fs * 1.15) + '" font-weight="700" fill="' + GD + '">' + Math.round(H) + ' cm</text>';
+    return o + '</svg>';
+  }
+  function runLegend(json){ var S = runSummary(json); if (!S) return null; var cut = function(a){ return a ? a + '° cut' : 'square'; };
+    return S.G.map(function(s){ return (s.i + 1) + ' Angled piece — outer ' + Math.round(s.g.L) + ', inner ' + Math.round(s.inner) + ', depth ' + S.R.d + ' · left: ' + (s.armS ? 'arm' : cut(s.cs)) + ' · right: ' + (s.armE ? 'arm' : cut(s.ce)) + ' · ' + s.g.seats + ' seat' + (s.g.seats > 1 ? 's' : ''); }); }
   /* opts.ppc = pixels per cm of the finished picture (3 by default); opts.title = a caption above the drawing */
   function svg(json, opts){
-    opts = opts || {}; var ps = pieces(json); if (!ps.length) return '';
+    opts = opts || {}; if (run(json)) return runSvg(json, opts); var ps = pieces(json); if (!ps.length) return '';
     number(ps);
     var ppc = opts.ppc || 3, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     ps.forEach(function(p){ var f = dims(p); x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + f[0]); y1 = Math.max(y1, p.y + f[1]); });
@@ -2506,8 +2573,8 @@ var NaderBuildPlan = (function(){
     return out + '</svg>';
   }
   /* the piece list in words, numbered like the drawing */
-  function legend(json){ var ps = pieces(json); number(ps); return ps.sort(function(a, b){ return a.n - b.n; }).map(function(p){ var f = dims(p); return p.n + ' ' + NAMES[p.k] + ' ' + Math.round(f[0]) + ' × ' + Math.round(f[1]); }); }
-  return { svg: svg, legend: legend, count: function(json){ return pieces(json).length; } };
+  function legend(json){ var rl = runLegend(json); if (rl) return rl; var ps = pieces(json); number(ps); return ps.sort(function(a, b){ return a.n - b.n; }).map(function(p){ var f = dims(p); return p.n + ' ' + NAMES[p.k] + ' ' + Math.round(f[0]) + ' × ' + Math.round(f[1]); }); }
+  return { svg: svg, legend: legend, count: function(json){ var R = run(json); return R ? R.segs.length : pieces(json).length; }, run: run, runSummary: runSummary, TURNS: TURNS };
 })();
 /*BUILD_PLAN_END*/
 
