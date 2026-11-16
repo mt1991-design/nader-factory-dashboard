@@ -2444,7 +2444,7 @@ var NaderBuildPlan = (function(){
      back along the top from (0,0) to (w,0); each end leans in by its cut: front-left at d·tan(cl), front-right at w − d·tan(cr). ===== */
   var ANG = function(k){ return k === 'aside' || k === 'amid' || k === 'atwo'; };
   function angOf(p){ var armL = p.k === 'atwo' || (p.k === 'aside' && !p.f), armR = p.k === 'atwo' || (p.k === 'aside' && !!p.f);
-    var cl = (p.k === 'aside' && !p.f) ? 0 : (p.cl || 0), cr = (p.k === 'aside' && p.f) ? 0 : (p.cr || 0), tl = Math.tan(cl * Math.PI / 180), tr = Math.tan(cr * Math.PI / 180);
+    var cl = p.cl || 0, cr = p.cr || 0, tl = Math.tan(cl * Math.PI / 180), tr = Math.tan(cr * Math.PI / 180);   /* 14 Nov: an arm end can be angled too */
     return { armL: armL, armR: armR, cl: cl, cr: cr, tl: tl, tr: tr, pts: [[0, 0], [p.w, 0], [p.w - p.d * tr, p.d], [p.d * tl, p.d]], inner: p.w - p.d * (tl + tr) }; }
   function world(p, q){ var a = p.r * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [p.x + q[0] * c - q[1] * s, p.y + q[0] * s + q[1] * c]; }
   function box(p){ if (ANG(p.k)) { var b = [1e9, 1e9, -1e9, -1e9]; angOf(p).pts.forEach(function(q){ var w = world(p, q); b[0] = Math.min(b[0], w[0]); b[1] = Math.min(b[1], w[1]); b[2] = Math.max(b[2], w[0]); b[3] = Math.max(b[3], w[1]); }); return b; }
@@ -2462,8 +2462,8 @@ var NaderBuildPlan = (function(){
     var BL = '#2f6f8f', yi = d - fs * 0.95;
     o += '<line x1="' + r1(P[3][0] + 3) + '" y1="' + r1(yi) + '" x2="' + r1(P[2][0] - 3) + '" y2="' + r1(yi) + '" stroke="' + BL + '" stroke-width="' + sw * 0.8 + '"/>' + up((P[3][0] + P[2][0]) / 2, yi, 'inner ' + Math.round(A.inner), fs * 0.82, BL, true);
     o += up(w / 2, bt / 2 + 1, 'outer ' + Math.round(w), fs * 0.82, C, true);
-    if (A.cl) o += up(P[3][0] * 0.6 + fs * 2.6, d * 0.62, A.cl + '°', fs * 0.85, '#8a6d2f', true);
-    if (A.cr) o += up(w - (w - P[2][0]) * 0.6 - fs * 2.6, d * 0.62, A.cr + '°', fs * 0.85, '#8a6d2f', true);
+    if (A.cl) o += up(P[3][0] * 0.6 + (A.armL ? at : 0) + fs * 2.6, d * 0.62, A.cl + '°', fs * 0.85, '#8a6d2f', true);
+    if (A.cr) o += up(w - (w - P[2][0]) * 0.6 - (A.armR ? at : 0) - fs * 2.6, d * 0.62, A.cr + '°', fs * 0.85, '#8a6d2f', true);
     return o; }
   /* one piece in its own cm coordinates (back along the top, arm down the left) */
   function body(p, fs, sw){
@@ -2615,7 +2615,7 @@ var NaderBuildPlan = (function(){
     return out + '</svg>';
   }
   /* the piece list in words, numbered like the drawing */
-  function legend(json){ var rl = runLegend(json); if (rl) return rl; var ps = pieces(json); number(ps); return ps.sort(function(a, b){ return a.n - b.n; }).map(function(p){ if (ANG(p.k)) { var A = angOf(p), e = function(arm, c){ return arm ? 'arm' : (c ? c + '° cut' : 'square'); }; return p.n + ' ' + NAMES[p.k] + ' outer ' + Math.round(p.w) + ' × ' + Math.round(p.d) + ', inner ' + Math.round(A.inner) + ' · left: ' + e(A.armL, A.cl) + ' · right: ' + e(A.armR, A.cr) + (p.r ? ' · turned ' + Math.round(p.r) + '°' : ''); } var f = dims(p); return p.n + ' ' + NAMES[p.k] + ' ' + Math.round(f[0]) + ' × ' + Math.round(f[1]); }); }
+  function legend(json){ var rl = runLegend(json); if (rl) return rl; var ps = pieces(json); number(ps); return ps.sort(function(a, b){ return a.n - b.n; }).map(function(p){ if (ANG(p.k)) { var A = angOf(p), e = function(arm, c){ return arm ? (c ? 'arm, angled ' + c + '°' : 'arm') : (c ? c + '° cut' : 'square'); }; return p.n + ' ' + NAMES[p.k] + ' outer ' + Math.round(p.w) + ' × ' + Math.round(p.d) + ', inner ' + Math.round(A.inner) + ' · left: ' + e(A.armL, A.cl) + ' · right: ' + e(A.armR, A.cr) + (p.r ? ' · turned ' + Math.round(p.r) + '°' : ''); } var f = dims(p); return p.n + ' ' + NAMES[p.k] + ' ' + Math.round(f[0]) + ' × ' + Math.round(f[1]); }); }
   return { svg: svg, legend: legend, count: function(json){ var R = run(json); return R ? R.segs.length : pieces(json).length; }, run: run, runSummary: runSummary, TURNS: TURNS, ANG: ANG, angOf: angOf, world: world };
 })();
 /*BUILD_PLAN_END*/
