@@ -199,6 +199,8 @@ body.custview .refs .ref{width:160px;height:130px}
 /* 13 Nov 2026 (Abdul, via Mariam): the FACTORY print shows only Workshop Notes — "Notes to Customer" stays on screen for the sales team
    and on the customer's own drawing page, but is not printed for the factory. And the top view is bigger (it was held to 60 mm). */
 @media print{body:not(.custview) :is(.cnotes,.cnotes-h){display:none!important}}
+/* 18 Nov 2026 (Mariam): the factory print never shows the delivery date (the customer copy keeps it) */
+@media print{body:not(.custview) .mast-meta .mdel{display:none!important}}
 body:not(.custview):not(.is-stool) .grid2c{grid-template-columns:24fr 76fr}
 body:not(.custview):not(.is-stool) .toppanel .body{min-height:92mm}
 body:not(.custview):not(.is-stool) .toppanel .body svg{max-height:104mm}
@@ -3309,7 +3311,7 @@ function renderSheet(){
   const c=ORDER.cust;
   document.getElementById('sheet').innerHTML=`
 <div class="mast"><div class="mast-l"><div class="wm">NADER</div><div class="sub">DARE TO BE RARE</div></div><div class="mast-r"><div class="doc">Factory Spec Sheet</div><div class="prod" contenteditable="true" spellcheck="false" data-k="product">${esc(ORDER.product)}</div></div></div>
-<div class="mast-meta"><div><div class="k">Order No.</div>${ce("orderNo",ORDER.orderNo)}</div><div><div class="k">Date</div>${ce("date",ORDER.date)}</div><div><div class="k">Delivery Date</div>${ce("deliveryDate",ORDER.deliveryDate||"")}</div><div><div class="k">Assigned To</div>${ce("assigned",ORDER.assigned)}</div><div><div class="k">Status</div><div id="statusBox"></div></div></div>
+<div class="mast-meta"><div><div class="k">Order No.</div>${ce("orderNo",ORDER.orderNo)}</div><div><div class="k">Date</div>${ce("date",ORDER.date)}</div><div class="mdel"><div class="k">Delivery Date</div>${ce("deliveryDate",ORDER.deliveryDate||"")}</div><div><div class="k">Assigned To</div>${ce("assigned",ORDER.assigned)}</div><div><div class="k">Status</div><div id="statusBox"></div></div></div>
 <div class="section-h"><span class="t">Reference &amp; Top View</span><span class="rule"></span></div>
 <div class="grid2c">
   <div class="panel"><div class="cap"><span>Reference Photo</span><b>AS ORDERED</b></div><div class="body">${ORDER.photo?`<img id="photo" src="${esc(ORDER.photo)}" alt="Reference photo">`:'<div class="manual" style="border-color:var(--line);background:none;color:var(--muted)"><span>No photo — use “Replace photo…”</span></div>'}</div></div>
