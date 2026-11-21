@@ -3121,7 +3121,10 @@ async function fromOrder(o,i){
   }
   /* orders made WITHOUT the sales form (typed straight into Shopify): read sizes from the title / extra lines / note.
      Orders made WITH the form use ONLY the form's dimension boxes. */
-  if(!fromForm)applyOrderText(O,[it.product].concat(extra).join("\n")+"\n"+itemNote);
+  /* 21 Nov (Abdul, #29293054): the size the customer PICKED on the website is in the variant ("4 seater: 300cm x 180cm x 150cm /
+     Black / Left Hand Facing") — it was never read, so the drawing fell back to the product's default 400 × 220 × 190. */
+  const vText=it.variant&&!/default title/i.test(it.variant)?String(it.variant):"";
+  if(!fromForm)applyOrderText(O,[it.product,vText].concat(extra).filter(Boolean).join("\n")+"\n"+itemNote);
   /* ONLINE orders: what the customer picked on the website arrives as line properties (Fabric, Fabric Code, Seat Depth (cm),
      Configuration …). They were not reaching the sheet at all (Mariam 13 Oct, #29292871). Sizes go through the same path as
      the sales form's answers (so they drive a template drawing and the mismatch warning); everything else shows as a row. */
