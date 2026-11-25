@@ -474,7 +474,10 @@ function promiseOf(o) {
      delivery method Shopify saved on that order — 7 to 14, 7 to 21, 21 to 40 working days, whatever it says — and, for an
      order with no delivery method, the standard at the time it was placed. tagDates() above is kept but no longer used here. */
   const wd = workingDaysSince(o.created_at || ''), sp = shippingPromise(o);
-  return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi };
+  /* 25 Nov 2026 (Mariam, #29292695 showed −41): once EVERY piece is in the warehouse (or its delivery is booked) the factory has done
+     its part — often the customer asked us to wait — so the order shows "Ready" and is not counted as overdue. */
+  const ready = Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)) >= 5;
+  return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi, ready };
 }
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
 // Stays hidden until there are ≥5 finished lines AND ≥3 weeks since the first timed stage, so it's based on real data.
@@ -485,7 +488,8 @@ function leadTime(raw) {
     Object.keys(pd).forEach(line => {
       Object.values(pd[line]).forEach(d => { if (!first || d < first) first = d; });
       const packed = pd[line]['4'];
-      if (packed && o.created_at) days.push((Date.parse(packed + ':00+04:00') - Date.parse(o.created_at)) / 864e5);
+      /* 25 Nov 2026 (Mariam): WORKING days (Mon–Fri), the same as the delivery promise to the customer — was calendar days (53 → ~38) */
+      if (packed && o.created_at) days.push(workDaysBetween(o.created_at, packed));
     });
   });
   const weeks = first ? (Date.now() - Date.parse(first + ':00+04:00')) / (7 * 864e5) : 0;

@@ -102,7 +102,7 @@ function renderSales(){
   const cur=all.filter(r=>ym(r.d)===MONTH&&f(r)), prev=all.filter(r=>ym(r.d)===prevMonth(MONTH)&&f(r));
   const rev=sum(cur,r=>r.t), revP=sum(prev,r=>r.t), n=cur.length, nP=prev.length, it=sum(cur,items), itP=sum(prev,items);
   const aov=n?rev/n:0, aovP=nP?revP/nP:0;
-  const open=all.filter(r=>r.open&&f(r)), late=open.filter(r=>r.p&&r.p.over>0);
+  const open=all.filter(r=>r.open&&f(r)), late=open.filter(r=>r.p&&r.p.over>0&&!r.p.ready);   /* 25 Nov 2026: ready in the warehouse = not overdue */
   /* refunds & cancellations in the month (cancelled / refunded / voided orders + partial refunds on kept orders) */
   const allR=(DATA.rows||[]).filter(f);
   const refRows=allR.filter(r=>ym(r.d)===MONTH&&(r.st==="x"||(r.rf||0)>0.5));
