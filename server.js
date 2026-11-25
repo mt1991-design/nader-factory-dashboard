@@ -335,9 +335,11 @@ function qtyTags(items, tags) {
    them, not items — flagged here (note: 1) so the dashboard counts and numbers real pieces only (Mariam 11 Oct). */
 const LINE_FABRIC_NOTE = /^[^:|\d]*\bfabric(\s*(&|and)\s*colou?r)?\s*:/i;   /*@rules — generated from rules/nader-rules.json, do not edit here*/
 const LINE_FURNITURE = /sofa|couch|sectional|loveseat|\bbeds?\b|headboard|daybed|chair|stool|table|bench|ottoman|pouf|puff|console|sideboard|cabinet|desk|bedside|nightstand|mirror|wardrobe|dresser|seater/i;
+function isNoteLine(li, i) { const t = String(li.title || ''), free = !li.product_id && !(parseFloat(li.price || 0) > 0);
+  return i > 0 && free && (LINE_FABRIC_NOTE.test(t) || !LINE_FURNITURE.test(t)); }
 function mapLineItems(arr) {
   const out = (arr || []).map((li, i) => {
-    const t = String(li.title || ''), free = !li.product_id && !(parseFloat(li.price || 0) > 0);
+    const t = String(li.title || '');
     const it = { product: li.title, variant: li.variant_title || '', sku: li.sku || '', qty: li.quantity || 1, price: li.price || '' };
     /* 25 Nov 2026 (Mariam, #29293075 — 2 armchairs showed as 1): a ONE-item sales-form order keeps one Shopify line at quantity 1
        (its total can include delivery) and puts the count in the name: "Elmwood Velvet Olive Arm Chair ×2". Read that "×N" as the
@@ -348,7 +350,7 @@ function mapLineItems(arr) {
     const props = (li.properties || []).map(pr => [String(pr && pr.name || '').trim(), String(pr && pr.value != null ? pr.value : '').trim()])
       .filter(pr => pr[0] && pr[1] && pr[0].charAt(0) !== '_');
     if (props.length) it.props = props;
-    if (i > 0 && free && (LINE_FABRIC_NOTE.test(t) || !LINE_FURNITURE.test(t))) it.note = 1;
+    if (isNoteLine(li, i)) it.note = 1;
     /* the layout a customer drew in the website's Cloud Nine planner rides on the line as "_Build plan" (27 Oct) */
     const bp = (li.properties || []).find(pr => pr && pr.name === '_Build plan'); if (bp && bp.value) it.plan = String(bp.value);
     return it;
@@ -476,7 +478,8 @@ function promiseOf(o) {
   const wd = workingDaysSince(o.created_at || ''), sp = shippingPromise(o);
   /* 25 Nov 2026 (Mariam, #29292695 showed −41): once EVERY piece is in the warehouse (or its delivery is booked) the factory has done
      its part — often the customer asked us to wait — so the order shows "Ready" and is not counted as overdue. */
-  const ready = Math.min.apply(null, prodStagesFromTags(o.tags, (o.line_items || []).length)) >= 5;
+  const stg = prodStagesFromTags(o.tags, (o.line_items || []).length).filter((x, i) => !isNoteLine((o.line_items || [])[i] || {}, i));   /* note lines (#29292695 "Fabric - Hero …") have no stage */
+  const ready = stg.length > 0 && Math.min.apply(null, stg) >= 5;
   return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi, ready };
 }
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
