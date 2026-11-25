@@ -114,7 +114,7 @@ function renderKpis(){
   const lines=openLines(false), per=STG.map(()=>0); lines.forEach(L=>per[L.cur]++); const mx=Math.max(1,...per);
   const lead=window.LEAD;
   const leadHTML=lead&&lead.ready
-    ?`<div class="big" data-n="${lead.avg}">${lead.avg}<small>days</small></div><div class="note">Order placed → packed · from ${lead.n} pieces</div>`
+    ?`<div class="big" data-n="${lead.avg}" title="Working days (Mon–Fri), counted the same way as the delivery promise to the customer">${lead.avg}<small>working days</small></div><div class="note">Mon–Fri, like the delivery promise · order placed → packed · from ${lead.n} pieces</div>`
     :`<div class="big blank">—</div><div class="note">Collecting data. Starts once the team has updated stages for 3 weeks${lead&&lead.n?` (${lead.n} of 5 pieces timed so far)`:""}.</div>`;
   box.innerHTML=`<div class="wr-kpis">
     <div class="wr-kpi"><div class="lbl">Open orders</div><div class="row"><div class="big" data-n="${open}">${loading?"—":open}</div>${spark(wk)}</div><div class="note">${thisWeek!=null?`<span class="delta">+${thisWeek}</span> placed this week`:"Last 12 weeks"}</div></div>

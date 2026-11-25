@@ -185,6 +185,7 @@
   .promise.ok{background:rgba(47,122,58,.14);color:#2f7a3a}
   .promise.mid{background:rgba(217,119,6,.16);color:#b45309}
   .promise.late{background:rgba(179,38,30,.12);color:#b3261e}
+  .promise.ready{background:rgba(37,99,235,.12);color:#1d4ed8;font-family:var(--ui)}
   .promise-u{display:block;font:500 10px var(--ui);color:var(--ink2);margin-top:3px}
   .stored{flex-basis:100%;text-align:right;color:#7c6031;font-weight:700}
   .dc-card{width:440px}.dc-what{font-size:14px;margin:0 0 10px}.dc-warn{font-size:13px;background:#fdf3e2;border:1px solid #ecd3a6;border-radius:8px;padding:9px 11px;margin:0 0 12px}
@@ -4894,6 +4895,8 @@ function promiseCell(o){
      days in), then ORANGE (19, 18 … 1) = inside the delivery window; RED once the last day has passed (0, −1, −2 …).
      Tags work the same way: "14th to 22 oct" is green until the 14th, orange until the 22nd. */
   const p=o.promise, toFirst=p.lo-p.wd, toLast=p.hi-p.wd;
+  /* 25 Nov 2026 (Mariam): every piece in the warehouse (or delivery booked) = ready, waiting on delivery — not overdue */
+  if(p.ready)return '<span class="promise ready" title="Every piece is ready in the warehouse — waiting for delivery, so it is not counted as overdue ('+p.wd+' working days since the order)">Ready</span>';
   const cls=toFirst>0?"ok":toLast>0?"mid":"late", n=toLast;
   const what=p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'”':p.lo+'–'+p.hi+' working days ('+(p.src==="shopify"?'the delivery method on this order in Shopify':'no delivery method on the order — the standard at the time it was placed')+')';
   const phase=cls==="ok"?'Green: working days until the last promised day (the first promised day has not passed yet)':cls==="mid"?'Orange: inside the delivery window — working days until the last promised day':'Red: past the last promised day';
@@ -5296,7 +5299,7 @@ async function drawEditDone(oi,i){
   catch(e){dMsg(oi,i,"Couldn't save: "+e.message);}
 }
 function salesCmp(a,b){ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
-  const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last */
+  const left=o=>(o.promise&&!o.promise.ready&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise / ready in the warehouse go last */
   /* "date" follows the order number (they run in date order), so the numbers always read …80, 81, 82 */
   let c = salesSort.k==="promise" ? left(a)-left(b)||num(a)-num(b) : num(a)-num(b)||(a.date||"").localeCompare(b.date||"");
   if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
