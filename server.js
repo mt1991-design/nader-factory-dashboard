@@ -339,6 +339,10 @@ function mapLineItems(arr) {
   const out = (arr || []).map((li, i) => {
     const t = String(li.title || ''), free = !li.product_id && !(parseFloat(li.price || 0) > 0);
     const it = { product: li.title, variant: li.variant_title || '', sku: li.sku || '', qty: li.quantity || 1, price: li.price || '' };
+    /* 25 Nov 2026 (Mariam, #29293075 — 2 armchairs showed as 1): a ONE-item sales-form order keeps one Shopify line at quantity 1
+       (its total can include delivery) and puts the count in the name: "Elmwood Velvet Olive Arm Chair ×2". Read that "×N" as the
+       quantity, so the workroom shows ×2. Only the "×" sign, never the letter x — "Namba 365x180x180" is a size, not a count. */
+    { const m = (li.quantity || 1) === 1 && t.match(/\s*×\s*(\d{1,2})\s*$/); if (m && +m[1] > 1) { it.qty = +m[1]; it.product = t.slice(0, m.index).trim(); } }
     /* what the customer picked on the website (fabric, fabric code, seat depth, configuration …) — Mariam 13 Oct: online orders
        such as #29292871 showed none of it anywhere on the dashboard. Hidden app properties (leading "_") are left out. */
     const props = (li.properties || []).map(pr => [String(pr && pr.name || '').trim(), String(pr && pr.value != null ? pr.value : '').trim()])
@@ -1249,7 +1253,8 @@ app.post('/api/spec', requireAuth, async (req, res) => {
     const oldKeys = old ? new Set((old.spec || []).map(r => r[0])) : null;
     const vKeys = old ? Object.keys(old.V || {}).sort() : [];   /* only sizes that existed — new default keys don't count */
     const vMap = x => vKeys.map(k => k + '=' + String((x.V || {})[k] ?? ''));
-    const drawingOf = (x, keys) => JSON.stringify([x.model || '', vMap(x), specMap(x, keys), !!x.photo, !!x.mirror, x.outline || '', x.customDraw ? Object.keys(x.drawings || {}).sort().map(k => k + ':' + String(x.drawings[k] || '').length) : '']);   /* shape / custom drawing changes count too */
+    const drawingOf = (x, keys) => JSON.stringify([x.model || '', vMap(x), specMap(x, keys), !!x.photo, !!x.mirror, x.outline || '', x.customDraw ? Object.keys(x.drawings || {}).sort().map(k => k + ':' + String(x.drawings[k] || '').length) : '',
+      Object.keys(x.autoOver || {}).sort().map(k => k + '=' + String(x.autoOver[k]).trim())]);   /* shape / custom drawing changes count too — and (25 Nov) a drawing row typed over by hand */
     if (old && drawingOf(old, oldKeys) !== drawingOf(data, oldKeys)) {
       try {
         const m = String(id).match(/^(\d{6,})(?:-(\d+))?$/);

@@ -109,6 +109,8 @@
   .is-stool .bigfront .body svg{max-height:92mm}.is-stool .toppanel .body svg{max-height:66mm}
   .ottpanel .body{padding:3px 10px}.ottpanel .body svg{max-height:40mm}
   .is-locked .mdraw-acts,.is-locked .upbtn{display:none!important}
+  /* 25 Nov 2026: a drawing-made row (Configuration, Seat Widths …) typed over by hand — tinted on screen only, never on the print */
+  @media screen{.cell.auto .v.typed{background:#fff3d6;box-shadow:inset 0 0 0 1px #e6c77a;border-radius:3px}}
 
 /* ---- customer mode (/drawing?t=…): just the drawing + the approval box ---- */
 body.custview #sheet .notes:not(.cnotes),body.custview aside.ed,body.custview .foot,body.custview #backLink,body.custview #savedSel,body.custview #saveState,body.custview #lockBox,body.custview #statusBox{display:none!important}
@@ -3378,7 +3380,11 @@ function addRefFile(file){
 }
 function renderSpec(){
   const auto=autoSpec();
-  const cells=auto.map(s=>`<div class="cell auto"><div class="k">${s[0]}</div><div class="v${s[2]?' big':''}">${esc(s[1])}</div></div>`)
+  /* 25 Nov 2026 (Mariam, for Abdul — #29293070): the rows the drawing writes (Size, Configuration, Seat Widths …) can be typed over
+     once the sheet is unlocked. The typed text is kept in ORDER.autoOver, tinted on screen, logged; clearing it gives the drawing's text back. */
+  const ov=ORDER.autoOver||{};
+  const cells=auto.map(s=>{const t=ov[s[0]]!=null&&ov[s[0]]!==""?ov[s[0]]:null;
+      return `<div class="cell auto"><div class="k">${s[0]}</div><div class="v${s[2]?' big':''}${t!=null?' typed':''}" contenteditable="true" spellcheck="false" data-a="${esc(s[0])}" data-drawn="${esc(s[1])}"${t!=null?` title="Typed by hand — the drawing says: ${esc(s[1])}. Clear it to go back to the drawing."`:''}>${esc(t!=null?t:s[1])}</div></div>`;})
     .concat(ORDER.spec.map((s,i)=>`<div class="cell"><div class="k">${esc(s[0])}</div><div class="v" contenteditable="true" spellcheck="false" data-s="${i}">${esc(s[1])}</div></div>`));
   document.getElementById('spec').innerHTML=cells.join("");
   lockCells();
@@ -3424,7 +3430,7 @@ function lockCells(){
   });
 }
 /* ---------- change log: who unlocked a finished sheet and exactly what they changed (Mariam 3 Oct) ---------- */
-const snapOf=()=>JSON.parse(JSON.stringify({model:ORDER.model||"",V:ORDER.V||{},spec:ORDER.spec||[],notes:ORDER.notes||"",photo:!!ORDER.photo,mirror:!!ORDER.mirror}));
+const snapOf=()=>JSON.parse(JSON.stringify({model:ORDER.model||"",V:ORDER.V||{},spec:ORDER.spec||[],notes:ORDER.notes||"",photo:!!ORDER.photo,mirror:!!ORDER.mirror,over:ORDER.autoOver||{},product:ORDER.product||""}));
 function fieldLabel(k){try{const M=MODELS[ORDER.model];if(M){for(const g of fieldsOf(M))for(const f of g[1])if(f[0]===k)return f[1];}}catch(e){}
   return ({n:"Seats",side:"Chaise side",SHAPE:"Shape",W:"Overall width",D:"Overall depth",RL:"Left chaise length",RR:"Right chaise length",H:"Height",SH:"Seat height",LH:"Leg height",A:"Arm width",B:"Back depth",BC:"Back cushion depth"})[k]||k;}
 function startEditLog(){ORDER.log=ORDER.log||[];const id="e"+Date.now().toString(36);
@@ -3436,6 +3442,8 @@ function recordEdits(){
   new Set([...Object.keys(a.V),...Object.keys(b.V)]).forEach(k=>{if(String(a.V[k]??"")!==String(b.V[k]??""))ch.push(fieldLabel(k)+": "+fmt(a.V[k])+" → "+fmt(b.V[k]));});
   const sm=x=>Object.fromEntries((x||[]).map(r=>[r[0],r[1]]));const sa=sm(a.spec),sb=sm(b.spec);
   new Set([...Object.keys(sa),...Object.keys(sb)]).forEach(k=>{if(String(sa[k]??"")!==String(sb[k]??""))ch.push(k+": "+fmt(sa[k])+" → "+fmt(sb[k]));});
+  const oa=a.over||{},ob=b.over||{};new Set([...Object.keys(oa),...Object.keys(ob)]).forEach(k=>{if(String(oa[k]??"")!==String(ob[k]??""))ch.push(k+" (typed): "+fmt(oa[k]??"drawing")+" → "+fmt(ob[k]??"back to the drawing"));});
+  if((a.product||"")!==(b.product||""))ch.push("Name: "+fmt(a.product)+" → "+fmt(b.product));
   if(a.notes!==b.notes)ch.push("Workshop notes edited");
   if(a.photo!==b.photo||a.mirror!==b.mirror)ch.push("Reference photo changed");
   const e=ORDER.log.find(x=>x.id===ORDER._edit.id);if(e)e.changes=ch;renderHistory();
@@ -3715,6 +3723,8 @@ function wire(){
     if(t.dataset.k)ORDER[t.dataset.k]=txt;
     else if(t.dataset.c)ORDER.cust[t.dataset.c]=txt;
     else if(t.dataset.s)ORDER.spec[+t.dataset.s][1]=txt;
+    else if(t.dataset.a){const o=ORDER.autoOver=ORDER.autoOver||{};if(!txt||txt===t.dataset.drawn)delete o[t.dataset.a];else o[t.dataset.a]=txt;
+      t.classList.toggle('typed',o[t.dataset.a]!=null);}
     if(t.dataset.k==="product"){document.getElementById("tbTitle").textContent=txt+" · Spec Sheet";}
     save();
   });
