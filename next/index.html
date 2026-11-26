@@ -4896,7 +4896,8 @@ function promiseCell(o){
      Tags work the same way: "14th to 22 oct" is green until the 14th, orange until the 22nd. */
   const p=o.promise, toFirst=p.lo-p.wd, toLast=p.hi-p.wd;
   /* 25 Nov 2026 (Mariam): every piece in the warehouse (or delivery booked) = ready, waiting on delivery — not overdue */
-  if(p.ready)return '<span class="promise ready" title="Every piece is ready in the warehouse — waiting for delivery, so it is not counted as overdue ('+p.wd+' working days since the order)">Ready</span>';
+  /* 26 Nov (Mariam): say WHERE it is, no minus number — it is only waiting to be sent. It stays in its place in the list. */
+  if(p.ready)return '<span class="promise ready" title="Every piece is ready — waiting to be sent, so it is not counted as overdue ('+p.wd+' working days since the order; promised within '+p.hi+')">'+(p.stage>=6?'🚚 Delivery booked':'🏬 Stored in warehouse')+'</span>';
   const cls=toFirst>0?"ok":toLast>0?"mid":"late", n=toLast;
   const what=p.src==="tag"?'Delivery date tag on the order: “'+String(p.tag||'').replace(/"/g,'')+'”':p.lo+'–'+p.hi+' working days ('+(p.src==="shopify"?'the delivery method on this order in Shopify':'no delivery method on the order — the standard at the time it was placed')+')';
   const phase=cls==="ok"?'Green: working days until the last promised day (the first promised day has not passed yet)':cls==="mid"?'Orange: inside the delivery window — working days until the last promised day':'Red: past the last promised day';
@@ -5299,7 +5300,7 @@ async function drawEditDone(oi,i){
   catch(e){dMsg(oi,i,"Couldn't save: "+e.message);}
 }
 function salesCmp(a,b){ const num=o=>parseInt(String(o.order).replace(/\D/g,''))||0;
-  const left=o=>(o.promise&&!o.promise.ready&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise / ready in the warehouse go last */
+  const left=o=>(o.promise&&!o.isDraft&&o.state==="open")?o.promise.hi-o.promise.wd:1e9;   /* shipped / no promise go last; a stored order keeps its place (Mariam 26 Nov) */
   /* "date" follows the order number (they run in date order), so the numbers always read …80, 81, 82 */
   let c = salesSort.k==="promise" ? left(a)-left(b)||num(a)-num(b) : num(a)-num(b)||(a.date||"").localeCompare(b.date||"");
   if(salesSort.k==="promise") return salesSort.dir==="asc"?c:(left(a)===1e9?1:left(b)===1e9?-1:-c);
