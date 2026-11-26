@@ -478,9 +478,12 @@ function promiseOf(o) {
   const wd = workingDaysSince(o.created_at || ''), sp = shippingPromise(o);
   /* 25 Nov 2026 (Mariam, #29292695 showed −41): once EVERY piece is in the warehouse (or its delivery is booked) the factory has done
      its part — often the customer asked us to wait — so the order shows "Ready" and is not counted as overdue. */
-  const stg = prodStagesFromTags(o.tags, (o.line_items || []).length).filter((x, i) => !isNoteLine((o.line_items || [])[i] || {}, i));   /* note lines (#29292695 "Fabric - Hero …") have no stage */
-  const ready = stg.length > 0 && Math.min.apply(null, stg) >= 5;
-  return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi, ready };
+  /* only the PIECES count — not fabric notes (#29292695 "Fabric - Hero …"), "Change to order" / "Extra charge" lines or an advance payment */
+  const lis = o.line_items || [], all = prodStagesFromTags(o.tags, lis.length);
+  let stg = all.filter((x, i) => { const li = lis[i] || {}, t = String(li.title || ''); return !isNoteLine(li, i) && !/^\s*(extra charge|change to order)\s*:/i.test(t) && LINE_FURNITURE.test(t); });
+  if (!stg.length) stg = all.filter((x, i) => !isNoteLine(lis[i] || {}, i));
+  const stage = stg.length ? Math.min.apply(null, stg) : 0, ready = stage >= 5;   /* 5 = Stored in warehouse, 6 = Delivery booked */
+  return { lo: sp.lo, hi: sp.hi, src: sp.src, method: sp.method || '', wd, over: wd - sp.hi, ready, stage };
 }
 // Average lead time (order placed → packing reached), only from lines the factory actually timed on the dashboard.
 // Stays hidden until there are ≥5 finished lines AND ≥3 weeks since the first timed stage, so it's based on real data.
