@@ -314,16 +314,7 @@
         <button class="roletab on" id="tab-orders" onclick="setSalesView('orders')">Orders</button>
         <button class="roletab" id="tab-drafts" onclick="setSalesView('drafts')">Draft orders</button>
         <button class="roletab" id="tab-production" onclick="setSalesView('production')">Production status</button>
-        <button class="roletab" id="tab-lookup" onclick="setSalesView('lookup')" title="Find any order by its number — delivered ones too — and see its spec sheet as a picture">Old orders</button>
       </div>
-      <section id="lookupPanel" hidden>
-        <form onsubmit="event.preventDefault();lookupOrder()" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px">
-          <input type="text" id="lookupNo" inputmode="numeric" autocomplete="off" placeholder="Order number, e.g. 29292890" aria-label="Order number" style="flex:0 1 280px;padding:9px 12px;border:1px solid var(--fieldline);border-radius:9px;background:var(--field);font:inherit">
-          <button type="submit" class="small" style="background:var(--ox);color:#fff;border:1px solid var(--ox);border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer">Find order</button>
-          <span class="hint" style="font-size:11px">Any order, delivered ones too. The spec sheet opens as a picture with the team's comments — read-only, nothing can be changed.</span>
-        </form>
-        <div id="lookupOut"></div>
-      </section>
       <section id="attn" class="attn" hidden aria-live="polite"></section>
       <div id="salesfilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
         <select id="salesmonth" class="filtersel" onchange="salesMonth=this.value;renderSalesDash()"><option value="all">All months</option></select>
@@ -4462,6 +4453,15 @@ let ROLE=null,pendingRole="sales",mode="sales",curOrderId=null,activeTab="photo"
 /* Passwords are validated server-side via /api/login (see server.js). */
 const DEFWORKERS=["Rabi","Suvash","Raja","Ahmad","Akash","Jo","Bahador"];
 let SHOPIFY=[];
+/* 27 Nov 2026 (Mariam): every delivered order under the Shipped chip — kept apart from SHOPIFY so counts, KPIs and the workroom never see
+   them. Loaded the first time the Shipped chip is picked. Rows are read-only: the only action is the spec sheet as a PICTURE. */
+let SHIPPED_OLD=null,SHIPPED_LOADING=false;
+async function loadShippedOld(){if(SHIPPED_OLD||SHIPPED_LOADING)return;SHIPPED_LOADING=true;
+  try{const r=await fetch("/api/shipped",{credentials:"same-origin"});const d=await r.json();
+    const have=new Set(SHOPIFY.map(o=>String(o.id)));SHIPPED_OLD=(d.orders||[]).filter(o=>!have.has(String(o.id))).map(o=>Object.assign({},o,{isDraft:false}));}
+  catch(e){SHIPPED_OLD=null;}SHIPPED_LOADING=false;buildFilters();renderSalesDash();}
+function snapSpec(oi,i){const o=(SHIPPED_OLD||[])[oi];if(!o)return;
+  window.open("/next/spec.html?"+new URLSearchParams({view:"snap",o:o.order,i:String(i),k:"order",id:specKey(lineId(o,i))}).toString(),"_blank");}
 let SAVED_SPECS=new Map();   /* id → {status,…} */   /* order lines that have a saved spec sheet */   /* populated live from Shopify via loadShopify() */
 /* Pull real orders + draft orders from the server (which proxies Shopify Admin). */
 async function loadShopify(fresh){
@@ -4836,24 +4836,6 @@ let salesSort=(function(){try{const v=(localStorage.getItem("nfs_sort")||"").spl
 function setSalesSort(k,dir){ if(dir)salesSort={k,dir}; else if(salesSort.k===k)salesSort.dir=salesSort.dir==="asc"?"desc":"asc"; else salesSort={k,dir:k==="promise"?"asc":"desc"};
   try{localStorage.setItem("nfs_sort",salesSort.k+":"+salesSort.dir);}catch(e){}
   const sel=$("salessort"); if(sel)sel.value=salesSort.k+":"+salesSort.dir; renderSalesDash(); }  /* "orders" (paid/placed) | "drafts" */
-/* 27 Nov 2026 (Mariam): "Old orders" — look up ANY order by number (delivered ones drop off the list 3 days after shipping) and open its
-   spec sheet as a read-only PICTURE with the team's comments, change log and production / delivery dates (/next/spec.html?view=snap). */
-function lookupView(){const on=salesView==="lookup";const t=$("tab-lookup");if(t)t.classList.toggle("on",on);
-  const lp=$("lookupPanel");if(lp)lp.hidden=!on;["attn","salesfilters","salesnote","salesloading"].forEach(id=>{const e=$(id);if(e)e.style.display=on?"none":"";});
-  const w=document.querySelector("#screen-sales .otablewrap");if(w)w.style.display=on?"none":"";
-  if(on){const i=$("lookupNo");if(i&&!i.value)setTimeout(()=>i.focus(),0);}}
-async function lookupOrder(){const no=String(($("lookupNo")||{}).value||"").replace(/\D/g,""),out=$("lookupOut");if(!out)return;
-  if(no.length<4){out.innerHTML='<div class="muted" style="padding:8px 2px">Type the order number, e.g. 29292890.</div>';return;}
-  out.innerHTML='<div class="muted" style="padding:8px 2px">Looking up #'+esc(no)+'…</div>';
-  let d={};try{const r=await fetch("/api/lookup?no="+no,{credentials:"same-origin"});d=await r.json();}catch(e){d={ok:false,error:"Couldn’t reach the server"};}
-  if(!d.ok){out.innerHTML='<div class="muted" style="padding:8px 2px">'+esc(d.error||"Not found")+'</div>';return;}
-  const o=d.order,st=o.state==="delivered"?"Delivered"+(o.fulfilled?" "+esc(o.fulfilled):""):o.state==="cancelled"?"Cancelled / refunded":"Open";
-  const rows=(o.items||[]).map((it,i)=>{if(it.note)return"";const sp=it.spec||{};
-    const url="/next/spec.html?"+new URLSearchParams({view:"snap",o:o.order,i:String(i),k:"order",id:sp.id||""}).toString();
-    return '<tr><td>'+esc(it.product||"")+(it.variant?'<div class="muted" style="font-size:11px">'+esc(it.variant)+'</div>':'')+'</td><td>'+(+it.qty>1?"×"+esc(it.qty):"1")+'</td><td>'
-      +(sp.saved?'<a href="'+url+'" target="_blank" rel="noopener" style="display:inline-block;background:var(--ox);color:#fff;border-radius:8px;padding:6px 12px;font-weight:600;font-size:12px;text-decoration:none">🖼 Spec sheet picture</a>':'<span class="muted">No spec sheet saved</span>')+'</td></tr>';}).join("");
-  out.innerHTML='<div style="margin:4px 2px 8px"><b>'+esc(o.order)+'</b> · '+esc(o.customer||"")+' · ordered '+esc(o.date||"")+' · '+st+(o.agent?' · agent '+esc(o.agent):'')+'</div>'
-    +'<div class="otablewrap"><table class="otable"><thead><tr><th>Product</th><th>Qty</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="3" class="muted">No items</td></tr>')+'</tbody></table></div>';}
 function setSalesView(v){salesView=v;const t1=$("tab-orders"),t2=$("tab-drafts");if(t1)t1.classList.toggle("on",v==="orders");if(t2)t2.classList.toggle("on",v==="drafts");const t3=$("tab-production");if(t3)t3.classList.toggle("on",v==="production");salesStatuses.clear();buildFilters();renderSalesDash();}
 function refreshSales(){const note=$("salesloading");if(note){note.style.display="";note.style.color="";note.textContent="Refreshing from Shopify…";}loadShopify(true).then(function(){buildFilters();renderSalesDash();});}
 /* Shopify-derived status pill (Shipped / Paid / Draft …) */
@@ -4936,7 +4918,7 @@ function buildFilters(){
   const ss=$("salessort"); if(ss) ss.value=salesSort.k+":"+salesSort.dir;
   const ms=$("salesmonth");
   if(ms){
-    const months=[...new Set(SHOPIFY.filter(o=>o.date).map(o=>o.date.slice(0,7)))].sort().reverse();
+    const months=[...new Set(SHOPIFY.concat(salesStatuses.has("shipped")&&SHIPPED_OLD?SHIPPED_OLD:[]).filter(o=>o.date).map(o=>o.date.slice(0,7)))].sort().reverse();
     if(!months.includes(salesMonth)) salesMonth="all";
     ms.innerHTML='<option value="all">All months</option>'+months.map(m=>'<option value="'+m+'"'+(m===salesMonth?" selected":"")+'>'+monthLabel(m)+'</option>').join("");
   }
@@ -4948,12 +4930,12 @@ function buildFilters(){
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
-  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. Shipped orders appear for 3 days only (Shipped chip), then roll off automatically. Refunds aren't shown here." : "";
+  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. The Shipped chip shows every delivered order — older ones open only as a picture of the spec sheet (read-only). Refunds aren't shown here." : "";
 }
 /* drawing progress across OPEN orders: furniture lines with a finished drawing (template or manual marked complete) */
 function drawingTally(){let done=0,all=0;SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").forEach(o=>o.items.forEach((it,i)=>{if(!isFurnitureLine(it.product))return;all++;if(lineDrawn(o,i))done++;}));return {done,all};}
 function drawnLabel(){const t=drawingTally();return "Drawing complete · "+t.done+" of "+t.all;}
-function toggleStatus(s){ if(salesStatuses.has(s)) salesStatuses.delete(s); else salesStatuses.add(s); buildFilters(); renderSalesDash(); }
+function toggleStatus(s){ if(salesStatuses.has(s)) salesStatuses.delete(s); else salesStatuses.add(s); if(salesStatuses.has("shipped"))loadShippedOld(); buildFilters(); renderSalesDash(); }
 function matchOne(o,s){
   if(o.isDraft){ if(s==="open") return (o.status||"open")==="open"; if(s==="invoice_sent") return o.status==="invoice_sent"; return false; }
   if(s==="needsdrawing") return needsDrawing(o);
@@ -5562,7 +5544,6 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
   if($("tab-orders"))$("tab-orders").textContent="Orders"+(nOrders?" ("+nOrders+")":"");
   if($("tab-drafts"))$("tab-drafts").textContent="Draft orders"+(nDrafts?" ("+nDrafts+")":"");
   if($("tab-production"))$("tab-production").textContent="Production status"+(nProd?" ("+nProd+")":"");
-  lookupView(); if(salesView==="lookup") return;
   const th=$("saleshead"), tbl=$("salestable");
   const sh=(k,t,tip)=>'<th class="sortable'+(salesSort.k===k?" on":"")+'" onclick="setSalesSort(\''+k+'\')"'+(tip?' title="'+tip+'"':'')+'>'+t+' <span class="sortarr">'+(salesSort.k===k?(salesSort.dir==="asc"?"▲":"▼"):"↕")+'</span></th>';
   if(th) th.innerHTML = salesView==="production" ? '<tr>'+sh(salesSort.k==="promise"?"promise":"date","Order")+'<th>Product</th><th>Fabric</th><th colspan="3">Production status</th></tr>'
@@ -5602,6 +5583,13 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i)+webOpts(it);
     html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+onlineTag+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
+  if(salesView==="orders"&&salesStatuses.has("shipped")){
+    if(!SHIPPED_OLD){loadShippedOld();html+='<tr><td colspan="7" class="muted" style="padding:12px 10px">Loading older delivered orders…</td></tr>';}
+    else SHIPPED_OLD.filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth).forEach((o,k)=>{const oi=SHIPPED_OLD.indexOf(o);o.items.forEach((it,i)=>{if(it.note)return;
+      const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
+      const has=SAVED_SPECS.has(specKey(lineId(o,i)));
+      html+='<tr class="oldship"><td class="ono">'+(i===0||k<0?esc(o.order):"")+'</td><td>'+esc(it.product||"")+(+it.qty>1?' <b>×'+esc(it.qty)+'</b>':'')+(it.variant?' <span class="muted">'+esc(it.variant)+'</span>':'')+'</td><td>'+esc(o.customer||"")+'</td><td class="promisetd"><span class="muted">'+(o.fulfilled?'Delivered '+esc(o.fulfilled):'Delivered')+'</span></td><td>'+esc(o.date||"")+'</td><td><span class="pill pass">Shipped</span></td><td style="text-align:right;white-space:nowrap">'
+        +(has?'<button class="specbtn" style="background:#5b6b7c;border-color:#5b6b7c" title="Read-only picture of the spec sheet, with the team\'s comments" onclick="snapSpec('+oi+','+i+')">🖼 Spec picture</button>':'<span class="muted" style="font-size:11px">No spec sheet</span>')+'</td></tr>';});});}
   tb.innerHTML=shown?html:'<tr><td colspan="7" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
   const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");
 }
