@@ -4456,6 +4456,12 @@ let SHOPIFY=[];
 /* 27 Nov 2026 (Mariam): every delivered order under the Shipped chip — kept apart from SHOPIFY so counts, KPIs and the workroom never see
    them. Loaded the first time the Shipped chip is picked. Rows are read-only: the only action is the spec sheet as a PICTURE. */
 let SHIPPED_OLD=null,SHIPPED_LOADING=false;
+/* 27 Nov 2026 (Mariam): proof of delivery from the delivery team's form (/delivery). POD_INDEX = {shopify order id: how many}.
+   The proof opens read-only in /pod.html — nobody can change it. */
+let POD_INDEX={};
+function podBtn(o,always){const n=POD_INDEX[String(o.id)];
+  if(n)return '<a class="pdflink" href="/pod.html?'+new URLSearchParams({id:String(o.id),no:o.order}).toString()+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Customer signature, photos and the terms they agreed to — read-only" style="color:#2f7a3a;font-weight:700">📋 Delivery proof'+(n>1?' ('+n+')':'')+'</a> ';
+  return always?'<span class="muted" style="font-size:11px;margin-right:6px" title="Shows here once the delivery team sends the delivery form">No delivery proof yet</span>':"";}
 async function loadShippedOld(){if(SHIPPED_OLD||SHIPPED_LOADING)return;SHIPPED_LOADING=true;
   try{const r=await fetch("/api/shipped",{credentials:"same-origin"});const d=await r.json();
     const have=new Set(SHOPIFY.map(o=>String(o.id)));SHIPPED_OLD=(d.orders||[]).filter(o=>!have.has(String(o.id))).map(o=>Object.assign({},o,{isDraft:false}));}
@@ -4480,6 +4486,7 @@ async function loadShopify(fresh){
     /* drafts first (awaiting spec), then placed orders; both newest-first */
     SHOPIFY=drafts.concat(orders).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
     if(typeof syncWorkers==="function")syncWorkers();   /* the shared factory team (refreshes with the orders) */
+    try{const rp=await fetch("/api/pods",{credentials:"same-origin"});const dp=await rp.json();if(dp&&dp.ok)POD_INDEX=dp.pods||{};}catch(e){}   /* proof of delivery (27 Nov) */
     try{const rs=await fetch("/api/specs",{credentials:"same-origin"});const ds=await rs.json();if(ds&&ds.ok)SAVED_SPECS=new Map((ds.items||[]).map(x=>[x.id,x]));}catch(e){}
     const err=(!ro.ok&&ro.status!==401?" orders":"")+(!rd.ok&&rd.status!==401?" drafts":"");
     const note=$("salesloading");
@@ -4930,7 +4937,7 @@ function buildFilters(){
     [...salesStatuses].forEach(s=>{ if(!defs.some(d=>d[0]===s)) salesStatuses.delete(s); });
     box.innerHTML=defs.map(d=>'<button class="fchip'+(salesStatuses.has(d[0])?" on":"")+'" onclick="toggleStatus(\''+d[0]+'\')">'+d[1]+'</button>').join("");
   }
-  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. The Shipped chip shows every delivered order — older ones open only as a picture of the spec sheet (read-only). Refunds aren't shown here." : "";
+  const note=$("salesnote"); if(note) note.textContent = (salesView==="orders") ? "Showing open orders. The Shipped chip shows every order delivered from 2026 — older ones open only as a picture of the spec sheet (read-only). Refunds aren't shown here." : "";
 }
 /* drawing progress across OPEN orders: furniture lines with a finished drawing (template or manual marked complete) */
 function drawingTally(){let done=0,all=0;SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").forEach(o=>o.items.forEach((it,i)=>{if(!isFurnitureLine(it.product))return;all++;if(lineDrawn(o,i))done++;}));return {done,all};}
@@ -5581,14 +5588,14 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const xtra=(i===0&&!o.isDraft&&ROLE!=="factory"&&o.state==="open")?'<div onclick="event.stopPropagation()" style="margin-top:6px"><button type="button" class="dbtn" onclick="chgOpen('+oi+')">✎ Change order</button><div id="chg-'+oi+'" hidden></div></div>':"";
     const statusCell=i===0?('<span class="pill '+st.cls+'">'+st.txt+'</span>'+draw+sig+(i===0?editChip(o):"")+payCtrl+balCtrl+xtra):"";
     const prod=esc(it.product)+qtyChip(it)+(itemTag(o,i)?' <span class="muted">'+itemTag(o,i).trim()+"</span>":"")+drawTypeChip(it.product,o,i)+(o.isDraft?"":drawCtl(o,i,oi))+fabricNotesAfter(o,i)+webOpts(it);
-    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+onlineTag+editBtn+pdfLink+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
+    html+='<tr data-oi="'+oi+'" onclick="salesRowClick(this)"><td class="ono">'+(i===0?esc(o.order):"")+'</td><td>'+prod+'</td><td>'+(i===0?esc(o.customer||""):"")+'</td><td class="promisetd">'+(i===0?promiseCell(o):"")+'</td><td>'+(i===0?esc(o.date||""):"")+'</td><td>'+statusCell+'</td><td style="text-align:right;white-space:nowrap">'+onlineTag+editBtn+pdfLink+(i===0?podBtn(o,o.state==="shipped"):"")+'<button class="'+specCls+'" onclick="event.stopPropagation();specLineItem(\''+oq+'\','+i+')">'+specTxt+'</button></td></tr>';
   });});
   if(salesView==="orders"&&salesStatuses.has("shipped")){
     if(!SHIPPED_OLD){loadShippedOld();html+='<tr><td colspan="7" class="muted" style="padding:12px 10px">Loading older delivered orders…</td></tr>';}
     else SHIPPED_OLD.filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth).forEach((o,k)=>{const oi=SHIPPED_OLD.indexOf(o);o.items.forEach((it,i)=>{if(it.note)return;
       const hay=(o.order+" "+it.product+" "+(o.customer||"")).toLowerCase();if(q&&hay.indexOf(q)<0)return;shown++;
       const has=SAVED_SPECS.has(specKey(lineId(o,i)));
-      html+='<tr class="oldship"><td class="ono">'+(i===0||k<0?esc(o.order):"")+'</td><td>'+esc(it.product||"")+(+it.qty>1?' <b>×'+esc(it.qty)+'</b>':'')+(it.variant?' <span class="muted">'+esc(it.variant)+'</span>':'')+'</td><td>'+esc(o.customer||"")+'</td><td class="promisetd"><span class="muted">'+(o.fulfilled?'Delivered '+esc(o.fulfilled):'Delivered')+'</span></td><td>'+esc(o.date||"")+'</td><td><span class="pill pass">Shipped</span></td><td style="text-align:right;white-space:nowrap">'
+      html+='<tr class="oldship"><td class="ono">'+(i===0||k<0?esc(o.order):"")+'</td><td>'+esc(it.product||"")+(+it.qty>1?' <b>×'+esc(it.qty)+'</b>':'')+(it.variant?' <span class="muted">'+esc(it.variant)+'</span>':'')+'</td><td>'+esc(o.customer||"")+'</td><td class="promisetd"><span class="muted">'+(o.fulfilled?'Delivered '+esc(o.fulfilled):'Delivered')+'</span></td><td>'+esc(o.date||"")+'</td><td><span class="pill pass">Shipped</span></td><td style="text-align:right;white-space:nowrap">'+(i===0?podBtn(o,true):'')
         +(has?'<button class="specbtn" style="background:#5b6b7c;border-color:#5b6b7c" title="Read-only picture of the spec sheet, with the team\'s comments" onclick="snapSpec('+oi+','+i+')">🖼 Spec picture</button>':'<span class="muted" style="font-size:11px">No spec sheet</span>')+'</td></tr>';});});}
   tb.innerHTML=shown?html:'<tr><td colspan="7" class="muted" style="padding:16px 10px">No '+(salesView==="drafts"?"draft orders":"orders")+' to show'+(q||salesMonth!=="all"||salesStatuses.size>0?' matching your filters':'')+'.</td></tr>';
   const cnt=$("salescount");if(cnt)cnt.textContent=shown+" line"+(shown===1?"":"s");
