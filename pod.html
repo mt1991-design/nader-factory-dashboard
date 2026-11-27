@@ -51,7 +51,7 @@ out.innerHTML=d.list.map((r,n)=>'<section class="doc">'
   +'<div class="mast"><div><div class="wm">NADER</div><div class="sub">DARE TO BE RARE</div></div><div class="r"><div class="k">PROOF OF DELIVERY'+(d.list.length>1?' · '+(n+1)+' of '+d.list.length:'')+'</div><div class="v">'+esc(r.order)+'</div></div></div>'
   +'<div class="grid"><div><span class="k">Customer (typed by the customer)</span><span class="v">'+esc(r.customer)+'</span></div><div><span class="k">Delivered on</span><span class="v">'+when(r.at)+'</span></div>'
   +'<div><span class="k">Delivered by</span><span class="v">'+esc(r.driver)+'</span></div><div><span class="k">Reference</span><span class="v">'+esc(r.id)+'</span></div></div>'
-  +'<h3>What the customer noted</h3>'+(r.issues?'<div class="issues">'+esc(r.issues).replace(/\n/g,"<br>")+'</div>':'<div class="terms">Nothing — the customer reported no problems.</div>')
+  +(r.issues?'<h3>What the customer noted</h3><div class="issues">'+esc(r.issues).replace(/\n/g,"<br>")+'</div>':'')
   +'<h3>Delivery terms the customer agreed to</h3><div class="terms">'+esc(r.terms)+(r.termsUrl?'<div style="margin-top:4px">Full terms: <a href="'+esc(r.termsUrl)+'" target="_blank" rel="noopener">'+esc(r.termsUrl.replace(/^https?:\/\//,''))+'</a></div>':'')+'<div class="tick">☑ “I agree” ticked by the customer</div></div>'
   +'<h3>Customer signature</h3><div class="sig"><img src="'+img(r.signature)+'" alt="Customer signature"></div>'
   +'<h3>Photo'+((r.photos||[]).length>1?'s':'')+' of the delivery</h3><div class="photos">'+(r.photos||[]).map((p,i)=>'<a href="'+img(p)+'" target="_blank" rel="noopener"><img src="'+img(p)+'" alt="Delivery photo '+(i+1)+'"></a>').join("")+'</div>'

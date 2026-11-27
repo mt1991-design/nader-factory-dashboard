@@ -255,6 +255,13 @@ body.snapview #sheet [contenteditable]:empty:before{content:none!important}
 body.snapview #sheet:has(.refs.empty) :is(.refs,.refs-h){display:none}
 body.snapview #sheet:has(.cnotes [data-k=custNotes]:empty) :is(.cnotes,.cnotes-h){display:none}
 body.snapview .stsel{border:none;background:none;padding:0;-webkit-appearance:none;appearance:none;opacity:1;color:inherit}
+#snapWrap{display:flex;gap:16px;align-items:flex-start;width:max-content;margin:0 auto;padding:12px;background:#ece6da}
+#snapSide{flex:0 0 300px;width:300px;background:#faf8f3;border-radius:10px;padding:12px}
+#snapSide .section-h{display:flex;align-items:center;gap:8px;margin:10px 0 6px}#snapSide .section-h:first-child{margin-top:0}
+#snapSide .section-h .t{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#b8955a;white-space:nowrap}
+#snapSide .section-h .rule{flex:1;border-top:1px solid #e3dccd}
+#snapSide .snap-grid{grid-template-columns:1fr 1fr!important}
+body.snapview #snapWrap .sheet-scroll{display:block}
 #snapExtra .snap-box{border:1px solid #e3dccd;border-radius:6px;background:#faf8f3;padding:8px 12px;margin:0 0 10px;font-size:12px;line-height:1.5;color:#2b2621}
 #snapExtra .snap-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 #snapExtra .snap-grid span{display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#8a7f6c}
@@ -3844,7 +3851,10 @@ async function snapBoot(){
   start();
   document.querySelectorAll("#sheet [contenteditable]").forEach(e=>e.setAttribute("contenteditable","false"));
   document.querySelectorAll("#sheet select").forEach(e=>{const sp=document.createElement("b");sp.textContent=(e.options[e.selectedIndex]||{}).text||"";sp.style.color=getComputedStyle(e).color;e.replaceWith(sp);});
-  const sh=document.getElementById("sheet");sh.insertAdjacentHTML("beforeend",snapExtra(O));
+  /* 27 Nov 2026 (Mariam): the picture is laid out like the screen — the team's side panel (customer, comments, history…) on the
+     left, the sheet on the right — and captured as ONE image */
+  const sc=document.querySelector(".sheet-scroll"),wrap=document.createElement("div");wrap.id="snapWrap";sc.parentNode.insertBefore(wrap,sc);
+  wrap.innerHTML='<aside id="snapSide">'+snapExtra(O)+'</aside>';wrap.appendChild(sc);
   document.getElementById("tbTitle").textContent=(ORDER.orderNo?String(ORDER.orderNo).split(" ")[0]+" · ":"")+(ORDER.product||"Spec sheet");
   await snapPicture();
 }
@@ -3853,10 +3863,11 @@ function snapExtra(O){
   const day=t=>{const d=new Date(String(t).slice(0,10)+"T12:00");return isNaN(d)?esc(t):d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});};
   const box=(h,body)=>'<div class="section-h"><span class="t">'+h+'</span><span class="rule"></span></div><div class="snap-box">'+body+'</div>';
   const none='<div class="snap-none">None</div>';
-  let h='';
+  let h='';const c=ORDER.cust||{};
+  h+=box("Customer",(c.name||(O&&O.customer)?'<div><b>'+esc(c.name||O.customer)+'</b></div>':'')+(c.phone?'<div>'+esc(c.phone)+'</div>':'')+(c.email?'<div>'+esc(c.email)+'</div>':'')||none);
   /* order */
   if(O){const st=O.state==="delivered"?"Delivered"+(O.fulfilled?" · "+day(O.fulfilled):""):O.state==="cancelled"?"Cancelled / refunded":"Open (in production)";
-    h+=box("Order",'<div class="snap-grid"><div><span>Customer</span>'+esc(O.customer||"—")+'</div><div><span>Ordered</span>'+day(O.date)+'</div><div><span>Sales agent</span>'+esc(O.agent||"—")+'</div><div><span>Order status</span>'+st+'</div></div>');
+    h+=box("Order",'<div class="snap-grid"><div><span>Order</span>'+esc(O.order||"")+'</div><div><span>Ordered</span>'+day(O.date)+'</div><div><span>Sales agent</span>'+esc(O.agent||"—")+'</div><div><span>Order status</span>'+st+'</div></div>');
     /* production + delivery for this line */
     const pd=(O.prod_dates||{})[i]||{},cur=(O.prod_stages||[])[i],rows=[];
     SNAP_STAGES.forEach((n,k)=>{if(pd[k])rows.push('<tr><td>'+n+'</td><td>'+when(pd[k])+'</td></tr>');});
@@ -3888,10 +3899,14 @@ async function snapPicture(){
   try{
     if(!window.html2canvas)await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
     await Promise.all([...sh.querySelectorAll("img")].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
-    const cv=await html2canvas(sh,{scale:2,useCORS:true,backgroundColor:"#ffffff",logging:false,windowWidth:sh.scrollWidth+40});
+    const wrap=document.getElementById("snapWrap")||sh;
+    const src=[...wrap.querySelectorAll("svg")].map(v=>{const r=v.getBoundingClientRect(),c=v.cloneNode(true);c.setAttribute("width",r.width);c.setAttribute("height",r.height);
+      if(!c.getAttribute("xmlns"))c.setAttribute("xmlns","http://www.w3.org/2000/svg");c.style.cssText="";return{w:r.width,h:r.height,url:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(new XMLSerializer().serializeToString(c))};});
+    const cv=await html2canvas(wrap,{scale:2,useCORS:true,backgroundColor:"#ffffff",logging:false,windowWidth:wrap.scrollWidth+40,
+      onclone:doc=>{[...doc.getElementById(wrap.id||"sheet").querySelectorAll("svg")].forEach((v,k)=>{const d=src[k];if(!d||!d.w)return;const im=doc.createElement("img");im.src=d.url;im.style.cssText="display:block;width:"+d.w+"px;height:"+d.h+"px;max-width:none;max-height:none";v.replaceWith(im);});}});
     const url=cv.toDataURL("image/png"),name=(String(ORDER.orderNo||SPEC_ID).split(" ")[0].replace(/[^A-Za-z0-9-]/g,"")||"spec")+(Q.i?"-item"+(Q.i+1):"")+" "+String(ORDER.product||"spec sheet").replace(/[\\/:*?"<>|]/g,"")+".png";
     const out=document.createElement("div");out.id="snapOut";out.innerHTML='<img alt="Spec sheet picture" src="'+url+'">';
-    document.querySelector(".sheet-scroll").hidden=true;document.getElementById("app").appendChild(out);
+    wrap.hidden=true;document.getElementById("app").appendChild(out);
     bar.innerHTML='<a class="snap-dl" download="'+esc(name)+'" href="'+url+'">⬇ Download picture</a>';
     window.SNAP_READY=true;
   }catch(e){

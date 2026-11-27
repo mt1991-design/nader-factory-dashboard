@@ -133,7 +133,10 @@ buildFilters=function(){ _buildFilters.apply(this,arguments);
   box.querySelectorAll(".fchip").forEach(b=>{const m=(b.getAttribute("onclick")||"").match(/toggleStatus\('([^']+)'\)/);if(!m)return;const k=m[1];
     b.setAttribute("aria-pressed",String(salesStatuses.has(k)));
     if(k==="drawn"){const t=drawingTally();b.innerHTML=`Drawing complete <span class="wr-mini"><i style="width:${t.all?Math.round(t.done/t.all*100):0}%"></i></span><span class="wr-c">${t.done}/${t.all}</span>`;}
-    else{const n=base.filter(o=>matchOne(o,k)).length;b.insertAdjacentHTML("beforeend",` <span class="wr-c">${n}</span>`);}
+    else{let n=base.filter(o=>matchOne(o,k)).length;
+      /* 27 Nov 2026: Shipped counts every 2026 delivered order, not only the last 3 days */
+      if(k==="shipped"&&salesView!=="drafts"&&typeof SHIPPED_OLD!=="undefined"&&SHIPPED_OLD)n+=SHIPPED_OLD.filter(o=>salesMonth==="all"||(o.date||"").slice(0,7)===salesMonth).length;
+     b.insertAdjacentHTML("beforeend",` <span class="wr-c">${n}</span>`);}
   });
 };
 

@@ -4485,7 +4485,8 @@ async function loadShopify(fresh){
     const orders=(od.orders||[]).map(o=>Object.assign({},o,{isDraft:false}));
     /* drafts first (awaiting spec), then placed orders; both newest-first */
     SHOPIFY=drafts.concat(orders).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-    if(typeof syncWorkers==="function")syncWorkers();   /* the shared factory team (refreshes with the orders) */
+    if(typeof syncWorkers==="function")syncWorkers();
+    if(!SHIPPED_OLD)setTimeout(loadShippedOld,1500);   /* the Shipped chip shows its full count straight away (27 Nov) */   /* the shared factory team (refreshes with the orders) */
     try{const rp=await fetch("/api/pods",{credentials:"same-origin"});const dp=await rp.json();if(dp&&dp.ok)POD_INDEX=dp.pods||{};}catch(e){}   /* proof of delivery (27 Nov) */
     try{const rs=await fetch("/api/specs",{credentials:"same-origin"});const ds=await rs.json();if(ds&&ds.ok)SAVED_SPECS=new Map((ds.items||[]).map(x=>[x.id,x]));}catch(e){}
     const err=(!ro.ok&&ro.status!==401?" orders":"")+(!rd.ok&&rd.status!==401?" drafts":"");

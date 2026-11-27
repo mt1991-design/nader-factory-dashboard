@@ -89,8 +89,6 @@ label.lbl{display:block;font-size:15px;font-weight:600;margin:12px 0 6px;color:v
     <div class="who">Give the phone to the customer</div>
     <label class="lbl" for="cust">First and last name</label>
     <input type="text" id="cust" autocomplete="off" autocapitalize="words" placeholder="e.g. Sara Ahmed" maxlength="80">
-    <label class="lbl" for="issues">Anything wrong? <span style="font-weight:400">(leave empty if all is fine)</span></label>
-    <textarea id="issues" maxlength="1000" placeholder="e.g. small mark on the left arm"></textarea>
     <div class="terms" id="terms">Loading the terms…</div>
     <label class="agree" id="agreeBox"><input type="checkbox" id="agree"> I agree</label>
     <label class="lbl">Sign here with your finger</label>
@@ -188,11 +186,11 @@ update();
 $("submit").addEventListener("click",async()=>{if(missing().length||S.busy)return;S.busy=true;update();$("busy").hidden=false;$("subMsg").textContent="";
   /* signature on white, trimmed to what was drawn */
   const w=document.createElement("canvas");w.width=cv.width;w.height=cv.height;const wc=w.getContext("2d");wc.fillStyle="#fff";wc.fillRect(0,0,w.width,w.height);wc.drawImage(cv,0,0);
-  const body={no:S.order,driver:$("driver").value.trim(),customer:$("cust").value.trim(),issues:$("issues").value.trim(),agree:$("agree").checked===true,signature:w.toDataURL("image/png"),photos:S.photos};
+  const body={no:S.order,driver:$("driver").value.trim(),customer:$("cust").value.trim(),agree:$("agree").checked===true,signature:w.toDataURL("image/png"),photos:S.photos};
   try{const r=await fetch("/api/pod",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));
     if(!r.ok||!d.ok)throw new Error(d.error||"Could not save — press Submit again");
     $("sum").innerHTML='<div><b>Order</b> '+esc(d.order)+'</div><div><b>Customer</b> '+esc(body.customer)+'</div><div><b>Delivered by</b> '+esc(body.driver)+'</div><div><b>Time</b> '+esc(String(d.at).replace("T"," "))+'</div>'
-      +(body.issues?'<div><b>Customer noted</b> '+esc(body.issues)+'</div>':'')+'<div><b>Signature</b><br><img src="'+body.signature+'" alt="Signature" style="max-height:90px;background:#fff"></div><div><b>Photos</b> '+S.photos.length+'</div>';
+      +'<div><b>Signature</b><br><img src="'+body.signature+'" alt="Signature" style="max-height:90px;background:#fff"></div><div><b>Photos</b> '+S.photos.length+'</div>';
     $("form").hidden=true;$("thanks").hidden=false;window.scrollTo(0,0);
   }catch(e){$("subMsg").textContent=e.message||"Could not save — check the internet and press Submit again";S.busy=false;update();}
   $("busy").hidden=true;});

@@ -1298,9 +1298,9 @@ app.get('/api/shipped', requireAuth, async (req, res) => {
    wording is stored with the proof). Stored for good: photos + signature as files, the record in the "pod" doc, keyed by order id.
    Nothing can be edited or deleted from anywhere — a second delivery for the same order (e.g. a missing piece) is added beside it.
    Public endpoints are rate-limited and only accept a real 2026 order that isn't cancelled. */
-const POD_TERMS_VERSION = '2026-11-27b';   /* Mariam 27 Nov: short sentence on the form; the full terms live on the website page */
+const POD_TERMS_VERSION = '2026-11-27c';   /* Mariam 27 Nov: short sentence on the form; the full terms live on the website page */
 const POD_TERMS_URL = 'https://nader.ae/pages/delivery-acceptance';
-const POD_TERMS = 'I confirm my Nader furniture has been delivered today and I agree to the delivery terms.';
+const POD_TERMS = 'I confirm my Nader furniture has been delivered today and I agree to the full delivery terms.';
 const POD_HITS = new Map();
 function podLimit(req, kind, max, mins) {
   const k = kind + ':' + clientIp(req), now = Date.now(), h = (POD_HITS.get(k) || []).filter(t => now - t < mins * 60e3);
