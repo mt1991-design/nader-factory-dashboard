@@ -252,6 +252,8 @@ body.snapview .wrap{display:block!important;max-width:1100px;margin:0 auto}
 body.snapview .sheet-scroll{display:flex;justify-content:safe center}
 body.snapview .mdraw-acts,body.snapview .upbtn,body.snapview [data-up],body.snapview [data-rm],body.snapview .ref-add,body.snapview .ref-rm{display:none!important}
 body.snapview #sheet [contenteditable]:empty:before{content:none!important}
+body.snapview #sheet:has(.refs.empty) :is(.refs,.refs-h){display:none}
+body.snapview #sheet:has(.cnotes [data-k=custNotes]:empty) :is(.cnotes,.cnotes-h){display:none}
 body.snapview .stsel{border:none;background:none;padding:0;-webkit-appearance:none;appearance:none;opacity:1;color:inherit}
 #snapExtra .snap-box{border:1px solid #e3dccd;border-radius:6px;background:#faf8f3;padding:8px 12px;margin:0 0 10px;font-size:12px;line-height:1.5;color:#2b2621}
 #snapExtra .snap-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -3841,7 +3843,7 @@ async function snapBoot(){
   if(no){try{const r=await fetch("/api/lookup?no="+no,{credentials:"same-origin"});const d=await r.json();if(d.ok)O=d.order;}catch(e){}}
   start();
   document.querySelectorAll("#sheet [contenteditable]").forEach(e=>e.setAttribute("contenteditable","false"));
-  document.querySelectorAll("#sheet select").forEach(e=>e.disabled=true);
+  document.querySelectorAll("#sheet select").forEach(e=>{const sp=document.createElement("b");sp.textContent=(e.options[e.selectedIndex]||{}).text||"";sp.style.color=getComputedStyle(e).color;e.replaceWith(sp);});
   const sh=document.getElementById("sheet");sh.insertAdjacentHTML("beforeend",snapExtra(O));
   document.getElementById("tbTitle").textContent=(ORDER.orderNo?String(ORDER.orderNo).split(" ")[0]+" · ":"")+(ORDER.product||"Spec sheet");
   await snapPicture();
