@@ -245,6 +245,29 @@ body:not(.custview):not(.is-stool) .toppanel .body .mdraw img,body:not(.custview
 @media print{.ed-toggle{display:none!important}}
 </style>
 
+<style>
+/* 27 Nov 2026: picture mode for the dashboard's "Old orders" lookup (read-only, one picture with the team's comments) */
+body.snapview aside.ed,body.snapview #savedSel,body.snapview #saveState,body.snapview #printBtn,body.snapview #teamNotes,body.snapview #histBox,body.snapview #custInfo{display:none!important}
+body.snapview .wrap{display:block!important;max-width:1100px;margin:0 auto}
+body.snapview .sheet-scroll{display:flex;justify-content:safe center}
+body.snapview .mdraw-acts,body.snapview .upbtn,body.snapview [data-up],body.snapview [data-rm],body.snapview .ref-add,body.snapview .ref-rm{display:none!important}
+body.snapview #sheet [contenteditable]:empty:before{content:none!important}
+body.snapview .stsel{border:none;background:none;padding:0;-webkit-appearance:none;appearance:none;opacity:1;color:inherit}
+#snapExtra .snap-box{border:1px solid #e3dccd;border-radius:6px;background:#faf8f3;padding:8px 12px;margin:0 0 10px;font-size:12px;line-height:1.5;color:#2b2621}
+#snapExtra .snap-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#snapExtra .snap-grid span{display:block;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#8a7f6c}
+#snapExtra .snap-e{padding:5px 0;border-bottom:1px dashed #e3dccd}#snapExtra .snap-e:last-child{border-bottom:none}
+#snapExtra .snap-e ul{margin:3px 0 0 18px;padding:0}
+#snapExtra .snap-when,#snapExtra .snap-none,#snapExtra .snap-small{color:#8a7f6c}
+#snapExtra .snap-small{margin-top:6px;font-size:11px}
+#snapExtra .snap-t{border-collapse:collapse}#snapExtra .snap-t td{padding:2px 18px 2px 0}#snapExtra .snap-t td:first-child{color:#6b6253}
+#snapExtra .snap-foot{margin-top:10px;font-size:10px;color:#a39a89;text-align:right}
+#snapOut{display:flex;justify-content:center;padding:14px 10px 40px}#snapOut img{width:100%;max-width:1000px;height:auto;box-shadow:0 4px 24px rgba(0,0,0,.12);background:#fff}
+#snapBar .snap-dl{display:inline-block;background:#b8955a;color:#1c1a17;font-weight:700;text-decoration:none;border-radius:8px;padding:8px 14px;font-size:13px}
+#snapBar .snap-wait{color:#d9cfbd;font-size:12px}
+.snap-msg{max-width:520px;margin:60px auto;background:#fff;border-radius:12px;padding:24px;text-align:center;font-size:15px}
+@media (max-width:760px){#snapExtra .snap-grid{grid-template-columns:1fr 1fr}}
+</style>
 <div class="toolbar">
   <div class="left">
     <a class="back" id="backLink" href="/">‹ Dashboard</a>
@@ -2885,6 +2908,7 @@ const WORKER="https://nader-drafts.partner-e88.workers.dev";
 const SF={url:"https://91fb05.myshopify.com/api/2024-10/graphql.json",token:"be7a8d7a841c0bd4c963af0573d3ee9d"};
 const qs=new URLSearchParams(location.search);
 const Q={o:qs.get("o")||"",i:parseInt(qs.get("i")||"0",10)||0,k:qs.get("k")||"",id:qs.get("id")||"",p:qs.get("p")||"",t:qs.get("t")||""};
+let SNAP=qs.get("view")==="snap";
 let LIVE=false, SPEC_ID="", ORDER=null, V=null, IS_ADMIN=false, ME="", FROM_SAVE=false, CAN_SALES=true;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cleanId=s=>String(s||"").replace(/[^A-Za-z0-9-]/g,"");
@@ -3290,6 +3314,7 @@ function applyFormSpec(O,spec){
 let saveT=null;
 function setSaveState(t,cls){const e=document.getElementById("saveState");e.textContent=t;e.className="save"+(cls?" "+cls:"");}
 function save(){
+  if(SNAP)return;   /* picture mode (old-orders lookup) is read-only */
   recordEdits();
   if(!LIVE){try{localStorage.setItem("nader-spec-demo-"+ORDER.model+((MODELS[ORDER.model]||{}).ver||""),JSON.stringify(ORDER));}catch(e){}return;}
   if(drawStatus()==="complete"&&!ORDER.completedBy)ORDER.completedBy=ME;
@@ -3802,6 +3827,76 @@ function start(){
   renderSheet();wire();buildDimFields();syncInputs();renderDrawings();
 }
 
+/* ---------- PICTURE MODE (/spec.html?view=snap&…) — 27 Nov 2026 (Mariam): the dashboard's "Old orders" lookup shows a saved sheet as
+   ONE PICTURE the sales team can send on (e.g. to Abdul after delivery): the sheet as printed, plus everything the team wrote about it —
+   sales team comments, dashboard notes on the order, the change log, production and delivery dates. Read-only: nothing is saved,
+   nothing is re-read from the form, no changes are applied. Customer phone / e-mail are left out. ---------- */
+const SNAP_STAGES=["Drawing","Carpentry","Foaming","Fabrication","Packing","Stored in warehouse","Delivery booked"];
+async function snapBoot(){
+  document.body.classList.add("snapview");setSaveState("");
+  const msg=t=>{document.getElementById("app").hidden=false;document.getElementById("app").innerHTML='<div class="snap-msg">'+t+'</div>';};
+  try{const r=await fetch("/api/spec?id="+encodeURIComponent(SPEC_ID),{credentials:"same-origin"});const d=await r.json();if(d.ok&&d.data){ORDER=d.data;FROM_SAVE=true;}}catch(e){}
+  if(!ORDER)return msg("No spec sheet was saved for "+esc(Q.o||SPEC_ID)+(Q.i?" (item "+(Q.i+1)+")":"")+".");
+  let O=null;const no=String(Q.o||ORDER.orderNo||SPEC_ID).replace(/\D/g,"").slice(0,12);
+  if(no){try{const r=await fetch("/api/lookup?no="+no,{credentials:"same-origin"});const d=await r.json();if(d.ok)O=d.order;}catch(e){}}
+  start();
+  document.querySelectorAll("#sheet [contenteditable]").forEach(e=>e.setAttribute("contenteditable","false"));
+  document.querySelectorAll("#sheet select").forEach(e=>e.disabled=true);
+  const sh=document.getElementById("sheet");sh.insertAdjacentHTML("beforeend",snapExtra(O));
+  document.getElementById("tbTitle").textContent=(ORDER.orderNo?String(ORDER.orderNo).split(" ")[0]+" · ":"")+(ORDER.product||"Spec sheet");
+  await snapPicture();
+}
+function snapExtra(O){
+  const i=Q.i|0,when=t=>{const d=typeof t==="number"?new Date(t):new Date(String(t).replace(" ","T"));return isNaN(d)?esc(t):d.toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});};
+  const day=t=>{const d=new Date(String(t).slice(0,10)+"T12:00");return isNaN(d)?esc(t):d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});};
+  const box=(h,body)=>'<div class="section-h"><span class="t">'+h+'</span><span class="rule"></span></div><div class="snap-box">'+body+'</div>';
+  const none='<div class="snap-none">None</div>';
+  let h='';
+  /* order */
+  if(O){const st=O.state==="delivered"?"Delivered"+(O.fulfilled?" · "+day(O.fulfilled):""):O.state==="cancelled"?"Cancelled / refunded":"Open (in production)";
+    h+=box("Order",'<div class="snap-grid"><div><span>Customer</span>'+esc(O.customer||"—")+'</div><div><span>Ordered</span>'+day(O.date)+'</div><div><span>Sales agent</span>'+esc(O.agent||"—")+'</div><div><span>Order status</span>'+st+'</div></div>');
+    /* production + delivery for this line */
+    const pd=(O.prod_dates||{})[i]||{},cur=(O.prod_stages||[])[i],rows=[];
+    SNAP_STAGES.forEach((n,k)=>{if(pd[k])rows.push('<tr><td>'+n+'</td><td>'+when(pd[k])+'</td></tr>');});
+    const dv=(O.delivery||{})[i],dd=((O.delivered||{})[i]||{}).d,crew=(O.crew||{})[i]||{};
+    if(dv)rows.push('<tr><td>Delivery booked for</td><td>'+when(dv)+'</td></tr>');
+    if(dd)rows.push('<tr><td>Delivered</td><td>'+day(dd)+'</td></tr>');
+    const cr=Object.keys(crew).map(k=>'<tr><td>'+(SNAP_STAGES[k]||"Stage "+k)+' — made by</td><td>'+crew[k].map(c=>esc(c.n)).join(", ")+'</td></tr>').join("");
+    h+=box("Production &amp; delivery",(rows.length||cr?'<table class="snap-t">'+rows.join("")+cr+'</table>':none)+(cur!=null?'<div class="snap-small">Stage on the dashboard: <b>'+(SNAP_STAGES[cur]||cur)+'</b></div>':''));
+  }
+  /* sales team comments (the server never sends these to factory-only logins) */
+  const tn=(ORDER.teamNotes||[]).slice().sort((a,b)=>(a.t||0)-(b.t||0));
+  h+=box("Sales team comments",tn.length?tn.map(n=>'<div class="snap-e"><b>'+esc(n.by||"")+'</b> <span class="snap-when">· '+when(n.t)+'</span><div>'+esc(n.text||"").replace(/\n/g,"<br>")+'</div></div>').join(""):none);
+  /* notes on the order in the dashboard */
+  if(O){const on=(O.tnotes||[]);h+=box("Order notes (dashboard)",on.length?on.map(n=>'<div class="snap-e"><b>'+esc(n.by||"")+'</b> <span class="snap-when">· '+when(n.t)+(n.e?' · edited':'')+'</span><div>'+esc(n.text||"").replace(/\n/g,"<br>")+'</div></div>').join(""):none);
+    const ed=String(O.note||"").split("\n").map(l=>l.trim()).filter(l=>/^✎/.test(l));
+    if(ed.length)h+=box("Order edits",ed.map(l=>'<div class="snap-e">'+esc(l)+'</div>').join(""));}
+  /* change log of the sheet */
+  const lg=(ORDER.log||[]).slice().sort((a,b)=>(a.t||0)-(b.t||0)),lk=ORDER.locked;
+  h+=box("Spec sheet history",(lg.length?lg.map(e=>'<div class="snap-e"><b>'+esc(e.by||"")+'</b> <span class="snap-when">· '+when(e.t)+'</span><div>'+esc(e.what||"")+'</div>'+(e.changes&&e.changes.length?'<ul>'+e.changes.map(c=>'<li>'+esc(c)+'</li>').join("")+'</ul>':'')+'</div>').join(""):none)
+    +(lk&&lk.at?'<div class="snap-small">Drawing locked'+(lk.by?' by <b>'+esc(lk.by)+'</b>':'')+' · '+when(lk.at)+'</div>':''));
+  h+='<div class="snap-foot">Picture made '+when(Date.now())+(ME?' by '+esc(ME):'')+' · Nader dashboard · read-only copy</div>';
+  return '<div id="snapExtra">'+h+'</div>';
+}
+function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);});}
+async function snapPicture(){
+  const sh=document.getElementById("sheet"),bar=document.getElementById("snapBar")||document.createElement("div");
+  bar.id="snapBar";bar.className="noprint";bar.innerHTML='<span class="snap-wait">Making the picture…</span>';document.querySelector(".toolbar .acts").appendChild(bar);
+  await new Promise(r=>setTimeout(r,600));
+  try{
+    if(!window.html2canvas)await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+    await Promise.all([...sh.querySelectorAll("img")].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
+    const cv=await html2canvas(sh,{scale:2,useCORS:true,backgroundColor:"#ffffff",logging:false,windowWidth:sh.scrollWidth+40});
+    const url=cv.toDataURL("image/png"),name=(String(ORDER.orderNo||SPEC_ID).split(" ")[0].replace(/[^A-Za-z0-9-]/g,"")||"spec")+(Q.i?"-item"+(Q.i+1):"")+" "+String(ORDER.product||"spec sheet").replace(/[\\/:*?"<>|]/g,"")+".png";
+    const out=document.createElement("div");out.id="snapOut";out.innerHTML='<img alt="Spec sheet picture" src="'+url+'">';
+    document.querySelector(".sheet-scroll").hidden=true;document.getElementById("app").appendChild(out);
+    bar.innerHTML='<a class="snap-dl" download="'+esc(name)+'" href="'+url+'">⬇ Download picture</a>';
+    window.SNAP_READY=true;
+  }catch(e){
+    bar.innerHTML='<span class="snap-wait">Couldn’t make the picture here — take a screenshot of the sheet below.</span>';window.SNAP_READY="html";
+  }
+}
+
 /* ---------- CUSTOMER MODE (/drawing?t=…): the customer checks their drawing, approves it or asks for a change ---------- */
 const fmtDay=t=>{const d=new Date(String(t).replace(' ','T'));return isNaN(d)?String(t).slice(0,10):d.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});};
 async function custBoot(){
@@ -3870,6 +3965,7 @@ async function boot(){
   }
   LIVE=true; IS_ADMIN=(sess.roles||[]).includes("admin"); CAN_SALES=(sess.roles||[]).some(r=>r==="sales"||r==="admin"); ME=sess.name||sess.username||"";
   SPEC_ID=cleanId(Q.id)||("N"+Date.now().toString(36).toUpperCase());
+  if(SNAP)return snapBoot();
   if(!Q.id)history.replaceState(null,"","/spec.html?"+new URLSearchParams(Object.assign({},Q.o?{o:Q.o,i:Q.i,k:Q.k}:{},Q.p?{p:Q.p}:{},{id:SPEC_ID})).toString());
   setSaveState("Loading…");
   try{const r=await fetch("/api/spec?id="+encodeURIComponent(SPEC_ID),{credentials:"same-origin"});const d=await r.json();if(d.ok&&d.data){ORDER=d.data;FROM_SAVE=true;}}catch(e){}
