@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Proof of delivery · Nader</title>
+<!-- 27 Nov 2026 (Mariam): the proof of delivery the delivery team sent from /delivery — READ-ONLY, for logged-in staff.
+     Opened from the order row on the dashboard (/pod.html?id=<shopify order id>&no=<order number>). Print / Save PDF keeps a copy. -->
+<style>
+:root{--ink:#1c1a17;--ink2:#6b6253;--gold:#b8955a;--line:#e3dccd;--bg:#f5f1e8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+.bar{background:var(--ink);color:#fff;display:flex;align-items:center;gap:12px;padding:10px 16px}
+.bar a{color:#fff;text-decoration:none;border:1px solid #555;border-radius:8px;padding:6px 12px;font-size:13px}
+.bar .t{flex:1;font-size:12px;letter-spacing:.14em;color:var(--gold);font-weight:700;text-transform:uppercase}
+.bar button{background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+main{max-width:820px;margin:0 auto;padding:16px}
+.doc{background:#fff;border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.08);padding:22px;margin:0 0 18px;break-after:page}
+.mast{display:flex;justify-content:space-between;align-items:flex-end;background:var(--ink);color:#fff;border-radius:6px;padding:14px 18px;margin:0 0 14px}
+.mast .wm{font:600 22px Georgia,serif;letter-spacing:.3em}.mast .sub{font-size:10px;letter-spacing:.2em;color:#cfc6b4}
+.mast .r{text-align:right}.mast .r .k{font-size:10px;letter-spacing:.18em;color:var(--gold)}.mast .r .v{font:600 18px Georgia,serif}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:0 0 14px}
+.grid div{padding:8px 12px;border-bottom:1px solid var(--line)}.grid div:nth-child(odd){border-right:1px solid var(--line)}
+.k{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a7f6c}
+.v{font-weight:600}
+h3{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:16px 0 8px}
+.terms{background:#faf8f3;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px}
+.terms .tick{font-weight:700;color:#2f7a3a;margin-top:6px}
+.issues{background:#fff6e5;border:1px solid #f0d9a8;border-radius:6px;padding:10px 12px}
+.sig{border:1px solid var(--line);border-radius:6px;padding:6px;display:inline-block;background:#fff}.sig img{display:block;max-width:100%;max-height:150px}
+.photos{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.photos a{display:block}.photos img{width:100%;border-radius:6px;border:1px solid var(--line);display:block}
+.foot{margin-top:14px;font-size:11px;color:#a39a89}
+.msg{background:#fff;border-radius:10px;padding:24px;text-align:center}
+@media (max-width:600px){.grid{grid-template-columns:1fr}.grid div:nth-child(odd){border-right:none}.photos{grid-template-columns:1fr}}
+@media print{.bar{display:none}body{background:#fff}main{padding:0;max-width:none}.doc{box-shadow:none;padding:0}.photos img{max-height:110mm;object-fit:contain}}
+</style></head>
+<body>
+<div class="bar"><a href="/">‹ Dashboard</a><span class="t">Proof of delivery · read-only</span><button type="button" onclick="window.print()">⎙ Print / Save PDF</button></div>
+<main id="out"><div class="msg">Loading…</div></main>
+<script>
+(async function(){
+const q=new URLSearchParams(location.search),out=document.getElementById("out");
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const when=t=>{const d=new Date(String(t).replace(" ","T"));return isNaN(d)?esc(t):d.toLocaleString("en-GB",{weekday:"short",day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});};
+const img=id=>"/api/file/"+encodeURIComponent(id)+"?inline=1";
+let d={};try{const r=await fetch("/api/pod?"+new URLSearchParams({id:q.get("id")||"",no:q.get("no")||""}),{credentials:"same-origin"});
+  if(r.status===401){out.innerHTML='<div class="msg">Please log in to the dashboard first, then open this again. <a href="/">Go to dashboard</a></div>';return;}
+  d=await r.json();}catch(e){d={ok:false,error:"Could not load — check the internet"};}
+if(!d.ok){out.innerHTML='<div class="msg">'+esc(d.error||"Not found")+'</div>';return;}
+document.title="Proof of delivery "+d.list[0].order+" · Nader";
+out.innerHTML=d.list.map((r,n)=>'<section class="doc">'
+  +'<div class="mast"><div><div class="wm">NADER</div><div class="sub">DARE TO BE RARE</div></div><div class="r"><div class="k">PROOF OF DELIVERY'+(d.list.length>1?' · '+(n+1)+' of '+d.list.length:'')+'</div><div class="v">'+esc(r.order)+'</div></div></div>'
+  +'<div class="grid"><div><span class="k">Customer (typed by the customer)</span><span class="v">'+esc(r.customer)+'</span></div><div><span class="k">Delivered on</span><span class="v">'+when(r.at)+'</span></div>'
+  +'<div><span class="k">Delivered by</span><span class="v">'+esc(r.driver)+'</span></div><div><span class="k">Reference</span><span class="v">'+esc(r.id)+'</span></div></div>'
+  +'<h3>What the customer noted</h3>'+(r.issues?'<div class="issues">'+esc(r.issues).replace(/\n/g,"<br>")+'</div>':'<div class="terms">Nothing — the customer reported no problems.</div>')
+  +'<h3>Delivery terms the customer agreed to</h3><div class="terms">'+esc(r.terms)+'<div class="tick">☑ “I agree” ticked by the customer</div></div>'
+  +'<h3>Customer signature</h3><div class="sig"><img src="'+img(r.signature)+'" alt="Customer signature"></div>'
+  +'<h3>Photo'+((r.photos||[]).length>1?'s':'')+' of the delivery</h3><div class="photos">'+(r.photos||[]).map((p,i)=>'<a href="'+img(p)+'" target="_blank" rel="noopener"><img src="'+img(p)+'" alt="Delivery photo '+(i+1)+'"></a>').join("")+'</div>'
+  +'<div class="foot">Sent from the delivery form on '+when(r.at)+' (UAE time) · terms version '+esc(r.termsVersion||"")+' · this record cannot be edited.</div>'
+  +'</section>').join("");
+})();
+</script>
+</body></html>

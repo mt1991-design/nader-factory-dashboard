@@ -90,6 +90,10 @@ app.get(['/spec', '/spec.html'], servePage('spec.html'));
 /* customer order tracker — public page, embedded only in nader.ae/pages/track-order (unlisted: no links to it anywhere) */
 /* the customer's drawing page (spec sheet in customer mode — opened from the link the team sends) */
 app.get('/drawing', (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); res.setHeader('Cache-Control', 'no-cache'); next(); }, servePage('spec.html'));
+/* 27 Nov 2026 (Mariam): proof of delivery. /delivery = the delivery team's phone form — NO login (one link for the team);
+   /pod.html = the read-only proof for logged-in staff (the dashboard opens it from the order row). */
+app.get(['/delivery', '/delivery.html'], (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); }, servePage('delivery.html'));
+app.get(['/pod', '/pod.html'], (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); }, servePage('pod.html'));
 app.get(['/track', '/track.html'], (req, res, next) => {
   res.setHeader('Content-Security-Policy', "frame-ancestors https://nader.ae https://www.nader.ae https://91fb05.myshopify.com https://*.myshopify.com https://*.shopifypreview.com https://admin.shopify.com");
   res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next();
@@ -1235,6 +1239,153 @@ async function workerJson(pathname, opts) {
   }));
   return r.json().catch(() => ({ ok: false, error: 'bad worker response' }));
 }
+/* 27 Nov 2026 (Mariam): "Old orders" lookup for the sales team — ANY order by its number (delivered ones too, which the
+   order list drops 3 days after shipping), with its spec sheet(s), the team's notes and the production / delivery dates.
+   Read-only. Prices are stripped for factory-only logins. */
+app.get('/api/lookup', requireAuth, async (req, res) => {
+  const no = String(req.query.no || '').replace(/\D/g, '');
+  if (no.length < 4 || no.length > 12) return res.status(400).json({ ok: false, error: 'Type the order number (e.g. 29292890)' });
+  try {
+    const list = await shopify(`orders.json?status=any&name=${encodeURIComponent('#' + no)}&limit=5&fields=${ORDER_FIELDS}`, 1);
+    const o = list.find(x => String(x.name || '').replace(/\D/g, '') === no);
+    if (!o) return res.json({ ok: false, error: 'No order #' + no + ' in Shopify' });
+    const fin = (o.financial_status || '').toLowerCase();
+    const state = (o.cancelled_at || fin === 'refunded' || fin === 'voided') ? 'cancelled' : (o.fulfillment_status === 'fulfilled' ? 'delivered' : 'open');
+    const items = qtyTags(mapLineItems(o.line_items), o.tags);
+    const ids = items.map((it, i) => specKey(items.length > 1 ? o.name + '-' + (i + 1) : o.name));
+    const sheets = await Promise.all(ids.map(id => workerJson('/spec/' + id).then(d => (d && d.ok && d.data) ? { id, saved: true, status: d.status || '' } : { id, saved: false }).catch(() => ({ id, saved: false }))));
+    let nts = {}; try { nts = await notesDoc(false); } catch (e) {}
+    const agent = (String(o.note || '').match(/Agent:\s*([^\n·]+?)\s*(?:·|\n|$)/) || [])[1] || '';
+    const out = {
+      id: o.id, order: o.name, customer: bestName(o.customer, o.note, o.email), date: (o.created_at || '').slice(0, 10),
+      state, agent: agent.trim(), note: o.note || '', pdf_url: extractPdf(o.note), total: o.total_price || '', currency: o.currency || '',
+      fulfilled: ((o.fulfillments || []).map(f => f.created_at).filter(Boolean).sort().pop() || '').slice(0, 10),
+      prod_stages: prodStagesFromTags(o.tags, (o.line_items || []).length), prod_dates: stageDatesFromTags(o.tags),
+      delivery: deliveryFromTags(o.tags), delivered: deliveredFromTags(o.tags), crew: crewFromTags(o.tags),
+      items: items.map((it, i) => Object.assign({}, it, { spec: sheets[i] })), tnotes: nts[o.id] || []
+    };
+    if (factoryOnly(req)) { delete out.total; out.note = ''; out.items = out.items.map(it => { const c = Object.assign({}, it); delete c.price; return c; }); }
+    logEvent(req.session.username, 'lookup', { no, ip: clientIp(req) });
+    res.json({ ok: true, order: out });
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+/* 27 Nov 2026 (Mariam): the Shipped chip lists EVERY delivered order (the order list drops them 3 days after shipping). Only what the
+   row needs — number, customer, date, items — no prices, notes or tags. On the dashboard they open only as a read-only PICTURE of the
+   spec sheet; nothing on them can be edited from there. Orders placed in 2026 only, cached like the order list. */
+const SHIPPED_FIELDS = 'id,name,created_at,customer,email,note,line_items,fulfillments,cancelled_at,financial_status,source_name';
+FETCH.shippedAll = async () => {
+  const since = '2026-01-01T00:00:00+04:00';   /* Mariam 27 Nov: 2026 orders only */
+  return shopify(`orders.json?status=any&fulfillment_status=shipped&created_at_min=${encodeURIComponent(since)}&limit=250&fields=${SHIPPED_FIELDS}`, 20);
+};
+app.get('/api/shipped', requireAuth, async (req, res) => {
+  try {
+    const raw = await cached('shippedAll', FETCH.shippedAll, req.query.fresh === '1');
+    const out = raw.filter(o => { const fin = (o.financial_status || '').toLowerCase(); return !o.cancelled_at && fin !== 'refunded' && fin !== 'voided' && fin !== 'partially_refunded'; })
+      .map(o => ({
+        id: o.id, order: o.name, kind: 'order', old: 1, state: 'shipped', customer: bestName(o.customer, o.note, o.email),
+        date: (o.created_at || '').slice(0, 10), online: o.source_name === 'web',
+        fulfilled: ((o.fulfillments || []).map(f => f.created_at).filter(Boolean).sort().pop() || '').slice(0, 10),
+        items: qtyTags(mapLineItems(o.line_items), '').map(it => ({ product: it.product, variant: it.variant, qty: it.qty, note: it.note, c9part: it.c9part }))
+      }));
+    res.json({ ok: true, orders: out });
+  } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); }
+});
+/* ---------- PROOF OF DELIVERY (27 Nov 2026, Mariam) ----------
+   The delivery team's form (/delivery, no login) sends: order number, who delivered, the customer's typed name, the customer's
+   finger signature, at least one photo of the delivered furniture, and the customer's agreement to the delivery terms (the exact
+   wording is stored with the proof). Stored for good: photos + signature as files, the record in the "pod" doc, keyed by order id.
+   Nothing can be edited or deleted from anywhere — a second delivery for the same order (e.g. a missing piece) is added beside it.
+   Public endpoints are rate-limited and only accept a real 2026 order that isn't cancelled. */
+const POD_TERMS_VERSION = '2026-11-27';
+const POD_TERMS = 'I confirm that my Nader furniture has been delivered today. I checked every piece with the delivery team before they left. ' +
+  'It was delivered complete and in good condition, with no stains, marks, scuffs, scratches, tears, dents or other damage, except anything written in the box above. ' +
+  'I understand that stains, marks or damage reported after the delivery team has left, and not written here, are treated as happening after delivery. ' +
+  'My 5-year warranty for manufacturing faults is not affected.';
+const POD_HITS = new Map();
+function podLimit(req, kind, max, mins) {
+  const k = kind + ':' + clientIp(req), now = Date.now(), h = (POD_HITS.get(k) || []).filter(t => now - t < mins * 60e3);
+  if (h.length >= max) return false; h.push(now); POD_HITS.set(k, h); return true;
+}
+async function podOrder(no) {
+  no = String(no || '').replace(/\D/g, '');
+  if (no.length < 6 || no.length > 12) return null;
+  const list = await shopify(`orders.json?status=any&name=${encodeURIComponent('#' + no)}&limit=5&fields=id,name,created_at,cancelled_at,financial_status,line_items`, 1);
+  const o = list.find(x => String(x.name || '').replace(/\D/g, '') === no);
+  if (!o || o.cancelled_at || /refunded|voided/i.test(o.financial_status || '') || String(o.created_at || '') < '2026') return null;
+  return o;
+}
+let POD = null, POD_AT = 0, podQ = Promise.resolve();
+async function podDoc(fresh) {
+  if (!fresh && POD && Date.now() - POD_AT < 15000) return POD;
+  const d = await workerJson('/doc/pod'); if (d && d.ok) { POD = d.data || {}; POD_AT = Date.now(); }
+  return POD || {};
+}
+app.get('/api/pod/terms', (req, res) => res.json({ ok: true, version: POD_TERMS_VERSION, text: POD_TERMS }));
+app.get('/api/pod/check', async (req, res) => {
+  if (!podLimit(req, 'check', 40, 15)) return res.status(429).json({ ok: false, error: 'Too many tries — wait a few minutes' });
+  try {
+    const o = await podOrder(req.query.no);
+    if (!o) return res.json({ ok: false, error: 'Order not found — check the number' });
+    const items = qtyTags(mapLineItems(o.line_items), '').filter(it => !it.note).map(it => (+it.qty > 1 ? it.qty + ' × ' : '') + it.product);
+    const done = ((await podDoc(false))[o.id] || []).length;
+    res.json({ ok: true, order: o.name, items, done });   /* no customer details on this public check */
+  } catch (e) { res.status(502).json({ ok: false, error: 'Could not check the order — try again' }); }
+});
+const dataUrlBuf = (u, re) => { const m = String(u || '').match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/); if (!m || (re && !re.test(m[1]))) return null; return { type: m[1], buf: Buffer.from(m[2], 'base64') }; };
+const isImg = b => b && b.length > 200 && ((b[0] === 0xFF && b[1] === 0xD8) || (b[0] === 0x89 && b[1] === 0x50) || (b.slice(0, 4).toString() === 'RIFF'));
+async function putFile(buf, type, name) {
+  const fid = crypto.randomBytes(12).toString('hex');
+  const up = await fetch(WORKER_URL + '/file/' + fid, { method: 'PUT', body: buf, headers: { 'X-Form-Secret': FORM_SECRET, 'Content-Type': type, 'X-File-Name': name } });
+  if (!up.ok) throw new Error('upload failed ' + up.status);
+  return fid;
+}
+app.post('/api/pod', async (req, res) => {
+  if (!podLimit(req, 'submit', 15, 60)) return res.status(429).json({ ok: false, error: 'Too many forms sent — wait a while and try again' });
+  const b = req.body || {}, clean = (v, n) => String(v || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+  const customer = clean(b.customer, 80), driver = clean(b.driver, 60), issues = String(b.issues || '').replace(/[\u0000-\u0008\u000b-\u001f]/g, '').trim().slice(0, 1000);
+  if (customer.length < 3) return res.status(400).json({ ok: false, error: 'Customer name is missing' });
+  if (driver.length < 2) return res.status(400).json({ ok: false, error: 'Your name is missing' });
+  if (b.agree !== true) return res.status(400).json({ ok: false, error: 'The customer must tick “I agree”' });
+  const sig = dataUrlBuf(b.signature, /png/);
+  if (!sig || !isImg(sig.buf) || sig.buf.length > 600e3) return res.status(400).json({ ok: false, error: 'The customer must sign' });
+  const photos = (Array.isArray(b.photos) ? b.photos : []).slice(0, 4).map(u => dataUrlBuf(u)).filter(p => p && isImg(p.buf) && p.buf.length < 3e6);
+  if (!photos.length) return res.status(400).json({ ok: false, error: 'Add a photo of the delivery' });
+  try {
+    const o = await podOrder(b.no);
+    if (!o) return res.status(400).json({ ok: false, error: 'Order not found — check the number' });
+    const tag = o.name.replace(/\D/g, '');
+    const sigId = await putFile(sig.buf, sig.type, 'signature-' + tag + '.png');
+    const ph = []; for (let i = 0; i < photos.length; i++) ph.push(await putFile(photos[i].buf, photos[i].type, 'delivery-' + tag + '-' + (i + 1) + (photos[i].type === 'image/png' ? '.png' : '.jpg')));
+    const rec = { id: crypto.randomBytes(6).toString('hex'), order: o.name, at: uaeNow(), customer, driver, issues, signature: sigId, photos: ph,
+      agreed: true, terms: POD_TERMS, termsVersion: POD_TERMS_VERSION, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 200) };
+    const run = podQ.then(async () => {
+      const all = JSON.parse(JSON.stringify(await podDoc(true)));
+      (all[o.id] = all[o.id] || []).push(rec);
+      const out = await docSet('pod', all); if (!out || !out.ok) throw new Error('save failed');
+      POD = all; POD_AT = Date.now();
+    });
+    podQ = run.catch(() => {});
+    await run;
+    logEvent('delivery:' + driver, 'pod_submit', { order: o.name, ip: clientIp(req) });
+    res.json({ ok: true, order: o.name, at: rec.at, ref: rec.id });
+  } catch (e) { res.status(502).json({ ok: false, error: 'Could not save — check the internet and press Submit again' }); }
+});
+/* staff: which orders have a proof (for the dashboard buttons) and the proof itself (read-only) */
+app.get('/api/pods', requireAuth, async (req, res) => {
+  try { const all = await podDoc(false), out = {}; Object.keys(all).forEach(k => { if ((all[k] || []).length) out[k] = all[k].length; }); res.json({ ok: true, pods: out }); }
+  catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
+app.get('/api/pod', requireAuth, async (req, res) => {
+  const id = String(req.query.id || '').replace(/\D/g, '');
+  try {
+    const all = await podDoc(false);
+    let key = id; if (!all[key]) { const no = String(req.query.no || '').replace(/\D/g, ''); key = Object.keys(all).find(k => (all[k] || []).some(r => r.order.replace(/\D/g, '') === no)) || ''; }
+    const list = (all[key] || []).map(r => { const c = Object.assign({}, r); delete c.ip; delete c.ua; return c; });
+    if (!list.length) return res.json({ ok: false, error: 'No proof of delivery for this order yet' });
+    logEvent(req.session.username, 'pod_view', { id: key, ip: clientIp(req) });
+    res.json({ ok: true, list });
+  } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
+});
 app.get('/api/specs', requireAuth, async (req, res) => {
   try { res.json(await workerJson('/spec')); } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
@@ -1371,7 +1522,7 @@ app.get('/api/file/:fid', requireAuth, async (req, res) => {
     if (!r.ok) return res.status(404).send('Not found');
     const name = decodeURIComponent(r.headers.get('x-file-name') || 'file');
     res.set('Content-Type', r.headers.get('content-type') || 'application/octet-stream');
-    res.set('Content-Disposition', 'attachment; filename="' + name.replace(/[^\w .()-]/g, '_') + '"; filename*=UTF-8\'\'' + encodeURIComponent(name));
+    res.set('Content-Disposition', (req.query.inline === '1' && /^image\//.test(r.headers.get('content-type') || '') ? 'inline' : 'attachment') + '; filename="' + name.replace(/[^\w .()-]/g, '_') + '"; filename*=UTF-8\'\'' + encodeURIComponent(name));
     res.send(Buffer.from(await r.arrayBuffer()));
     logEvent(req.session.username, 'file_download', { fid, name, ip: clientIp(req) });
   } catch (e) { res.status(502).send('Download failed'); }
