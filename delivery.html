@@ -119,7 +119,7 @@ label.lbl{display:block;font-size:15px;font-weight:600;margin:12px 0 6px;color:v
 const $=id=>document.getElementById(id);
 const S={order:"",items:[],photos:[],signed:false,terms:"",busy:false};
 try{$("driver").value=localStorage.getItem("nader-driver")||"";}catch(e){}
-fetch("/api/pod/terms").then(r=>r.json()).then(d=>{S.terms=d.text||"";$("terms").innerHTML=esc(S.terms)+' <a href="https://nader.ae/pages/delivery-acceptance" target="_blank" rel="noopener">Full terms</a>';}).catch(()=>{$("terms").textContent="Could not load the terms — check the internet and reload the page.";});
+fetch("/api/pod/terms").then(r=>r.json()).then(d=>{S.terms=d.text||"";$("terms").innerHTML='<b>'+esc(S.terms)+'</b><br><a href="'+esc(d.url||"https://nader.ae/pages/delivery-acceptance")+'" target="_blank" rel="noopener">Read full terms</a>';}).catch(()=>{$("terms").textContent="Could not load the terms — check the internet and reload the page.";});
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
 /* 1 + 2: driver and order */
@@ -154,17 +154,18 @@ function drawPhotos(){$("photos").innerHTML=S.photos.map((p,i)=>'<div><img src="
 /* 4: customer name, agree, signature */
 $("cust").addEventListener("input",update);
 $("agree").addEventListener("change",()=>{$("agreeBox").classList.toggle("on",$("agree").checked);update();});
-const cv=$("sig"),ctx=cv.getContext("2d");let drawing=false,last=null,ink=0;
-function sizeSig(){const r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;const keep=S.signed?cv.toDataURL():null;
-  cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);ctx.setTransform(d,0,0,d,0,0);ctx.lineWidth=2.6;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#111";
-  if(keep){const im=new Image();im.onload=()=>ctx.drawImage(im,0,0,r.width,r.height);im.src=keep;}}
-sizeSig();let rw=window.innerWidth;window.addEventListener("resize",()=>{if(window.innerWidth!==rw){rw=window.innerWidth;sizeSig();}});
-const pt=e=>{const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};};
-cv.addEventListener("pointerdown",e=>{e.preventDefault();drawing=true;last=pt(e);cv.setPointerCapture(e.pointerId);ctx.beginPath();ctx.arc(last.x,last.y,1.2,0,7);ctx.fillStyle="#111";ctx.fill();});
-cv.addEventListener("pointermove",e=>{if(!drawing)return;e.preventDefault();const p=pt(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();ink+=Math.hypot(p.x-last.x,p.y-last.y);last=p;
+const cv=$("sig"),ctx=cv.getContext("2d");let drawing=false,ink=0,strokes=[],cur=null;
+/* the signature is kept as strokes (in 0–1 of the box), so a resize / turning the phone just redraws it — never loses it */
+function paint(){const r=cv.getBoundingClientRect(),W=r.width,H=r.height;ctx.clearRect(0,0,W,H);ctx.lineWidth=2.6;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#111";ctx.fillStyle="#111";
+  strokes.forEach(s=>{if(s.length===1){ctx.beginPath();ctx.arc(s[0][0]*W,s[0][1]*H,1.2,0,7);ctx.fill();return;}ctx.beginPath();ctx.moveTo(s[0][0]*W,s[0][1]*H);for(let k=1;k<s.length;k++)ctx.lineTo(s[k][0]*W,s[k][1]*H);ctx.stroke();});}
+function sizeSig(){const r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;if(!r.width)return;cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);ctx.setTransform(d,0,0,d,0,0);paint();}
+sizeSig();window.addEventListener("resize",sizeSig);
+const pt=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height,r];};
+cv.addEventListener("pointerdown",e=>{e.preventDefault();drawing=true;const p=pt(e);cur=[[p[0],p[1]]];strokes.push(cur);try{cv.setPointerCapture(e.pointerId);}catch(x){}paint();});
+cv.addEventListener("pointermove",e=>{if(!drawing)return;e.preventDefault();const p=pt(e),l=cur[cur.length-1];ink+=Math.hypot((p[0]-l[0])*p[2].width,(p[1]-l[1])*p[2].height);cur.push([p[0],p[1]]);paint();
   if(ink>40&&!S.signed){S.signed=true;$("sigHint").hidden=true;update();}});
-["pointerup","pointercancel","pointerleave"].forEach(t=>cv.addEventListener(t,()=>{drawing=false;}));
-$("sigClear").addEventListener("click",()=>{ctx.clearRect(0,0,cv.width,cv.height);ink=0;S.signed=false;$("sigHint").hidden=false;update();});
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{drawing=false;}));
+$("sigClear").addEventListener("click",()=>{strokes=[];paint();ink=0;S.signed=false;$("sigHint").hidden=false;update();});
 
 /* what's still missing — Submit only works when the list is empty */
 function missing(){const m=[];

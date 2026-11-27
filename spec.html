@@ -3968,6 +3968,14 @@ async function boot(){
   LIVE=true; IS_ADMIN=(sess.roles||[]).includes("admin"); CAN_SALES=(sess.roles||[]).some(r=>r==="sales"||r==="admin"); ME=sess.name||sess.username||"";
   SPEC_ID=cleanId(Q.id)||("N"+Date.now().toString(36).toUpperCase());
   if(SNAP)return snapBoot();
+  /* 27 Nov 2026 (Mariam): a SHIPPED / delivered order's sheet opens only as the read-only picture — however it was opened (an old link,
+     a bookmark, another button). Open orders and drafts are untouched. */
+  if(Q.o&&Q.k!=="draft"){try{
+    const go=()=>{location.replace("/spec.html?"+new URLSearchParams({view:"snap",o:Q.o,i:String(Q.i|0),k:"order",id:SPEC_ID}).toString());};
+    const r=await fetch("/api/orders",{credentials:"same-origin"}),d=await r.json(),o=(d.orders||[]).find(x=>x.order===Q.o);
+    if(o&&o.state==="shipped")return go();
+    if(!o){const no=String(Q.o).replace(/\D/g,"");if(no.length>=6){const lr=await fetch("/api/lookup?no="+no,{credentials:"same-origin"}),ld=await lr.json();if(ld.ok&&ld.order&&ld.order.state==="delivered")return go();}}
+  }catch(e){}}
   if(!Q.id)history.replaceState(null,"","/spec.html?"+new URLSearchParams(Object.assign({},Q.o?{o:Q.o,i:Q.i,k:Q.k}:{},Q.p?{p:Q.p}:{},{id:SPEC_ID})).toString());
   setSaveState("Loading…");
   try{const r=await fetch("/api/spec?id="+encodeURIComponent(SPEC_ID),{credentials:"same-origin"});const d=await r.json();if(d.ok&&d.data){ORDER=d.data;FROM_SAVE=true;}}catch(e){}

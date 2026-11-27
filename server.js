@@ -85,6 +85,8 @@ function servePage(file) {
     } catch (e) { next(); }
   };
 }
+/* 27 Nov 2026 (Mariam): the delivery team's short link — delivery.nader.ae opens the delivery form straight away */
+app.get('/', (req, res, next) => { if (/^delivery\./i.test(String(req.headers.host || ''))) return res.redirect(302, '/delivery'); next(); });
 app.get(['/', '/index.html'], servePage('index.html'));
 app.get(['/spec', '/spec.html'], servePage('spec.html'));
 /* customer order tracker — public page, embedded only in nader.ae/pages/track-order (unlisted: no links to it anywhere) */
@@ -1296,11 +1298,9 @@ app.get('/api/shipped', requireAuth, async (req, res) => {
    wording is stored with the proof). Stored for good: photos + signature as files, the record in the "pod" doc, keyed by order id.
    Nothing can be edited or deleted from anywhere — a second delivery for the same order (e.g. a missing piece) is added beside it.
    Public endpoints are rate-limited and only accept a real 2026 order that isn't cancelled. */
-const POD_TERMS_VERSION = '2026-11-27';
-const POD_TERMS = 'I confirm that my Nader furniture has been delivered today. I checked every piece with the delivery team before they left. ' +
-  'It was delivered complete and in good condition, with no stains, marks, scuffs, scratches, tears, dents or other damage, except anything written in the box above. ' +
-  'I understand that stains, marks or damage reported after the delivery team has left, and not written here, are treated as happening after delivery. ' +
-  'My 5-year warranty for manufacturing faults is not affected.';
+const POD_TERMS_VERSION = '2026-11-27b';   /* Mariam 27 Nov: short sentence on the form; the full terms live on the website page */
+const POD_TERMS_URL = 'https://nader.ae/pages/delivery-acceptance';
+const POD_TERMS = 'I confirm my Nader furniture has been delivered today and I agree to the delivery terms.';
 const POD_HITS = new Map();
 function podLimit(req, kind, max, mins) {
   const k = kind + ':' + clientIp(req), now = Date.now(), h = (POD_HITS.get(k) || []).filter(t => now - t < mins * 60e3);
@@ -1320,7 +1320,7 @@ async function podDoc(fresh) {
   const d = await workerJson('/doc/pod'); if (d && d.ok) { POD = d.data || {}; POD_AT = Date.now(); }
   return POD || {};
 }
-app.get('/api/pod/terms', (req, res) => res.json({ ok: true, version: POD_TERMS_VERSION, text: POD_TERMS }));
+app.get('/api/pod/terms', (req, res) => res.json({ ok: true, version: POD_TERMS_VERSION, text: POD_TERMS, url: POD_TERMS_URL }));
 app.get('/api/pod/check', async (req, res) => {
   if (!podLimit(req, 'check', 40, 15)) return res.status(429).json({ ok: false, error: 'Too many tries — wait a few minutes' });
   try {
@@ -1357,7 +1357,7 @@ app.post('/api/pod', async (req, res) => {
     const sigId = await putFile(sig.buf, sig.type, 'signature-' + tag + '.png');
     const ph = []; for (let i = 0; i < photos.length; i++) ph.push(await putFile(photos[i].buf, photos[i].type, 'delivery-' + tag + '-' + (i + 1) + (photos[i].type === 'image/png' ? '.png' : '.jpg')));
     const rec = { id: crypto.randomBytes(6).toString('hex'), order: o.name, at: uaeNow(), customer, driver, issues, signature: sigId, photos: ph,
-      agreed: true, terms: POD_TERMS, termsVersion: POD_TERMS_VERSION, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 200) };
+      agreed: true, terms: POD_TERMS, termsUrl: POD_TERMS_URL, termsVersion: POD_TERMS_VERSION, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 200) };
     const run = podQ.then(async () => {
       const all = JSON.parse(JSON.stringify(await podDoc(true)));
       (all[o.id] = all[o.id] || []).push(rec);
