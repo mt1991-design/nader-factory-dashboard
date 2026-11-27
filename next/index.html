@@ -5568,7 +5568,7 @@ function renderSalesDash(){const q=($("salessearch").value||"").toLowerCase(),tb
     const st=shopifyStatus(o);
     const oid=lineId(o,i),done=DB.getOrder(oid)||SAVED_SPECS.has(specKey(oid));
     const multi=o.items.length>1;
-    const specCls="specbtn",specTxt="＋ Spec",oq=esc(o.order).replace(/'/g,"");   /* always the same red button (Mariam 2 Oct) */
+    const shp=!o.isDraft&&o.state==="shipped",specCls="specbtn",specTxt=shp?"🖼 Spec picture":"＋ Spec",oq=esc(o.order).replace(/'/g,"");   /* always the same red button (Mariam 2 Oct) */
     const pdfLink=(i===0&&o.pdf_url)?'<a class="pdflink" href="'+esc(o.pdf_url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Download signed form PDF">📄 PDF</a> ':"";
     const editBtn=(i===0&&o.edit_state&&!(o.state==="shipped")&&canEditOrder(o))?'<a class="pdflink" href="#" onclick="event.preventDefault();event.stopPropagation();editOrder('+oi+')" title="'+(o.isDraft?'Edit this order — the customer re-signs':'Change this paid order — any extra is added to the order and requested from the customer')+'">✎ Edit</a> ':"";
     /* an order the customer placed on the website: say so where Edit / PDF would be (it has neither) — Mariam 13 Oct */
@@ -5611,6 +5611,8 @@ function orderInfoHTML(o){
   return h;
 }
 function specLineItem(orderNo,i){const o=SHOPIFY.find(x=>x.order===orderNo);if(!o)return;
+  /* 27 Nov 2026 (Mariam): a SHIPPED order's sheet is only ever a picture — nothing to click, unlock or edit */
+  if(!o.isDraft&&o.state==="shipped"){window.open("/next/spec.html?"+new URLSearchParams({view:"snap",o:o.order,i:String(i),k:"order",id:specKey(lineId(o,i))}).toString(),"_blank");return;}
   const url="/next/spec.html?"+new URLSearchParams({o:o.order,i:String(i),k:o.isDraft?"draft":"order",id:specKey(lineId(o,i))}).toString();
   if(!SAVED_SPECS.has(specKey(lineId(o,i))))SAVED_SPECS.set(specKey(lineId(o,i)),{});window.open(url,"_blank");setTimeout(renderSalesDash,50);}
 /* the sales form is staff-only: open it with a signed pass from the server (who is logged in, valid 12h) */
