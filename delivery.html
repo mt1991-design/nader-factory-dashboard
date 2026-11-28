@@ -2,31 +2,33 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#1c1a17">
+<meta name="theme-color" content="#ffffff">
 <title>Nader · Delivery</title>
 <!-- 27 Nov 2026 (Mariam): proof of delivery — the delivery team's phone form. No login. Order number → photo → customer name,
      ticks "I agree", signs with a finger → Submit. Submit only works when everything is there. The proof is stored for good and
      shows on the dashboard (read-only). Kept very short and simple on purpose. -->
 <style>
-:root{--ink:#1c1a17;--ink2:#6b6253;--gold:#b8955a;--line:#e3dccd;--bg:#f5f1e8;--ok:#2f7a3a;--bad:#b3261e}
+/* 28 Nov 2026 (Mariam): Nader.ae logo + our maroon (#6B1A22) for the numbers, ticks and buttons; typed text stays black */
+:root{--ink:#1c1a17;--ink2:#6b6253;--gold:#b8955a;--line:#e3dccd;--bg:#f5f1e8;--m:#6b1a22;--m-soft:#f6ecec;--m-line:#dcbcbf;--ok:#6b1a22;--bad:#b3261e}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
-header{background:var(--ink);color:#fff;padding:14px 16px calc(14px);text-align:center}
+header{background:#fff;padding:10px 16px 8px;text-align:center;border-bottom:3px solid var(--m)}
+header img{height:52px;width:auto;display:block;margin:0 auto}
 header .wm{font:600 22px Georgia,serif;letter-spacing:.3em}
-header .sub{font-size:12px;letter-spacing:.18em;color:var(--gold);margin-top:2px}
+header .sub{font-size:12px;font-weight:700;letter-spacing:.22em;color:var(--m);margin-top:2px}
 main{max-width:520px;margin:0 auto;padding:14px 14px 40px}
 .card{background:#fff;border-radius:16px;padding:16px;margin:0 0 14px;box-shadow:0 1px 4px rgba(0,0,0,.06);border:2px solid transparent}
-.card.done{border-color:#cfe5d2}
+.card.done{border-color:var(--m-line)}
 .card h2{margin:0 0 10px;font-size:18px;display:flex;align-items:center;gap:10px}
-.num{flex:0 0 32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
+.num{flex:0 0 32px;height:32px;border-radius:50%;background:var(--m);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
 .card.done .num{background:var(--ok)}
 .card.done .num:after{content:"✓"}.card.done .num span{display:none}
-.who{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin:-4px 0 8px}
+.who{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--m);text-transform:uppercase;margin:-4px 0 8px}
 input[type=text],textarea{width:100%;font:inherit;font-size:19px;padding:14px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);outline:none}
-input[type=text]:focus,textarea:focus{border-color:var(--gold)}
+input[type=text]:focus,textarea:focus{border-color:var(--m)}
 textarea{font-size:16px;min-height:70px;resize:vertical}
 .row{display:flex;gap:8px}.row input{flex:1}
-.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font:inherit;font-weight:700;font-size:18px;padding:16px;border-radius:12px;border:none;cursor:pointer;background:var(--ink);color:#fff;-webkit-tap-highlight-color:transparent}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font:inherit;font-weight:700;font-size:18px;padding:16px;border-radius:12px;border:none;cursor:pointer;background:var(--m);color:#fff;-webkit-tap-highlight-color:transparent}
 .btn.small{width:auto;padding:14px 16px;font-size:16px}
 .btn.light{background:#efe9dc;color:var(--ink)}
 .btn.go{background:var(--ok);font-size:20px;padding:18px}
@@ -40,13 +42,13 @@ textarea{font-size:16px;min-height:70px;resize:vertical}
 .terms{background:#faf8f3;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:15px;line-height:1.45;margin:12px 0}
 .terms a{color:var(--ink2)}
 .terms details{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
-.terms summary{cursor:pointer;font-weight:700;color:var(--ink2);list-style:none;padding:6px 0;font-size:16px}
+.terms summary{cursor:pointer;font-weight:700;color:var(--m);list-style:none;padding:6px 0;font-size:16px}
 .terms summary::-webkit-details-marker{display:none}
 .terms summary .op{display:none}.terms details[open] summary .cl{display:none}.terms details[open] summary .op{display:inline}
 .terms ul{margin:6px 0 8px;padding-left:20px}.terms li{margin:4px 0}
 .agree{display:flex;gap:12px;align-items:center;font-size:18px;font-weight:700;padding:14px;border:2px solid var(--line);border-radius:12px;cursor:pointer;user-select:none}
 .agree input{width:30px;height:30px;flex:0 0 30px;accent-color:var(--ok)}
-.agree.on{border-color:var(--ok);background:#eef7ef}
+.agree.on{border-color:var(--m);background:var(--m-soft)}
 .sigwrap{position:relative;border:2px dashed #c9bfa9;border-radius:12px;background:#fff;touch-action:none;margin-top:6px}
 .sigwrap canvas{display:block;width:100%;height:180px;touch-action:none}
 .sigwrap .hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#b9b0a0;font-size:18px;pointer-events:none}
@@ -64,7 +66,7 @@ label.lbl{display:block;font-size:15px;font-weight:600;margin:12px 0 6px;color:v
 [hidden]{display:none!important}
 </style></head>
 <body>
-<header><div class="wm">NADER</div><div class="sub">DELIVERY</div></header>
+<header><img src="https://nader.ae/cdn/shop/t/7/assets/logo-v2.png?v=167743339414529571811785583599" alt="Nader.ae" width="138" height="52"><div class="sub">DELIVERY</div></header>
 <main id="form">
 
   <section class="card" id="c1">
@@ -121,7 +123,7 @@ label.lbl{display:block;font-size:15px;font-weight:600;margin:12px 0 6px;color:v
 const $=id=>document.getElementById(id);
 const S={order:"",items:[],photos:[],signed:false,terms:"",busy:false};
 try{$("driver").value=localStorage.getItem("nader-driver")||"";}catch(e){}
-fetch("/api/pod/terms").then(r=>r.json()).then(d=>{S.terms=d.text||"";$("terms").innerHTML='<b>'+esc(S.terms)+'</b>'+'<details id="termsMore"><summary><span class="cl">▸ Read the delivery terms</span><span class="op">▾ Hide the delivery terms</span></summary>'
+fetch("/api/pod/terms").then(r=>r.json()).then(d=>{S.terms=d.text||"";$("terms").innerHTML='<b>'+esc(S.terms)+'</b>'+'<details id="termsMore"><summary><span class="cl">Show more ▾</span><span class="op">Show less ▴</span></summary>'
   +'<ul>'+(d.points||[]).map(p=>'<li>'+esc(p)+'</li>').join("")+'</ul><a href="'+esc(d.url||"https://nader.ae/pages/delivery-acceptance")+'" target="_blank" rel="noopener">Full terms on nader.ae</a></details>';}).catch(()=>{$("terms").textContent="Could not load the terms — check the internet and reload the page.";});
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
