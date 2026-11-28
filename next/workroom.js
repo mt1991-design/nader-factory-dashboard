@@ -111,7 +111,9 @@ function renderKpis(){
   const open=SHOPIFY.filter(o=>!o.isDraft&&o.state==="open").length;
   const wk=window.WEEKLY||null, thisWeek=wk?wk[wk.length-1]:null;
   const t=drawingTally(), pct=t.all?t.done/t.all:0, C=2*Math.PI*26;
-  const lines=openLines(false), per=STG.map(()=>0); lines.forEach(L=>per[L.cur]++); const mx=Math.max(1,...per);
+  /* 28 Nov 2026 (Mariam: "Drawing says 14, only one needs drawing"): a piece whose drawing is finished but whose stage was
+     never moved on is waiting for carpentry — count it there, so "Drawing" = pieces that really still need drawing */
+  const lines=openLines(false), per=STG.map(()=>0); lines.forEach(L=>{const k=L.cur===0&&lineDrawn(L.o,L.i)?1:L.cur;if(k<per.length)per[k]++;}); const mx=Math.max(1,...per);
   const lead=window.LEAD;
   const leadHTML=lead&&lead.ready
     ?`<div class="big" data-n="${lead.avg}" title="Working days (Mon–Fri), counted the same way as the delivery promise to the customer">${lead.avg}<small>working days</small></div><div class="note">Mon–Fri, like the delivery promise · order placed → packed · from ${lead.n} pieces</div>`
