@@ -3333,6 +3333,8 @@ function save(){
       const r=await fetch("/api/spec",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:SPEC_ID,data:ORDER,status:drawStatus()})});
       const d=await r.json().catch(()=>({}));
       if(r.status===401){document.getElementById("app").hidden=true;document.getElementById("gate").hidden=false;return;}
+      /* 28 Nov: the order has been delivered → the server refuses changes; show the read-only picture instead */
+      if(d.shipped){const u=new URL(location.href);u.searchParams.set("view","snap");location.replace(u.toString());return;}
       if(d.ok)setSaveState("✓ Saved "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),"ok");else setSaveState("Not saved — retrying","err"),setTimeout(save,4000);
     }catch(e){setSaveState("Offline — not saved","err");}
   },900);
@@ -3902,8 +3904,16 @@ async function snapPicture(){
     const wrap=document.getElementById("snapWrap")||sh;
     const src=[...wrap.querySelectorAll("svg")].map(v=>{const r=v.getBoundingClientRect(),c=v.cloneNode(true);c.setAttribute("width",r.width);c.setAttribute("height",r.height);
       if(!c.getAttribute("xmlns"))c.setAttribute("xmlns","http://www.w3.org/2000/svg");c.style.cssText="";return{w:r.width,h:r.height,url:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(new XMLSerializer().serializeToString(c))};});
+    /* 28 Nov 2026: html2canvas ignores object-fit, so photos / traced drawings were squashed into their boxes —
+       work out each picture's true on-screen size now and rebuild it in the copy as a clipped, centred box */
+    const fit=[...wrap.querySelectorAll("img")].map(im=>{const r=im.getBoundingClientRect(),cs=getComputedStyle(im),f=cs.objectFit,nw=im.naturalWidth,nh=im.naturalHeight;
+      if(!r.width||!r.height||!nw||!nh||(f!=="contain"&&f!=="cover"))return null;
+      const s=(f==="contain"?Math.min:Math.max)(r.width/nw,r.height/nh);return{w:r.width,h:r.height,iw:nw*s,ih:nh*s,disp:cs.display==="inline"?"inline-block":cs.display,rad:cs.borderRadius};});
     const cv=await html2canvas(wrap,{scale:2,useCORS:true,backgroundColor:"#ffffff",logging:false,windowWidth:wrap.scrollWidth+40,
-      onclone:doc=>{[...doc.getElementById(wrap.id||"sheet").querySelectorAll("svg")].forEach((v,k)=>{const d=src[k];if(!d||!d.w)return;const im=doc.createElement("img");im.src=d.url;im.style.cssText="display:block;width:"+d.w+"px;height:"+d.h+"px;max-width:none;max-height:none";v.replaceWith(im);});}});
+      onclone:doc=>{[...doc.getElementById(wrap.id||"sheet").querySelectorAll("img")].forEach((im,k)=>{const d=fit[k];if(!d)return;
+          const box=doc.createElement("div");box.style.cssText="position:relative;overflow:hidden;display:"+d.disp+";width:"+d.w+"px;height:"+d.h+"px;border-radius:"+d.rad+";margin:"+getComputedStyle(wrap.querySelectorAll("img")[k]).margin;
+          im.replaceWith(box);box.appendChild(im);im.style.cssText="position:absolute;display:block;margin:0;max-width:none;max-height:none;object-fit:fill;width:"+d.iw+"px;height:"+d.ih+"px;left:"+(d.w-d.iw)/2+"px;top:"+(d.h-d.ih)/2+"px";});
+        [...doc.getElementById(wrap.id||"sheet").querySelectorAll("svg")].forEach((v,k)=>{const d=src[k];if(!d||!d.w)return;const im=doc.createElement("img");im.src=d.url;im.style.cssText="display:block;width:"+d.w+"px;height:"+d.h+"px;max-width:none;max-height:none";v.replaceWith(im);});}});
     const url=cv.toDataURL("image/png"),name=(String(ORDER.orderNo||SPEC_ID).split(" ")[0].replace(/[^A-Za-z0-9-]/g,"")||"spec")+(Q.i?"-item"+(Q.i+1):"")+" "+String(ORDER.product||"spec sheet").replace(/[\\/:*?"<>|]/g,"")+".png";
     const out=document.createElement("div");out.id="snapOut";out.innerHTML='<img alt="Spec sheet picture" src="'+url+'">';
     wrap.hidden=true;document.getElementById("app").appendChild(out);

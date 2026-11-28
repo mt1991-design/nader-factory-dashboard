@@ -39,6 +39,11 @@ textarea{font-size:16px;min-height:70px;resize:vertical}
 .photos button{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:16px}
 .terms{background:#faf8f3;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:15px;line-height:1.45;margin:12px 0}
 .terms a{color:var(--ink2)}
+.terms details{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.terms summary{cursor:pointer;font-weight:700;color:var(--ink2);list-style:none;padding:6px 0;font-size:16px}
+.terms summary::-webkit-details-marker{display:none}
+.terms summary .op{display:none}.terms details[open] summary .cl{display:none}.terms details[open] summary .op{display:inline}
+.terms ul{margin:6px 0 8px;padding-left:20px}.terms li{margin:4px 0}
 .agree{display:flex;gap:12px;align-items:center;font-size:18px;font-weight:700;padding:14px;border:2px solid var(--line);border-radius:12px;cursor:pointer;user-select:none}
 .agree input{width:30px;height:30px;flex:0 0 30px;accent-color:var(--ok)}
 .agree.on{border-color:var(--ok);background:#eef7ef}
@@ -76,11 +81,10 @@ label.lbl{display:block;font-size:15px;font-weight:600;margin:12px 0 6px;color:v
 
   <section class="card" id="c3">
     <h2><span class="num"><span>3</span></span> Photo of the delivery</h2>
-    <div style="font-size:15px;color:var(--ink2);margin:-4px 0 10px">Take a clear photo of the furniture in the customer's home.</div>
+    <div style="font-size:15px;color:var(--ink2);margin:-4px 0 10px">Take a clear photo of the furniture in the customer's home, now, with the camera.</div>
     <label class="btn" for="cam">📷 Take photo</label>
     <input type="file" id="cam" accept="image/*" capture="environment" hidden>
-    <label class="btn light" for="pick" style="margin-top:8px;font-size:15px;padding:12px">Choose from gallery</label>
-    <input type="file" id="pick" accept="image/*" multiple hidden>
+    <div class="msg bad" id="camMsg"></div>
     <div class="photos" id="photos"></div>
   </section>
 
@@ -117,7 +121,8 @@ label.lbl{display:block;font-size:15px;font-weight:600;margin:12px 0 6px;color:v
 const $=id=>document.getElementById(id);
 const S={order:"",items:[],photos:[],signed:false,terms:"",busy:false};
 try{$("driver").value=localStorage.getItem("nader-driver")||"";}catch(e){}
-fetch("/api/pod/terms").then(r=>r.json()).then(d=>{S.terms=d.text||"";$("terms").innerHTML='<b>'+esc(S.terms)+'</b><br><a href="'+esc(d.url||"https://nader.ae/pages/delivery-acceptance")+'" target="_blank" rel="noopener">Read full terms</a>';}).catch(()=>{$("terms").textContent="Could not load the terms — check the internet and reload the page.";});
+fetch("/api/pod/terms").then(r=>r.json()).then(d=>{S.terms=d.text||"";$("terms").innerHTML='<b>'+esc(S.terms)+'</b>'+'<details id="termsMore"><summary><span class="cl">▸ Read the delivery terms</span><span class="op">▾ Hide the delivery terms</span></summary>'
+  +'<ul>'+(d.points||[]).map(p=>'<li>'+esc(p)+'</li>').join("")+'</ul><a href="'+esc(d.url||"https://nader.ae/pages/delivery-acceptance")+'" target="_blank" rel="noopener">Full terms on nader.ae</a></details>';}).catch(()=>{$("terms").textContent="Could not load the terms — check the internet and reload the page.";});
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
 /* 1 + 2: driver and order */
@@ -137,7 +142,10 @@ async function check(){const v=$("no").value.replace(/\D/g,""),m=$("noMsg");
   update();}
 
 /* 3: photos — made smaller on the phone (max 1600 px) so they upload fast */
-function addFiles(files){[...files].forEach(f=>{if(!/^image\//.test(f.type||"image/"))return;if(S.photos.length>=4)return;
+/* 28 Nov 2026 (Mariam): camera only — no uploading from the gallery. The button opens the camera; a photo that wasn't
+   taken just now (an older picture picked another way) is refused. */
+function addFiles(files){$("camMsg").textContent="";[...files].forEach(f=>{if(!/^image\//.test(f.type||"image/"))return;if(S.photos.length>=4)return;
+  if(f.lastModified&&Date.now()-f.lastModified>10*60*1000){$("camMsg").textContent="Please take a NEW photo now with the camera — older photos can't be used.";return;}
   const url=URL.createObjectURL(f),img=new Image();
   img.onload=()=>{const k=Math.min(1,1600/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
     c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
@@ -145,7 +153,6 @@ function addFiles(files){[...files].forEach(f=>{if(!/^image\//.test(f.type||"ima
   img.onerror=()=>{URL.revokeObjectURL(url);alert("That photo could not be opened — please take it again.");};
   img.src=url;});}
 $("cam").addEventListener("change",e=>{addFiles(e.target.files);e.target.value="";});
-$("pick").addEventListener("change",e=>{addFiles(e.target.files);e.target.value="";});
 function drawPhotos(){$("photos").innerHTML=S.photos.map((p,i)=>'<div><img src="'+p+'" alt="Photo '+(i+1)+'"><button type="button" aria-label="Remove photo" data-i="'+i+'">✕</button></div>').join("");
   $("photos").querySelectorAll("button").forEach(b=>b.onclick=()=>{S.photos.splice(+b.dataset.i,1);drawPhotos();update();});}
 

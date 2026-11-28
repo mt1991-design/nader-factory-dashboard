@@ -1039,6 +1039,7 @@ async function fulfilLine(orderId, line) {
   return true;   // nothing left to fulfil for this line (already fulfilled)
 }
 app.post('/api/delivered', requireAuth, async (req, res) => {
+  for (const k in SHIPPED_CHECK) delete SHIPPED_CHECK[k];   /* delivered / undone → re-check the spec lock */
   if (!hasRole(req, 'factory') && !hasRole(req, 'admin')) return res.status(403).json({ ok: false, error: 'factory only' });
   const b = req.body || {}, id = String(b.id || '').replace(/\D/g, ''), line = Math.max(0, parseInt(b.line, 10) || 0), undo = !!b.undo;
   if (!id) return res.status(400).json({ ok: false, error: 'no id' });
@@ -1298,9 +1299,15 @@ app.get('/api/shipped', requireAuth, async (req, res) => {
    wording is stored with the proof). Stored for good: photos + signature as files, the record in the "pod" doc, keyed by order id.
    Nothing can be edited or deleted from anywhere — a second delivery for the same order (e.g. a missing piece) is added beside it.
    Public endpoints are rate-limited and only accept a real 2026 order that isn't cancelled. */
-const POD_TERMS_VERSION = '2026-11-27c';   /* Mariam 27 Nov: short sentence on the form; the full terms live on the website page */
+const POD_TERMS_VERSION = '2026-11-28';   /* Mariam 27 Nov: short sentence on the form; 28 Nov: + a few short points the customer can open / close; full terms on the website page */
 const POD_TERMS_URL = 'https://nader.ae/pages/delivery-acceptance';
 const POD_TERMS = 'I confirm my Nader furniture has been delivered today and I agree to the full delivery terms.';
+const POD_POINTS = [   /* short version of nader.ae/pages/delivery-acceptance — change both together and bump POD_TERMS_VERSION */
+  'I checked my furniture with the delivery team before signing.',
+  'It arrived complete, with no damage, stains, marks or scuffs.',
+  'Any problem must be shown to the delivery team now, before I sign.',
+  'Marks or stains reported after delivery are not treated as delivery damage.',
+  'My 5-year warranty for manufacturing faults is not affected.'];
 const POD_HITS = new Map();
 function podLimit(req, kind, max, mins) {
   const k = kind + ':' + clientIp(req), now = Date.now(), h = (POD_HITS.get(k) || []).filter(t => now - t < mins * 60e3);
@@ -1320,7 +1327,7 @@ async function podDoc(fresh) {
   const d = await workerJson('/doc/pod'); if (d && d.ok) { POD = d.data || {}; POD_AT = Date.now(); }
   return POD || {};
 }
-app.get('/api/pod/terms', (req, res) => res.json({ ok: true, version: POD_TERMS_VERSION, text: POD_TERMS, url: POD_TERMS_URL }));
+app.get('/api/pod/terms', (req, res) => res.json({ ok: true, version: POD_TERMS_VERSION, text: POD_TERMS, points: POD_POINTS, url: POD_TERMS_URL }));
 app.get('/api/pod/check', async (req, res) => {
   if (!podLimit(req, 'check', 40, 15)) return res.status(429).json({ ok: false, error: 'Too many tries — wait a few minutes' });
   try {
@@ -1357,7 +1364,7 @@ app.post('/api/pod', async (req, res) => {
     const sigId = await putFile(sig.buf, sig.type, 'signature-' + tag + '.png');
     const ph = []; for (let i = 0; i < photos.length; i++) ph.push(await putFile(photos[i].buf, photos[i].type, 'delivery-' + tag + '-' + (i + 1) + (photos[i].type === 'image/png' ? '.png' : '.jpg')));
     const rec = { id: crypto.randomBytes(6).toString('hex'), order: o.name, at: uaeNow(), customer, driver, issues, signature: sigId, photos: ph,
-      agreed: true, terms: POD_TERMS, termsUrl: POD_TERMS_URL, termsVersion: POD_TERMS_VERSION, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 200) };
+      agreed: true, terms: POD_TERMS, termsPoints: POD_POINTS, termsUrl: POD_TERMS_URL, termsVersion: POD_TERMS_VERSION, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 200) };
     const run = podQ.then(async () => {
       const all = JSON.parse(JSON.stringify(await podDoc(true)));
       (all[o.id] = all[o.id] || []).push(rec);
@@ -1401,6 +1408,10 @@ app.get('/api/spec', requireAuth, async (req, res) => {
 app.post('/api/spec', requireAuth, async (req, res) => {
   const b = req.body || {}, id = specKey(b.id), data = b.data;
   if (!id || !data || typeof data !== 'object') return res.status(400).json({ ok: false, error: 'id and data required' });
+  /* 28 Nov 2026 (Mariam): a DELIVERED order's sheet is a picture only — nobody can unlock, edit or comment on it,
+     even from a page that was open before the change. Checked here so no old tab or other route can get round it. */
+  try { if (await orderShipped(id)) return res.status(403).json({ ok: false, shipped: true, error: 'This order has been delivered — its spec sheet is read-only (picture only).' }); }
+  catch (e) { console.error('shipped check', e.message); }
   const c = data.cust || {};
   let status = b.status;
   try {
@@ -1453,6 +1464,15 @@ app.post('/api/spec', requireAuth, async (req, res) => {
   } catch (e) { res.status(502).json({ ok: false, error: e.message }); }
 });
 const specLogged = {};
+const SHIPPED_CHECK = {};   /* order no → { t, v } — 2 min cache so autosave doesn't hit Shopify every time */
+async function orderShipped(id) {
+  const m = String(id).match(/^(\d{6,})(?:-\d+)?$/); if (!m) return false;   /* drafts / loose drawings: never locked */
+  const c = SHIPPED_CHECK[m[1]]; if (c && Date.now() - c.t < 120000) return c.v;
+  const list = await shopify(`orders.json?status=any&name=${encodeURIComponent('#' + m[1])}&limit=5&fields=id,name,fulfillment_status`, 1);
+  const o = list.find(x => String(x.name || '').replace(/\D/g, '') === m[1]);
+  const v = !!(o && o.fulfillment_status === 'fulfilled');
+  SHIPPED_CHECK[m[1]] = { t: Date.now(), v }; return v;
+}
 // The sales form's saved state (field values per item) — proxied because the worker only allows nader.ae origins.
 app.get('/api/formstate', requireAuth, async (req, res) => {
   const id = String(req.query.id || '').replace(/[^a-z0-9_]/gi, ''); if (!id) return res.status(400).json({ ok: false });
